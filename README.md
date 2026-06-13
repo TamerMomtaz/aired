@@ -37,6 +37,29 @@ keys) are **server-only and never committed** (CLAUDE.md §1.7).
 
 ## Status
 
-**Phase 0 — Foundation.** Supabase schema (the ★ tables + RLS) is applied; the
-Next.js app is scaffolded, connected to Supabase, and deployed to Vercel showing
-the AIRED wordmark and the cert-red Red Line. Next: Phase 1 (auth + app shell).
+**Phase 1 — Skeleton.** The app shell is live: a dark, mobile-first layout with a
+header that reflects auth state, email + Google sign-in/up (Supabase Auth, sessions
+refreshed in the Next.js 16 Proxy), the `AIRED-#### · "Title"` display component,
+and the public registry (empty until Phase 2 brings uploads). A profile row opens
+automatically on first signup. Next: Phase 2 (the Volley Ledger + uploads).
+
+### Routes
+
+| Route | What |
+| --- | --- |
+| `/` | Landing — wordmark, Red Line, calls to action |
+| `/registry` | The public catalog (live works; empty for now) |
+| `/login`, `/signup` | Email + Google auth |
+| `/auth/callback`, `/auth/confirm` | OAuth / email code + token-hash exchange |
+
+### Supabase dashboard settings this phase needs
+
+Code is in place; these dashboard toggles (founder-only) light up the full flow:
+
+- **Auth → URL Configuration:** Site URL `https://ai-red.io`; add Redirect URLs
+  `https://ai-red.io/auth/callback`, `https://ai-red.io/auth/confirm` (and
+  `http://localhost:3000/...` for local dev).
+- **Auth → Providers → Google:** enable and add the OAuth client ID + secret for
+  the “Continue with Google” button to work.
+- **Auth → Email confirmation:** if on, signup shows “check your email”; if off,
+  signup logs straight in. The app handles both.
