@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* AIRED palette — cert-red accent on near-black (CLAUDE.md §3). */
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --cert-red: #ff2d2d;
+  --muted: #8a8a8a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-cert-red: var(--cert-red);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The Red Line — the audio progress bar (CLAUDE.md §3).
+   There is no audio yet, so it animates as a determinate progress bar to
+   show the role it will play once a track is streaming. */
+.redline-track {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--cert-red) 16%, transparent);
+}
+
+.redline-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--cert-red);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cert-red) 70%, transparent);
+  animation: redline 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.redline-head {
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: var(--cert-red);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--cert-red) 80%, transparent);
+}
+
+@keyframes redline {
+  0% {
+    width: 0%;
+    opacity: 1;
+  }
+  82% {
+    width: 100%;
+    opacity: 1;
+  }
+  90% {
+    width: 100%;
+    opacity: 0;
+  }
+  91% {
+    width: 0%;
+    opacity: 0;
+  }
+  100% {
+    width: 0%;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redline-fill {
+    animation: none;
+    width: 38%;
+  }
+}
