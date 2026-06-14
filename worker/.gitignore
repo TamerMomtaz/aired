@@ -1,0 +1,6 @@
+# The root .gitignore only anchors /node_modules at the repo root, so the
+# worker needs its own. Env files are covered by the root rules (.env, .env.*
+# ignored; .env.example committed).
+node_modules
+npm-debug.log*
+*.log
