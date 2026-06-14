@@ -8,6 +8,7 @@ import { WorkTitle } from "@/components/work-title";
 import { type ContributorSummary } from "@/lib/agents/actions";
 import { formatCatalogId } from "@/lib/catalog";
 import { formatDuration } from "@/lib/format";
+import { normalizeDescriptors } from "@/lib/ledger/descriptors";
 import {
   type AgentType,
   type DeltaType,
@@ -99,9 +100,9 @@ export default async function WorkPage({
     }),
   );
 
-  const descriptors: string[] = Array.isArray(work.descriptors)
-    ? work.descriptors
-    : [];
+  // Render descriptors as clean separated chips: split any comma-joined element,
+  // trim, drop blanks, and de-duplicate (mirrors the declare_volley RPC merge).
+  const descriptors = normalizeDescriptors(work.descriptors);
 
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
