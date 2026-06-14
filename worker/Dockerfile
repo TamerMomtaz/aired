@@ -4,7 +4,7 @@
 # missing from the image is THE classic way this breaks, so it is installed
 # explicitly and verified at build time below.
 
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # ffmpeg does the master → HLS transcode. ca-certificates lets us reach
 # Supabase + R2 over HTTPS.
@@ -28,7 +28,7 @@ ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
-# Container-level health probe (Railway can also use its own). Node 20 ships a
+# Container-level health probe (Railway can also use its own). Node 22 ships a
 # global fetch.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

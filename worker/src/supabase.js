@@ -2,13 +2,23 @@
 // work row and to sign a short-lived download URL for the private master.
 
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 import { config } from "./config.js";
 
+// This worker only does REST reads/updates and a signed-URL call — it never
+// opens a realtime channel. supabase-js still constructs a RealtimeClient
+// eagerly, and realtime-js aborts in that constructor when there is no native
+// WebSocket (Node < 22). We hand it the `ws` package as the realtime transport
+// so the client boots on any Node version without leaning on a global
+// WebSocket; no socket is ever opened because we never subscribe.
 export const supabase = createClient(
   config.supabaseUrl,
   config.supabaseServiceRoleKey,
-  { auth: { persistSession: false, autoRefreshToken: false } },
+  {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: ws },
+  },
 );
 
 export async function getWork(workId) {
