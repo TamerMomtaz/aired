@@ -166,7 +166,7 @@ Product copy is warm, plain, confident — accurate sentences, not hype. The pla
 quiet idea: **no one ever made anything alone; the ledger reveals the connection.** Within the
 without. Σ I.
 
-*recreAi Ionganica · IdeaTa · mefay*
+*recreAi Ionganica · IdeaTa · mefey*
 
 ---
 

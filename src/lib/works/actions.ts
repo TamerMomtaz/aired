@@ -1,0 +1,73 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { createClient } from "@/lib/supabase/server";
+
+// Create a draft work AFTER its media has been uploaded directly to Supabase
+// Storage from the browser (large audio never routes through the server — that
+// would hit Vercel's request-body cap and there is no length limit on AIRED
+// works). This action only writes the small metadata row.
+//
+// The catalog id is NOT set here: the bigint identity column assigns it. The
+// master lives in the private `masters` bucket via `master_storage_path` (a
+// Phase-2 holding column — Rule 6 keeps audio off Supabase serving; R2 + HLS is
+// Phase 3). Artwork is a public URL.
+
+export type CreateWorkInput = {
+  title: string;
+  durationSeconds: number | null;
+  masterPath: string;
+  artworkUrl: string | null;
+};
+
+export type CreateWorkResult =
+  | { ok: true; workId: number }
+  | { ok: false; error: string };
+
+export async function createWork(
+  input: CreateWorkInput,
+): Promise<CreateWorkResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "You need to be signed in to upload." };
+  }
+
+  const title = (input.title ?? "").trim();
+  if (!title) {
+    return { ok: false, error: "Give the work a title." };
+  }
+  if (!input.masterPath) {
+    return { ok: false, error: "The audio master didn't upload — try again." };
+  }
+
+  const duration =
+    input.durationSeconds != null && Number.isFinite(input.durationSeconds)
+      ? Math.max(0, Math.round(input.durationSeconds))
+      : null;
+
+  // RLS (work_owner_ins) enforces creator_id = auth.uid(); we set it explicitly
+  // from the verified server session.
+  const { data, error } = await supabase
+    .from("work")
+    .insert({
+      title,
+      creator_id: user.id,
+      duration_seconds: duration,
+      master_storage_path: input.masterPath,
+      artwork_url: input.artworkUrl,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Couldn't create the work." };
+  }
+
+  revalidatePath("/registry");
+  return { ok: true, workId: Number(data.id) };
+}

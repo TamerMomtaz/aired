@@ -29,6 +29,12 @@ export async function SiteHeader() {
 
           {user ? (
             <>
+              <Link
+                href="/upload"
+                className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
+              >
+                Upload
+              </Link>
               <span
                 className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 sm:inline"
                 title={user.email ?? undefined}
