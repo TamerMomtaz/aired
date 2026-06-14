@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
+import { RedLinePlayer } from "@/components/RedLinePlayer";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
@@ -67,7 +68,7 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, creator_id, created_at",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, creator_id, created_at",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -156,6 +157,14 @@ export default async function WorkPage({
         </div>
       </header>
 
+      <section className="mb-8">
+        <RedLinePlayer
+          hlsPlaylistKey={work.hls_playlist_key}
+          workId={work.id}
+          title={work.title}
+        />
+      </section>
+
       <section className="mb-8 flex flex-col gap-3">
         <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
           The Volley Ledger
@@ -167,7 +176,8 @@ export default async function WorkPage({
         <section className="flex flex-col gap-3">
           <p className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-xs text-muted">
             This is your draft. Declare the volleys that made it — typically 5–15
-            for a track. Streaming (R2 + the Red Line player) arrives in Phase 3.
+            for a track. The Red Line player above goes live once this track&apos;s
+            audio is processed for streaming.
           </p>
           <VolleyEditor
             workId={work.id}
