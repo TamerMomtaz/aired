@@ -5,12 +5,22 @@ import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
 import type { FeedWork } from "@/lib/works/queries";
 
+// Cap visible contributor chips so a 2-contributor card and a 7-contributor
+// card render at the same height — extras fold into a single "+N" indicator.
+const MAX_VISIBLE_CHIPS = 3;
+
 // One tile on the listener's Browse feed: cover, AIRED-#### · title, the
 // contributors as followable chips (each linking to /agent/[slug]), a Red Line
-// badge when certified, and the duration. Click the cover or title to open the
-// work — chips link to the contributor's page, so we keep them outside the
-// outer link (no nested anchors).
+// badge when certified, and the duration. Title, chip, and duration rows are
+// fixed-height so every card in the grid renders identically regardless of
+// how many contributors a work carries; any contributors past the cap fold
+// into a compact "+N" chip. Chips stay outside the outer link (no nested
+// anchors). Dedupe of repeated contributors is handled at the data layer
+// (see src/lib/works/queries.ts:shape).
 export function WorkCard({ work }: { work: FeedWork }) {
+  const visible = work.contributors.slice(0, MAX_VISIBLE_CHIPS);
+  const overflow = work.contributors.length - visible.length;
+
   return (
     <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
       <Link
@@ -42,37 +52,50 @@ export function WorkCard({ work }: { work: FeedWork }) {
       <div className="flex flex-col gap-2">
         <Link
           href={`/registry/${work.id}`}
-          className="block transition hover:opacity-90"
+          className="block h-10 overflow-hidden transition hover:opacity-90"
         >
           <WorkTitle id={work.id} title={work.title} size="sm" />
         </Link>
 
-        {work.contributors.length > 0 ? (
-          <ul className="flex flex-wrap gap-1.5">
-            {work.contributors.map((c) => {
-              const chip = (
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted transition hover:border-white/20 hover:text-foreground">
-                  {c.name}
-                </span>
-              );
-              return (
-                <li key={`${work.id}-${c.profile_slug ?? c.name}`}>
-                  {c.profile_slug ? (
-                    <Link href={`/agent/${c.profile_slug}`}>{chip}</Link>
-                  ) : (
-                    chip
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+        <ul className="flex h-6 flex-nowrap items-center gap-1.5 overflow-hidden">
+          {visible.map((c) => {
+            const chip = (
+              <span className="block max-w-[7rem] truncate rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted transition hover:border-white/20 hover:text-foreground">
+                {c.name}
+              </span>
+            );
+            return (
+              <li
+                key={`${work.id}-${c.profile_slug ?? c.name}`}
+                className="shrink-0"
+              >
+                {c.profile_slug ? (
+                  <Link href={`/agent/${c.profile_slug}`}>{chip}</Link>
+                ) : (
+                  chip
+                )}
+              </li>
+            );
+          })}
+          {overflow > 0 ? (
+            <li className="shrink-0">
+              <span
+                className="block rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted"
+                aria-label={`${overflow} more contributor${overflow === 1 ? "" : "s"}`}
+                title={work.contributors
+                  .slice(MAX_VISIBLE_CHIPS)
+                  .map((c) => c.name)
+                  .join(" · ")}
+              >
+                +{overflow}
+              </span>
+            </li>
+          ) : null}
+        </ul>
 
-        {work.duration_seconds != null ? (
-          <span className="font-mono text-[11px] text-muted/60">
-            {formatDuration(work.duration_seconds)}
-          </span>
-        ) : null}
+        <span className="block h-4 font-mono text-[11px] leading-4 text-muted/60">
+          {work.duration_seconds != null ? formatDuration(work.duration_seconds) : ""}
+        </span>
       </div>
     </article>
   );
