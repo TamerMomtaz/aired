@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { triggerTranscode } from "./transcode";
 
 // Create a draft work AFTER its media has been uploaded directly to Supabase
 // Storage from the browser (large audio never routes through the server — that
@@ -68,8 +70,16 @@ export async function createWork(
     return { ok: false, error: error?.message ?? "Couldn't create the work." };
   }
 
+  const workId = Number(data.id);
+
+  // Kick the Railway worker after the response is sent — the user redirects
+  // to /registry/[id] immediately while ffmpeg + R2 upload run in the
+  // background and fill audio_master_key / hls_playlist_key when done.
+  // Status stays `draft`; Go Live is still a deliberate click.
+  after(() => triggerTranscode(workId));
+
   revalidatePath("/registry");
-  return { ok: true, workId: Number(data.id) };
+  return { ok: true, workId };
 }
 
 export type GoLiveResult = { ok: true } | { ok: false; error: string };

@@ -1,9 +1,15 @@
 # AIRED transcoding worker (Phase 3)
 
 Turns **one** work's audio master into a streamable HLS rendition and stores it
-in Cloudflare R2. Manual / on-demand only — there is **no polling loop** and **no
-auto-trigger** yet (that comes later). Per CLAUDE.md §5 (Phase 3) and Rule 6
-(audio is served only from R2).
+in Cloudflare R2. Per CLAUDE.md §5 (Phase 3) and Rule 6 (audio is served only
+from R2).
+
+The web app **auto-triggers** this worker as soon as a new `work` row is
+inserted (`src/lib/works/transcode.ts`, called via `after()` from
+`createWork`). The status stays `draft` — Go Live is still a deliberate click.
+The CLI + curl forms below are still here for re-runs, debugging, and the
+backfill case where the auto-trigger didn't fire (e.g. env vars missing on a
+preview deploy). There is **no polling loop**.
 
 What one run does, for a given `work_id`:
 
