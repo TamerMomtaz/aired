@@ -3,7 +3,7 @@
 // `https://evil.com`. Accept a single-slash absolute path and nothing else.
 export function safeNext(
   next: string | null | undefined,
-  fallback = "/registry",
+  fallback = "/",
 ): string {
   if (!next) return fallback;
   if (!next.startsWith("/")) return fallback;
