@@ -2,7 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { GoLiveButton } from "@/components/go-live-button";
-import { RedLinePlayer } from "@/components/RedLinePlayer";
+import { PlayerStage } from "@/components/player-stage";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
@@ -70,7 +70,7 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, creator_id, created_at",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -163,13 +163,15 @@ export default async function WorkPage({
         </div>
       </header>
 
-      <section className="mb-8">
-        <RedLinePlayer
-          hlsPlaylistKey={work.hls_playlist_key}
-          workId={work.id}
-          title={work.title}
-        />
-      </section>
+      {/* Hear it → read it → see who made it: the player, then the synced
+          lyrics (and the owner's tap-sync editor), then the ledger. */}
+      <PlayerStage
+        hlsPlaylistKey={work.hls_playlist_key}
+        workId={work.id}
+        title={work.title}
+        lyrics={work.lyrics}
+        isOwner={isOwner}
+      />
 
       <section className="mb-8 flex flex-col gap-3">
         <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">

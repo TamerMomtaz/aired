@@ -31,10 +31,16 @@ export function RedLinePlayer({
   hlsPlaylistKey,
   workId,
   title,
+  onTimeUpdate,
+  onReady,
 }: {
   hlsPlaylistKey: string | null | undefined;
   workId: number | bigint;
   title: string;
+  // Optional observers (Phase 4 synced lyrics). When omitted the player behaves
+  // exactly as before — these are the only additions to its public surface.
+  onTimeUpdate?: (seconds: number) => void;
+  onReady?: (durationSeconds: number) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -53,6 +59,17 @@ export function RedLinePlayer({
 
   const streamUrl = buildStreamUrl(hlsPlaylistKey);
   const hasKey = !!(hlsPlaylistKey && hlsPlaylistKey.trim());
+
+  // Hold the latest optional callbacks in refs so the playback-listener effect
+  // below never re-subscribes when the parent passes a new function identity —
+  // its deps stay [streamUrl], leaving audio/hls.js/seeking untouched. Absent
+  // props make the calls no-ops, so behavior is byte-for-byte identical.
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onTimeUpdateRef.current = onTimeUpdate;
+    onReadyRef.current = onReady;
+  }, [onTimeUpdate, onReady]);
 
   // Attach the audio source: hls.js where supported, native HLS otherwise.
   useEffect(() => {
@@ -107,9 +124,14 @@ export function RedLinePlayer({
     const audio = audioRef.current;
     if (!audio || !streamUrl) return;
 
-    const onTime = () => setCurrentTime(audio.currentTime);
+    const onTime = () => {
+      setCurrentTime(audio.currentTime);
+      onTimeUpdateRef.current?.(audio.currentTime);
+    };
     const onDuration = () => {
-      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      const next = Number.isFinite(audio.duration) ? audio.duration : 0;
+      setDuration(next);
+      onReadyRef.current?.(next);
     };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);

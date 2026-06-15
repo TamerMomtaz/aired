@@ -102,3 +102,38 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
   revalidatePath("/registry");
   return { ok: true };
 }
+
+export type SaveLyricsResult = { ok: true } | { ok: false; error: string };
+
+// Save a work's lyrics (Phase 4 — the "heard" half). The body is LRC: the single
+// source of truth for both the words and their timing. Like goLive, this uses the
+// session-bound server client (NOT the service role), so RLS runs as the user —
+// `work_owner_upd` (creator_id = auth.uid()) is what enforces ownership; a
+// non-owner's update simply matches no rows. An empty/whitespace body is stored
+// as NULL so the "Add lyrics" affordance returns and the public renders nothing.
+export async function saveLyrics(
+  workId: number,
+  lrc: string,
+): Promise<SaveLyricsResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to edit lyrics." };
+  }
+
+  const value = lrc && lrc.trim().length > 0 ? lrc : null;
+
+  const { error } = await supabase
+    .from("work")
+    .update({ lyrics: value })
+    .eq("id", workId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/registry/${workId}`);
+  return { ok: true };
+}
