@@ -79,6 +79,11 @@ export type GoLiveResult = { ok: true } | { ok: false; error: string };
 // service role), so RLS runs as the user: `work_owner_upd` (creator_id =
 // auth.uid()) is what actually enforces ownership. The `status = 'draft'` guard
 // scopes the flip and makes a re-click a harmless no-op once the work is live.
+//
+// Phase 4 #2 — go-live also records the Community Covenant acceptance. The
+// modal in GoLiveButton requires the owner to tick the checkbox before this
+// runs; we set `terms_accepted_at = now()` alongside the status flip, so a work
+// cannot reach `live` without an agreement on file.
 export async function goLive(workId: number): Promise<GoLiveResult> {
   const supabase = await createClient();
   const {
@@ -90,7 +95,7 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
 
   const { error } = await supabase
     .from("work")
-    .update({ status: "live" })
+    .update({ status: "live", terms_accepted_at: new Date().toISOString() })
     .eq("id", workId)
     .eq("status", "draft");
 
@@ -101,6 +106,137 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
   revalidatePath(`/registry/${workId}`);
   revalidatePath("/registry");
   return { ok: true };
+}
+
+export type IssueCertificateResult =
+  | { ok: true; certId: string }
+  | { ok: false; error: string };
+
+// Mint the Red Line certificate for a work (Phase 4 #2 part 2). The Red Line
+// certifies AUTHORSHIP & PROCESS only — never resemblance to any artist
+// (CLAUDE.md §1.3). We session-bind the Supabase client so RLS runs as the user:
+// `certification_owner_ins` (creator_id of the work matches auth.uid()) is what
+// actually enforces ownership; the inferred-as-owner guard below just lets us
+// return a clean error before talking to the DB. Once a cert exists for a work,
+// re-calling is a no-op — `certification` is immutable by design (no UPDATE/
+// DELETE policy).
+export async function issueCertificate(
+  workId: number,
+): Promise<IssueCertificateResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to issue the certificate." };
+  }
+
+  const { data: work, error: workErr } = await supabase
+    .from("work")
+    .select("id, title, creator_id, status, descriptors")
+    .eq("id", workId)
+    .maybeSingle();
+  if (workErr) {
+    return { ok: false, error: workErr.message };
+  }
+  if (!work) {
+    return { ok: false, error: "Couldn't find this work." };
+  }
+  if (work.creator_id !== user.id) {
+    return { ok: false, error: "Only the work's owner can issue its Red Line." };
+  }
+  if (work.status !== "live") {
+    return { ok: false, error: "Publish this work before certifying it." };
+  }
+
+  // Already certified? Treat as a no-op success so a double-click is harmless.
+  const { data: existing } = await supabase
+    .from("certification")
+    .select("id")
+    .eq("work_id", workId)
+    .maybeSingle();
+  if (existing) {
+    return { ok: true, certId: existing.id };
+  }
+
+  // Assemble the ledger's contributor lineage. Volleys carry SHAPES only; we
+  // surface each contributor exactly once (carbon and silicon, by name) in the
+  // order they first appear in the trail.
+  const { data: volleys, error: vErr } = await supabase
+    .from("public_volley")
+    .select("seq, agent:agent_id ( name, type )")
+    .eq("work_id", workId)
+    .order("seq", { ascending: true });
+  if (vErr) {
+    return { ok: false, error: vErr.message };
+  }
+
+  type VolleyRow = {
+    seq: number | string;
+    agent: { name: string; type: string } | null;
+  };
+  const rows = (volleys ?? []) as unknown as VolleyRow[];
+
+  const contributors: Array<{ name: string; type: "human" | "ai" | "tool" }> = [];
+  const seen = new Set<string>();
+  for (const v of rows) {
+    if (!v.agent || !v.agent.name) continue;
+    if (seen.has(v.agent.name)) continue;
+    seen.add(v.agent.name);
+    // Collapse the agent_type enum into the cert's coarser carbon/silicon/tool
+    // axis. AI models and AI voices both read as "ai" on the marquee.
+    const t: "human" | "ai" | "tool" =
+      v.agent.type === "human"
+        ? "human"
+        : v.agent.type === "tool"
+          ? "tool"
+          : "ai";
+    contributors.push({ name: v.agent.name, type: t });
+  }
+
+  const checks = {
+    human_origin: contributors.some((c) => c.type === "human"),
+    authorship: "declared via volley ledger",
+    volley_count: rows.length,
+    contributors,
+    process: "human-directed, AI-collaborated",
+    resemblance_claim: null,
+    note: "Certifies authorship and process. Makes no claim of similarity to any artist.",
+  };
+
+  const descriptors = Array.isArray(work.descriptors)
+    ? (work.descriptors as string[])
+    : [];
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from("certification")
+    .insert({
+      work_id: workId,
+      checks,
+      descriptors,
+      cert_url: `https://ai-red.io/cert/${workId}`,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !inserted) {
+    return {
+      ok: false,
+      error: insertErr?.message ?? "Couldn't issue the certificate.",
+    };
+  }
+
+  // Bump the denormalized flag on the work itself so the registry list (and any
+  // other surface that reads `red_line_certified` without joining the cert
+  // table) shows the Red Line badge immediately. work_owner_upd permits this.
+  await supabase
+    .from("work")
+    .update({ red_line_certified: true })
+    .eq("id", workId);
+
+  revalidatePath(`/registry/${workId}`);
+  revalidatePath(`/cert/${workId}`);
+  revalidatePath("/registry");
+  return { ok: true, certId: inserted.id };
 }
 
 export type SaveLyricsResult = { ok: true } | { ok: false; error: string };

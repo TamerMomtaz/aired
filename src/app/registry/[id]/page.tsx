@@ -1,7 +1,9 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { GoLiveButton } from "@/components/go-live-button";
+import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
@@ -78,6 +80,16 @@ export default async function WorkPage({
 
   const isOwner = !!user && user.id === work.creator_id;
 
+  // RLS on `certification` is `select using (true)` — fine to fetch for anyone.
+  // We only need to know whether one exists, to decide "Issue" vs "View" in the
+  // owner trigger below (and to flag certified works on the public chrome).
+  const { data: cert } = await supabase
+    .from("certification")
+    .select("id")
+    .eq("work_id", workId)
+    .maybeSingle();
+  const isCertified = !!cert;
+
   const { data: volleyData } = await supabase
     .from("public_volley")
     .select(
@@ -147,7 +159,7 @@ export default async function WorkPage({
             >
               {work.status}
             </span>
-            {work.red_line_certified ? (
+            {isCertified ? (
               <span className="rounded-full border border-cert-red/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-cert-red">
                 Red Line
               </span>
@@ -159,6 +171,17 @@ export default async function WorkPage({
 
           {isOwner && work.status === "draft" ? (
             <GoLiveButton workId={work.id} />
+          ) : null}
+
+          {isCertified ? (
+            <Link
+              href={`/cert/${work.id}`}
+              className="self-start rounded-lg border border-cert-red/40 px-4 py-2.5 text-sm font-medium text-cert-red transition hover:bg-cert-red/10"
+            >
+              View Certificate →
+            </Link>
+          ) : isOwner && work.status === "live" ? (
+            <IssueCertButton workId={work.id} />
           ) : null}
         </div>
       </header>
