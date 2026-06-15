@@ -71,3 +71,34 @@ export async function createWork(
   revalidatePath("/registry");
   return { ok: true, workId: Number(data.id) };
 }
+
+export type GoLiveResult = { ok: true } | { ok: false; error: string };
+
+// Publish a draft work — the Phase 4 "Go Live" action. One-directional for now:
+// draft → live, never back. We use the session-bound server client (NOT the
+// service role), so RLS runs as the user: `work_owner_upd` (creator_id =
+// auth.uid()) is what actually enforces ownership. The `status = 'draft'` guard
+// scopes the flip and makes a re-click a harmless no-op once the work is live.
+export async function goLive(workId: number): Promise<GoLiveResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to publish a work." };
+  }
+
+  const { error } = await supabase
+    .from("work")
+    .update({ status: "live" })
+    .eq("id", workId)
+    .eq("status", "draft");
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/registry/${workId}`);
+  revalidatePath("/registry");
+  return { ok: true };
+}

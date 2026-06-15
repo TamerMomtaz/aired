@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
+import { GoLiveButton } from "@/components/go-live-button";
 import { RedLinePlayer } from "@/components/RedLinePlayer";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
@@ -155,6 +156,10 @@ export default async function WorkPage({
               {formatDuration(work.duration_seconds)}
             </span>
           </div>
+
+          {isOwner && work.status === "draft" ? (
+            <GoLiveButton workId={work.id} />
+          ) : null}
         </div>
       </header>
 
