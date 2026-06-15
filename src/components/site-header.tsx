@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { InstallTrigger } from "@/components/install/install-trigger";
 import { signOut } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -31,6 +32,8 @@ export async function SiteHeader() {
           >
             Listen
           </Link>
+
+          <InstallTrigger />
 
           {user ? (
             <>
