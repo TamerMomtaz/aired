@@ -69,6 +69,11 @@ export function LyricsSyncEditor({
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
 
+  // The bounded scroll container for the lyric line list, and per-line refs
+  // for the "armed line scrolled to center" behavior.
+  const listRef = useRef<HTMLOListElement | null>(null);
+  const lineItemRefs = useRef<(HTMLLIElement | null)[]>([]);
+
   const streamUrl = buildStreamUrl(hlsPlaylistKey);
   const hasLyrics = !!(initialLyrics && initialLyrics.trim());
   const lines = useMemo(() => text.split(/\r?\n/), [text]);
@@ -233,6 +238,30 @@ export function LyricsSyncEditor({
     return () => window.removeEventListener("keydown", onKey);
   }, [step, tap]);
 
+  // Keep the armed line centered in its bounded scroll box. All motion is
+  // scoped to the list — the page never jumps, so the pinned transport (and
+  // the line about to be stamped) stay on screen together.
+  useEffect(() => {
+    if (step !== "sync") return;
+    const container = listRef.current;
+    if (!container) return;
+    const idx = Math.min(armed, lines.length - 1);
+    if (idx < 0) return;
+    const el = lineItemRefs.current[idx];
+    if (!el) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const elOffset = eRect.top - cRect.top + container.scrollTop;
+    const top = elOffset - container.clientHeight / 2 + el.clientHeight / 2;
+    container.scrollTo({
+      top: Math.max(0, top),
+      behavior: reduce ? "auto" : "smooth",
+    });
+  }, [step, armed, lines.length]);
+
   function save() {
     setError(null);
     const lrc = toLrc(lines.map((line, i) => ({ text: line, t: times[i] ?? null })));
@@ -341,8 +370,9 @@ export function LyricsSyncEditor({
         </div>
       </div>
 
-      {/* Transport for the editor's own audio. */}
-      <div className="flex flex-col gap-2">
+      {/* Transport + Tap, pinned so the controls never leave the viewport on
+          long lyrics — sits just under the site header (h-14, z-20). */}
+      <div className="sticky top-14 z-10 flex flex-col gap-3 rounded-xl border border-white/10 bg-background/90 p-4 backdrop-blur">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -373,48 +403,56 @@ export function LyricsSyncEditor({
           className="w-full accent-cert-red"
           aria-label="Seek"
         />
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={tap}
+            onKeyDown={(e) => {
+              // The window listener owns the spacebar; suppress native key
+              // activation so a focused Tap button can't double-fire.
+              if (e.code === "Space" || e.code === "Enter") e.preventDefault();
+            }}
+            disabled={allSynced}
+            className="flex-1 rounded-xl bg-cert-red px-4 py-4 text-sm font-semibold text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Stamp the current line and advance"
+          >
+            Tap <span className="opacity-70">(or press Space)</span>
+          </button>
+          <button
+            type="button"
+            onClick={backOne}
+            disabled={armed === 0}
+            className="rounded-xl border border-white/12 px-4 py-4 text-sm text-muted transition hover:text-foreground disabled:opacity-40"
+          >
+            Back one line
+          </button>
+        </div>
+
+        <p className="text-xs text-muted">
+          {allSynced
+            ? "All lines stamped. Adjust any line below, or save."
+            : `Armed: line ${armed + 1} of ${lines.length}. Play the track and tap on the beat.`}
+        </p>
       </div>
 
-      {/* Tap control. */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={tap}
-          onKeyDown={(e) => {
-            // The window listener owns the spacebar; suppress native key
-            // activation so a focused Tap button can't double-fire.
-            if (e.code === "Space" || e.code === "Enter") e.preventDefault();
-          }}
-          disabled={allSynced}
-          className="flex-1 rounded-xl bg-cert-red px-4 py-4 text-sm font-semibold text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="Stamp the current line and advance"
-        >
-          Tap <span className="opacity-70">(or press Space)</span>
-        </button>
-        <button
-          type="button"
-          onClick={backOne}
-          disabled={armed === 0}
-          className="rounded-xl border border-white/12 px-4 py-4 text-sm text-muted transition hover:text-foreground disabled:opacity-40"
-        >
-          Back one line
-        </button>
-      </div>
-
-      <p className="text-xs text-muted">
-        {allSynced
-          ? "All lines stamped. Adjust any line below, or save."
-          : `Armed: line ${armed + 1} of ${lines.length}. Play the track and tap on the beat.`}
-      </p>
-
-      {/* The lines, with their stamps. Click a line to re-arm from there. */}
-      <ol className="flex flex-col gap-1">
+      {/* The lines, with their stamps. Click a line to re-arm from there. The
+          list scrolls inside its own bounded box so the editor never grows
+          taller than the viewport on long lyrics; the armed line is held at
+          the box's center by the effect above. */}
+      <ol
+        ref={listRef}
+        className="relative flex max-h-96 flex-col gap-1 overflow-y-auto overscroll-contain pr-1"
+      >
         {lines.map((line, i) => {
           const t = times[i] ?? null;
           const isArmed = i === armed;
           return (
             <li
               key={i}
+              ref={(el) => {
+                lineItemRefs.current[i] = el;
+              }}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
                 isArmed
                   ? "bg-cert-red/10 ring-1 ring-cert-red/40"

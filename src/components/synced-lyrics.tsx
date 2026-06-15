@@ -31,7 +31,9 @@ export function SyncedLyrics({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
 
-  // Keep the lit line centered in its own scroll box (never scrolls the page).
+  // Karaoke anchor: hold the lit line at the container's center while lines
+  // scroll underneath. All motion is scoped to the lyrics box — getBoundingClientRect
+  // sidesteps offsetParent quirks so the page is never touched.
   useEffect(() => {
     if (activeIndex < 0) return;
     const container = containerRef.current;
@@ -40,7 +42,10 @@ export function SyncedLyrics({
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const top = el.offsetTop - container.clientHeight / 2 + el.clientHeight / 2;
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const elOffset = eRect.top - cRect.top + container.scrollTop;
+    const top = elOffset - container.clientHeight / 2 + el.clientHeight / 2;
     container.scrollTo({
       top: Math.max(0, top),
       behavior: reduce ? "auto" : "smooth",
@@ -68,7 +73,7 @@ export function SyncedLyrics({
     <div
       ref={containerRef}
       aria-label="Lyrics"
-      className="max-h-72 overflow-y-auto rounded-xl border border-white/8 bg-white/[0.02] p-5"
+      className="relative max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-white/8 bg-white/[0.02] p-5"
     >
       <div className="flex flex-col gap-2">
         {lines.map((l, i) => {
