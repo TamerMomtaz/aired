@@ -101,36 +101,23 @@ function CovenantModal({
             id="covenant-heading"
             className="text-base font-semibold text-foreground"
           >
-            Before this goes live
+            The AIRED Covenant
           </h2>
           <p className="text-sm text-muted">
-            Going live publishes this work to anyone with the link, and adds it
-            to the AIRED registry. By continuing you agree to the AIRED
-            Community Covenant:
+            AIRED celebrates what other places hide: music made by human and AI,
+            together. We will never ban the collaboration. In return, we ask
+            one thing.
           </p>
         </div>
 
-        <ul className="flex flex-col gap-1.5 rounded-xl border border-white/8 bg-white/[0.02] p-4 text-xs leading-relaxed text-muted">
-          <li>
-            <span className="text-foreground">·</span> You hold the rights to
-            the audio, the lyrics, and the artwork.
-          </li>
-          <li>
-            <span className="text-foreground">·</span> Every contributor — carbon
-            and silicon — is named honestly in the ledger.
-          </li>
-          <li>
-            <span className="text-foreground">·</span> The Red Line will certify
-            authorship and process. It never claims resemblance.
-          </li>
-          <li>
-            <span className="text-foreground">·</span> No third-party artist or
-            song names live in public data.
-          </li>
-        </ul>
+        <p className="rounded-xl border border-cert-red/30 bg-cert-red/[0.06] p-4 text-sm leading-relaxed text-foreground">
+          Your work does not promote, glorify, or incite hatred, violence, or
+          the dehumanization of any people — by race, religion, ethnicity,
+          nationality, gender, sexuality, disability, or the like.
+        </p>
 
         <p className="text-xs text-muted/80">
-          The{" "}
+          Read the{" "}
           <Link
             href="/terms"
             target="_blank"
@@ -138,7 +125,7 @@ function CovenantModal({
           >
             full Covenant
           </Link>{" "}
-          opens in a new tab.
+          (opens in a new tab).
         </p>
 
         <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-sm text-foreground">
