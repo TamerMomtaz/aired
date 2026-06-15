@@ -82,7 +82,14 @@ export function VolleyEditor({
         setAddError(result.error);
         return;
       }
-      setAgents((prev) => [...prev, result.agent]);
+      // createContributor is find-or-create: typing a name that already
+      // exists returns the existing agent. Don't duplicate it in the picker
+      // — just select it.
+      setAgents((prev) =>
+        prev.some((a) => a.id === result.agent.id)
+          ? prev
+          : [...prev, result.agent],
+      );
       setAgentId(result.agent.id);
       setNewName("");
       setAdding(false);
