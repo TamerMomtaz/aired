@@ -7,10 +7,11 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 export const metadata = { title: "Upload · AIRED" };
 
 // Uploading is creator-only. Authorization still lives at the data layer (RLS);
-// this redirect is for UX.
+// this redirect is for UX. Carry `next=/upload` so the listener-turned-maker
+// lands back here the moment they finish logging in or signing up.
 export default async function UploadPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?next=/upload");
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-5 py-10">

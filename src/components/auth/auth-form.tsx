@@ -34,7 +34,7 @@ const COPY: Record<
   },
 };
 
-export function AuthForm({ mode }: { mode: Mode }) {
+export function AuthForm({ mode, next }: { mode: Mode; next?: string }) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     mode === "login" ? signIn : signUp,
     undefined,
@@ -44,6 +44,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <div className="flex w-full flex-col gap-5">
       <form action={signInWithGoogle}>
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <GoogleButton />
       </form>
 
@@ -54,6 +55,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </div>
 
       <form action={formAction} className="flex flex-col gap-3">
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted">Email</span>
           <input
@@ -98,7 +100,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
       <p className="text-center text-sm text-muted">
         {copy.togglePrompt}{" "}
-        <Link href={copy.toggleHref} className="text-foreground underline-offset-4 hover:underline">
+        <Link
+          href={
+            next ? `${copy.toggleHref}?next=${encodeURIComponent(next)}` : copy.toggleHref
+          }
+          className="text-foreground underline-offset-4 hover:underline"
+        >
           {copy.toggleCta}
         </Link>
       </p>

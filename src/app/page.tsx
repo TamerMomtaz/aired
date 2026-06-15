@@ -1,51 +1,98 @@
 import Link from "next/link";
 
-import { LedgerStatus } from "@/components/ledger-status";
+import { SearchBar } from "@/components/search-bar";
+import { WorkCard } from "@/components/work-card";
+import { getCurrentUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/server";
+import { getFeed, searchWorks } from "@/lib/works/queries";
 
-export default function Home() {
+export const metadata = { title: "AIRED — AI-ed and proud" };
+
+// The listener's door. The catalog is the front page: live works, newest first,
+// with search up top. A maker who arrives here gets a clear Create CTA (the
+// site header carries the Listen/Create split); a listener gets to listen.
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const rawQ = Array.isArray(params.q) ? params.q[0] : params.q;
+  const q = (rawQ ?? "").trim();
+  const isSearching = q.length > 0;
+
+  const supabase = await createClient();
+  const [works, user] = await Promise.all([
+    isSearching ? searchWorks(supabase, q) : getFeed(supabase),
+    getCurrentUser(),
+  ]);
+
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-12 px-6 py-16 text-center">
-      <header className="flex flex-col items-center gap-3">
-        <h1 className="text-6xl font-semibold tracking-[0.22em] sm:text-7xl">
-          AIRED
-        </h1>
-        <p className="text-sm leading-relaxed text-muted">
-          <span className="text-foreground">AI-ed</span> and proud — Added
-          Intelligence, not Artificial. The first platform where the AI is a
-          named, credited collaborator.
-        </p>
+    <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
+      <header className="mb-7 flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
+            {isSearching ? "Search" : "Listen"}
+          </h1>
+          <p className="text-sm text-muted">
+            {isSearching
+              ? "Works whose title, AIRED-####, or contributor name match."
+              : "Every AIRED work, freshest first — credited to everyone who made it, carbon and silicon alike."}
+          </p>
+        </div>
+        <SearchBar initial={q} autoFocus={isSearching} />
       </header>
 
-      <section className="w-full" aria-label="The Red Line">
-        <div className="redline-track">
-          <div className="redline-fill">
-            <span className="redline-head" />
-          </div>
-        </div>
-        <p className="mt-3 text-[11px] uppercase tracking-[0.28em] text-muted">
-          The Red Line
-        </p>
-      </section>
-
-      <div className="flex w-full flex-col items-center gap-3">
-        <Link
-          href="/registry"
-          className="w-full rounded-lg bg-cert-red px-5 py-3 text-sm font-medium text-white shadow-[0_0_22px_-8px_var(--cert-red)] transition hover:brightness-110"
-        >
-          Browse the registry
-        </Link>
-        <Link
-          href="/signup"
-          className="w-full rounded-lg border border-white/12 px-5 py-3 text-sm font-medium text-foreground transition hover:bg-white/[0.06]"
-        >
-          Start your ledger
-        </Link>
-      </div>
-
-      <footer className="flex flex-col items-center gap-3 text-xs text-muted">
-        <LedgerStatus />
-        <p className="font-mono text-muted/70">Σ I</p>
-      </footer>
+      {works.length > 0 ? (
+        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {works.map((work) => (
+            <li key={work.id}>
+              <WorkCard work={work} />
+            </li>
+          ))}
+        </ul>
+      ) : isSearching ? (
+        <EmptyResults query={q} />
+      ) : (
+        <EmptyFeed signedIn={!!user} />
+      )}
     </main>
+  );
+}
+
+function EmptyResults({ query }: { query: string }) {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-white/12 px-6 py-16 text-center">
+      <p className="max-w-md text-sm leading-relaxed text-muted">
+        No works match{" "}
+        <span className="font-mono text-foreground">&ldquo;{query}&rdquo;</span>{" "}
+        yet. Try a different title, AIRED number, or contributor name.
+      </p>
+      <Link
+        href="/"
+        className="rounded-lg border border-white/12 px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-white/[0.06]"
+      >
+        Back to Browse
+      </Link>
+    </div>
+  );
+}
+
+function EmptyFeed({ signedIn }: { signedIn: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-white/12 px-6 py-16 text-center">
+      <span className="font-mono text-sm uppercase tracking-[0.18em] text-muted/60">
+        AIRED-0001 · awaiting
+      </span>
+      <p className="max-w-md text-sm leading-relaxed text-muted">
+        Nothing live yet. The first ledger writes the first work.
+      </p>
+      <Link
+        href={signedIn ? "/upload" : "/signup?next=/upload"}
+        className="rounded-lg bg-cert-red px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
+      >
+        {signedIn ? "Upload the first work" : "Start your ledger"}
+      </Link>
+    </div>
   );
 }

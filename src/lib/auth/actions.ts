@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { safeNext } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/server";
 
 // Result returned to the form via useActionState. `error` shows inline; `notice`
@@ -24,12 +25,17 @@ async function getOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+// Where to land after a successful sign-in/sign-up when the form carries no
+// explicit `next` (e.g. a listener who tapped Create lands at /upload).
+const DEFAULT_NEXT = "/";
+
 export async function signIn(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const next = safeNext(formData.get("next")?.toString(), DEFAULT_NEXT);
   if (!email || !password) {
     return { error: "Enter your email and password." };
   }
@@ -42,7 +48,7 @@ export async function signIn(
 
   // The root layout reads the user, so refresh it before leaving.
   revalidatePath("/", "layout");
-  redirect("/registry");
+  redirect(next);
 }
 
 export async function signUp(
@@ -51,6 +57,7 @@ export async function signUp(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const next = safeNext(formData.get("next")?.toString(), DEFAULT_NEXT);
   if (!email || !password) {
     return { error: "Enter your email and password." };
   }
@@ -63,7 +70,9 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/registry` },
+    options: {
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
   });
   if (error) {
     return { error: error.message };
@@ -73,7 +82,7 @@ export async function signUp(
   // the user is already in. Otherwise we wait for them to confirm by email.
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/registry");
+    redirect(next);
   }
 
   return {
@@ -85,12 +94,15 @@ export async function signUp(
 // Google sign-in. This kicks off the OAuth handshake and redirects the browser
 // to Google; the round-trip lands back on /auth/callback. Requires the Google
 // provider to be enabled in the Supabase dashboard with OAuth credentials.
-export async function signInWithGoogle(): Promise<void> {
+export async function signInWithGoogle(formData: FormData): Promise<void> {
+  const next = safeNext(formData.get("next")?.toString(), DEFAULT_NEXT);
   const supabase = await createClient();
   const origin = await getOrigin();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${origin}/auth/callback?next=/registry` },
+    options: {
+      redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
   });
   if (error) {
     redirect(`/auth/auth-code-error?reason=${encodeURIComponent(error.message)}`);

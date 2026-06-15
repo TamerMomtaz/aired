@@ -6,12 +6,17 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 // The app shell's top bar. Server-rendered so it knows who's signed in. It's
 // revalidated on sign-in/out (see lib/auth/actions) so the state never goes
 // stale across a navigation.
+//
+// The shape is the platform's offer in nav form: Listen (the public feed) on
+// one side, Create (Upload) on the other. A logged-out maker who taps Create
+// is routed via /signup?next=/upload — landing them at the upload form the
+// moment they finish signing up.
 export async function SiteHeader() {
   const user = await getCurrentUser();
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/8 bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-5">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-5">
         <Link
           href="/"
           className="text-lg font-semibold tracking-[0.2em] text-foreground"
@@ -21,17 +26,17 @@ export async function SiteHeader() {
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
           <Link
-            href="/registry"
+            href="/"
             className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
           >
-            Registry
+            Listen
           </Link>
 
           {user ? (
             <>
               <Link
                 href="/upload"
-                className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
+                className="rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110"
               >
                 Upload
               </Link>
@@ -59,10 +64,10 @@ export async function SiteHeader() {
                 Log in
               </Link>
               <Link
-                href="/signup"
+                href="/signup?next=/upload"
                 className="rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110"
               >
-                Sign up
+                Create
               </Link>
             </>
           )}

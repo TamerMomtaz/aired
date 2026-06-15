@@ -2,13 +2,22 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AuthForm } from "@/components/auth/auth-form";
+import { safeNext } from "@/lib/auth/safe-redirect";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 export const metadata = { title: "Sign up · AIRED" };
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const rawNext = Array.isArray(params.next) ? params.next[0] : params.next;
+  const next = safeNext(rawNext, "/");
+
   if (await getCurrentUser()) {
-    redirect("/registry");
+    redirect(next);
   }
 
   return (
@@ -26,7 +35,7 @@ export default async function SignupPage() {
         </p>
       </header>
 
-      <AuthForm mode="signup" />
+      <AuthForm mode="signup" next={next} />
 
       <p className="text-center text-xs leading-relaxed text-muted/70">
         By creating an account you start a ledger. Your private craft stays
