@@ -39,19 +39,28 @@ type WorkRow = {
 const WORK_SELECT =
   "id, title, artwork_url, duration_seconds, red_line_certified, created_at, public_volley(agent(name, profile_slug))";
 
-// Reshape a hydrated row into a card-ready FeedWork. A single agent may appear
-// on several volleys per work; dedupe by slug-or-name so chips don't repeat.
-function shape(row: WorkRow): FeedWork {
+// A single agent may appear on several volleys per work; collapse by slug-or-name
+// so the contributor line / chips don't repeat. Generic over the agent shape so
+// callers carrying extra fields (id, type, …) keep them through the dedupe.
+type AgentLite = { name: string; profile_slug: string | null };
+export function dedupeContributors<A extends AgentLite>(
+  rows: ReadonlyArray<{ agent: A | null } | null | undefined> | null | undefined,
+): A[] {
   const seen = new Set<string>();
-  const contributors: FeedWork["contributors"] = [];
-  for (const v of row.public_volley ?? []) {
-    const a = v.agent;
+  const out: A[] = [];
+  for (const row of rows ?? []) {
+    const a = row?.agent;
     if (!a) continue;
     const key = (a.profile_slug ?? a.name).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    contributors.push({ name: a.name, profile_slug: a.profile_slug });
+    out.push(a);
   }
+  return out;
+}
+
+// Reshape a hydrated row into a card-ready FeedWork.
+function shape(row: WorkRow): FeedWork {
   return {
     id: row.id,
     title: row.title,
@@ -59,7 +68,7 @@ function shape(row: WorkRow): FeedWork {
     duration_seconds: row.duration_seconds,
     red_line_certified: row.red_line_certified,
     created_at: row.created_at,
-    contributors,
+    contributors: dedupeContributors(row.public_volley),
   };
 }
 
@@ -75,6 +84,25 @@ export async function getFeed(
     .order("created_at", { ascending: false })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
+}
+
+// One live work, card-ready (same shape as the feed). Used by the per-song
+// share preview (registry/[id]/opengraph-image) so the link card is built from
+// the same dedupe + embed as the browse cards. Returns null for missing,
+// non-live, or unreadable rows — never throws — so the OG renderer can degrade
+// to a neutral AIRED fallback rather than crashing the share unfurl.
+export async function getWorkById(
+  supabase: SupabaseServerClient,
+  workId: number,
+): Promise<FeedWork | null> {
+  if (!Number.isInteger(workId) || workId <= 0) return null;
+  const { data } = await supabase
+    .from("work")
+    .select(WORK_SELECT)
+    .eq("id", workId)
+    .eq("status", "live")
+    .maybeSingle();
+  return data ? shape(data as unknown as WorkRow) : null;
 }
 
 // "1", "0001", "AIRED-0001", "aired 1" → 1; anything else → null.

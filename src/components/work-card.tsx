@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ShareButton } from "@/components/share-button";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
 import type { FeedWork } from "@/lib/works/queries";
@@ -23,31 +24,42 @@ export function WorkCard({ work }: { work: FeedWork }) {
 
   return (
     <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
-      <Link
-        href={`/registry/${work.id}`}
-        className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
-        aria-label={`Open AIRED-${work.id} ${work.title}`}
-      >
-        {work.artwork_url ? (
-          <Image
-            src={work.artwork_url}
-            alt=""
-            fill
-            sizes="(min-width: 1024px) 240px, (min-width: 640px) 33vw, 50vw"
-            className="object-cover transition group-hover:scale-[1.02]"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/[0.04] to-transparent text-[10px] uppercase tracking-[0.18em] text-muted/50">
-            no art
-          </div>
-        )}
-        {work.red_line_certified ? (
-          <span className="absolute left-2 top-2 rounded-full border border-cert-red/50 bg-background/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cert-red backdrop-blur">
-            Red Line
-          </span>
-        ) : null}
-      </Link>
+      {/* The share button is a sibling of the cover Link, never a child — no
+          nested anchors, and a tap on the icon never navigates to the song. */}
+      <div className="relative">
+        <Link
+          href={`/registry/${work.id}`}
+          className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
+          aria-label={`Open AIRED-${work.id} ${work.title}`}
+        >
+          {work.artwork_url ? (
+            <Image
+              src={work.artwork_url}
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 240px, (min-width: 640px) 33vw, 50vw"
+              className="object-cover transition group-hover:scale-[1.02]"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/[0.04] to-transparent text-[10px] uppercase tracking-[0.18em] text-muted/50">
+              no art
+            </div>
+          )}
+          {work.red_line_certified ? (
+            <span className="absolute left-2 top-2 rounded-full border border-cert-red/50 bg-background/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cert-red backdrop-blur">
+              Red Line
+            </span>
+          ) : null}
+        </Link>
+        <ShareButton
+          workId={work.id}
+          title={work.title}
+          contributorNames={work.contributors.map((c) => c.name)}
+          compact
+          className="absolute right-2 top-2 z-10 inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-background/70 text-foreground backdrop-blur transition hover:border-white/30 hover:bg-background/85 active:scale-95"
+        />
+      </div>
 
       <div className="flex flex-col gap-2">
         <Link
