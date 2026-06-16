@@ -6,6 +6,7 @@ import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
+import { ShareButton } from "@/components/share-button";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
@@ -21,7 +22,7 @@ import {
 } from "@/lib/ledger/types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getFeed } from "@/lib/works/queries";
+import { dedupeContributors, getFeed } from "@/lib/works/queries";
 
 export async function generateMetadata({
   params,
@@ -30,16 +31,67 @@ export async function generateMetadata({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  // Pull the contributor names alongside the title so the share copy and the
+  // description tag both name the makers — the platform's whole point. The
+  // colocated opengraph-image picks up the rich card automatically.
   const { data: work } = await supabase
     .from("work")
-    .select("id, title")
+    .select(
+      "id, title, public_volley(agent(name, profile_slug))",
+    )
     .eq("id", Number(id))
     .maybeSingle();
+
+  if (!work) {
+    return { title: "Work · AIRED" };
+  }
+
+  const contributors = dedupeContributors(
+    (work as unknown as {
+      public_volley: Array<{ agent: { name: string; profile_slug: string | null } | null }>;
+    }).public_volley,
+  );
+  const names = contributors.map((c) => c.name);
+  const makers = formatMakerList(names);
+  const catalog = formatCatalogId(work.id);
+  const title = `${catalog} · "${work.title}" · AIRED`;
+  const description = makers
+    ? `${catalog} · "${work.title}" by ${makers}. Made by carbon and silicon, credited by name. Listen on AIRED.`
+    : `${catalog} · "${work.title}". Made by carbon and silicon, credited by name. Listen on AIRED.`;
+  const canonical = `/registry/${work.id}`;
+
   return {
-    title: work
-      ? `${formatCatalogId(work.id)} · "${work.title}" · AIRED`
-      : "Work · AIRED",
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "music.song",
+      title,
+      description,
+      url: canonical,
+      siteName: "AIRED",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   };
+}
+
+// "Tee, Claude & Suno" — soft cap at four names so the OG description stays
+// scannable on a phone preview; the rest fold into a "+N" tail. Identity only,
+// never a style descriptor (CLAUDE.md rules 2 + 3a).
+function formatMakerList(names: string[]): string {
+  if (names.length === 0) return "";
+  const visible = names.slice(0, 4);
+  const extra = names.length - visible.length;
+  let head: string;
+  if (visible.length === 1) head = visible[0];
+  else if (visible.length === 2) head = `${visible[0]} & ${visible[1]}`;
+  else
+    head = `${visible.slice(0, -1).join(", ")} & ${visible[visible.length - 1]}`;
+  return extra > 0 ? `${head} +${extra}` : head;
 }
 
 type VolleyRecord = {
@@ -151,6 +203,10 @@ export default async function WorkPage({
   // trim, drop blanks, and de-duplicate (mirrors the declare_volley RPC merge).
   const descriptors = normalizeDescriptors(work.descriptors);
 
+  // Carbon + silicon names, deduped, for the share copy. Same dedupe rule as
+  // the public feed (see src/lib/works/queries.ts).
+  const contributorNames = dedupeContributors(volleys).map((a) => a.name);
+
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
   if (isOwner) {
@@ -207,15 +263,24 @@ export default async function WorkPage({
             <GoLiveButton workId={work.id} />
           ) : null}
 
-          {isCertified ? (
-            <Link
-              href={`/cert/${work.id}`}
-              className="self-start rounded-lg border border-cert-red/40 px-4 py-2.5 text-sm font-medium text-cert-red transition hover:bg-cert-red/10"
-            >
-              View Certificate →
-            </Link>
-          ) : isOwner && work.status === "live" ? (
-            <IssueCertButton workId={work.id} />
+          {work.status === "live" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {isCertified ? (
+                <Link
+                  href={`/cert/${work.id}`}
+                  className="rounded-lg border border-cert-red/40 px-4 py-2.5 text-sm font-medium text-cert-red transition hover:bg-cert-red/10"
+                >
+                  View Certificate →
+                </Link>
+              ) : isOwner ? (
+                <IssueCertButton workId={work.id} />
+              ) : null}
+              <ShareButton
+                workId={work.id}
+                title={work.title}
+                contributorNames={contributorNames}
+              />
+            </div>
           ) : null}
         </div>
       </header>

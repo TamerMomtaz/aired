@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { CardPlayButton } from "@/components/player/card-play-button";
 import type { Track } from "@/components/player/track";
+import { ShareButton } from "@/components/share-button";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
 import type { FeedWork } from "@/lib/works/queries";
@@ -33,6 +34,8 @@ export function WorkCard({
 
   return (
     <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
+      {/* The share button is a sibling of the cover Link, never a child — no
+          nested anchors, and a tap on the icon never navigates to the song. */}
       <div className="relative">
         <Link
           href={`/registry/${work.id}`}
@@ -59,6 +62,13 @@ export function WorkCard({
             </span>
           ) : null}
         </Link>
+        <ShareButton
+          workId={work.id}
+          title={work.title}
+          contributorNames={work.contributors.map((c) => c.name)}
+          compact
+          className="absolute right-2 top-2 z-10 inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-background/70 text-foreground backdrop-blur transition hover:border-white/30 hover:bg-background/85 active:scale-95"
+        />
         {queue && work.hls_playlist_key ? (
           <CardPlayButton queue={queue} workId={work.id} title={work.title} />
         ) : null}
