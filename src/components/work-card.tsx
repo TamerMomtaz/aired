@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { CardPlayButton } from "@/components/player/card-play-button";
+import type { Track } from "@/components/player/track";
 import { ShareButton } from "@/components/share-button";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
@@ -18,7 +20,15 @@ const MAX_VISIBLE_CHIPS = 3;
 // into a compact "+N" chip. Chips stay outside the outer link (no nested
 // anchors). Dedupe of repeated contributors is handled at the data layer
 // (see src/lib/works/queries.ts:shape).
-export function WorkCard({ work }: { work: FeedWork }) {
+export function WorkCard({
+  work,
+  queue,
+}: {
+  work: FeedWork;
+  // The full feed as a player queue (radio order). When present and this work is
+  // streamable, the cover gets a play button that starts the queue from here.
+  queue?: Track[];
+}) {
   const visible = work.contributors.slice(0, MAX_VISIBLE_CHIPS);
   const overflow = work.contributors.length - visible.length;
 
@@ -59,6 +69,9 @@ export function WorkCard({ work }: { work: FeedWork }) {
           compact
           className="absolute right-2 top-2 z-10 inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-background/70 text-foreground backdrop-blur transition hover:border-white/30 hover:bg-background/85 active:scale-95"
         />
+        {queue && work.hls_playlist_key ? (
+          <CardPlayButton queue={queue} workId={work.id} title={work.title} />
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

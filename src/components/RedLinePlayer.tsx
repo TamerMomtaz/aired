@@ -1,190 +1,70 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
+import { usePlayer, usePlayerClock } from "@/components/player/player-provider";
+import type { Track } from "@/components/player/track";
 import { formatDuration } from "@/lib/format";
+import { R2_BASE, buildStreamUrl } from "@/lib/stream-url";
 
-// The Red Line made kinetic (CLAUDE.md §3): a custom HLS player whose progress
-// bar IS the brand mark — cert-red on near-black, scrub-to-seek. Reusable as-is
-// on agent / discography pages in Phase 5.
-//
-// Audio is served only from R2 via CDN (Rule 6). The base lives in an env var so
-// the later cdn.ai-red.io swap needs no code change. NEXT_PUBLIC_ is inlined at
-// build time, so changing it in Vercel requires a redeploy to take effect.
-const R2_BASE = (process.env.NEXT_PUBLIC_R2_PUBLIC_BASE ?? "").replace(
-  /\/+$/,
-  "",
-);
-
-// Join the public base and the playlist key with exactly one slash.
-function buildStreamUrl(key: string | null | undefined): string | null {
-  if (!key || !key.trim()) return null;
-  if (!R2_BASE) return null;
-  return `${R2_BASE}/${key.trim().replace(/^\/+/, "")}`;
-}
+// The Red Line made kinetic (CLAUDE.md §3): a progress bar that IS the brand mark
+// — cert-red on near-black, scrub-to-seek. This is now a PRESENTATIONAL view over
+// the single global engine (player-provider): it owns no audio, only the transport
+// UI for one work. When this work is the engine's current track it mirrors live
+// playback; otherwise it shows the work at rest and its play button seeds the queue
+// from here ("play from here") so the catalog keeps rolling.
 
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
 export function RedLinePlayer({
-  hlsPlaylistKey,
-  workId,
-  title,
-  onTimeUpdate,
-  onReady,
+  track,
+  queue,
+  startIndex,
 }: {
-  hlsPlaylistKey: string | null | undefined;
-  workId: number | bigint;
-  title: string;
-  // Optional observers (Phase 4 synced lyrics). When omitted the player behaves
-  // exactly as before — these are the only additions to its public surface.
-  onTimeUpdate?: (seconds: number) => void;
-  onReady?: (durationSeconds: number) => void;
+  track: Track;
+  // The list to play from when the listener presses play on this page, and this
+  // work's position in it (the "radio from here" seed). For a track that isn't in
+  // a public feed (e.g. a draft) this is simply [track] at 0.
+  queue: Track[];
+  startIndex: number;
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const barRef = useRef<HTMLDivElement | null>(null);
-  // hls.js instance is loaded dynamically (browser-only), so it has no type here.
-  const hlsRef = useRef<{ destroy: () => void } | null>(null);
+  const player = usePlayer();
+  const clock = usePlayerClock();
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [buffering, setBuffering] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
   // While scrubbing, the bar follows the pointer immediately (0..1, else null).
   const [dragFraction, setDragFraction] = useState<number | null>(null);
-  // Bumping this re-runs setup — the "Try again" path after a load error.
-  const [attempt, setAttempt] = useState(0);
 
-  const streamUrl = buildStreamUrl(hlsPlaylistKey);
-  const hasKey = !!(hlsPlaylistKey && hlsPlaylistKey.trim());
+  const workId = track.id;
+  const title = track.title;
+  const isCurrent = player.current?.id === track.id;
 
-  // Hold the latest optional callbacks in refs so the playback-listener effect
-  // below never re-subscribes when the parent passes a new function identity —
-  // its deps stay [streamUrl], leaving audio/hls.js/seeking untouched. Absent
-  // props make the calls no-ops, so behavior is byte-for-byte identical.
-  const onTimeUpdateRef = useRef(onTimeUpdate);
-  const onReadyRef = useRef(onReady);
-  useEffect(() => {
-    onTimeUpdateRef.current = onTimeUpdate;
-    onReadyRef.current = onReady;
-  }, [onTimeUpdate, onReady]);
+  // Mirror the engine when this work is the one playing; show it at rest (its own
+  // known length, a quiet bar) when something else holds the engine.
+  const isPlaying = isCurrent && player.isPlaying;
+  // Prefer the engine's measured length once known; fall back to the work's
+  // stored duration so a sensible total shows at rest and before metadata loads.
+  const duration =
+    isCurrent && player.duration > 0
+      ? player.duration
+      : track.durationSeconds ?? 0;
+  const currentTime = isCurrent ? clock : 0;
+  const buffering = isCurrent && player.buffering;
+  const loadError = isCurrent && player.loadError;
 
-  // Attach the audio source: hls.js where supported, native HLS otherwise.
-  useEffect(() => {
-    const audio = audioRef.current;
-    const url = buildStreamUrl(hlsPlaylistKey);
-    if (!audio || !url) return;
+  const streamUrl = buildStreamUrl(track.hlsPlaylistKey);
+  const hasKey = !!(track.hlsPlaylistKey && track.hlsPlaylistKey.trim());
 
-    setLoadError(false);
-    let cancelled = false;
-
-    async function attach(url: string, el: HTMLAudioElement) {
-      const { default: Hls } = await import("hls.js");
-      if (cancelled) return;
-
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hlsRef.current = hls;
-        hls.loadSource(url);
-        hls.attachMedia(el);
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            console.error("[RedLinePlayer] fatal HLS error", data);
-            setLoadError(true);
-            hls.destroy();
-            if (hlsRef.current === hls) hlsRef.current = null;
-          }
-        });
-      } else if (el.canPlayType("application/vnd.apple.mpegurl")) {
-        // Safari / iOS play HLS natively from the element source.
-        el.src = url;
-      } else {
-        console.error("[RedLinePlayer] HLS is not supported in this browser");
-        setLoadError(true);
-      }
-    }
-
-    attach(url, audio);
-
-    return () => {
-      cancelled = true;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      audio.removeAttribute("src");
-      audio.load();
-    };
-  }, [hlsPlaylistKey, attempt]);
-
-  // Mirror the element's playback state into React for the custom controls.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !streamUrl) return;
-
-    const onTime = () => {
-      setCurrentTime(audio.currentTime);
-      onTimeUpdateRef.current?.(audio.currentTime);
-    };
-    const onDuration = () => {
-      const next = Number.isFinite(audio.duration) ? audio.duration : 0;
-      setDuration(next);
-      onReadyRef.current?.(next);
-    };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onWaiting = () => setBuffering(true);
-    const onPlaying = () => {
-      setBuffering(false);
-      setIsPlaying(true);
-    };
-    const onCanPlay = () => setBuffering(false);
-    const onEnded = () => setIsPlaying(false);
-    const onError = () => {
-      console.error("[RedLinePlayer] audio element error", audio.error);
-      setLoadError(true);
-    };
-
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("durationchange", onDuration);
-    audio.addEventListener("loadedmetadata", onDuration);
-    audio.addEventListener("play", onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("waiting", onWaiting);
-    audio.addEventListener("playing", onPlaying);
-    audio.addEventListener("canplay", onCanPlay);
-    audio.addEventListener("ended", onEnded);
-    audio.addEventListener("error", onError);
-
-    return () => {
-      audio.removeEventListener("timeupdate", onTime);
-      audio.removeEventListener("durationchange", onDuration);
-      audio.removeEventListener("loadedmetadata", onDuration);
-      audio.removeEventListener("play", onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("waiting", onWaiting);
-      audio.removeEventListener("playing", onPlaying);
-      audio.removeEventListener("canplay", onCanPlay);
-      audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("error", onError);
-    };
-  }, [streamUrl]);
-
-  function togglePlay() {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      audio.play().catch((err) => {
-        console.error("[RedLinePlayer] play() failed", err);
-      });
-    } else {
-      audio.pause();
-    }
+  function onPlayPause() {
+    // Mirror the engine when this work is current; otherwise seed the queue from
+    // here so pressing play continues the catalog onward.
+    if (isCurrent) player.toggle();
+    else player.playQueue(queue, startIndex);
   }
 
-  // --- Seeking: click or drag anywhere on the Red Line ---------------------
+  // --- Seeking: click or drag anywhere on the Red Line (only when live) -----
   function fractionFromClientX(clientX: number): number {
     const bar = barRef.current;
     if (!bar) return 0;
@@ -193,34 +73,25 @@ export function RedLinePlayer({
     return clamp01((clientX - rect.left) / rect.width);
   }
 
-  function seekToFraction(fraction: number) {
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
-      return;
-    }
-    audio.currentTime = fraction * audio.duration;
-    setCurrentTime(audio.currentTime);
-  }
-
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!duration) return;
+    if (!isCurrent || !duration) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const fraction = fractionFromClientX(e.clientX);
     setDragFraction(fraction);
-    seekToFraction(fraction);
+    player.seek(fraction);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (dragFraction === null) return;
     const fraction = fractionFromClientX(e.clientX);
     setDragFraction(fraction);
-    seekToFraction(fraction); // VOD seeks smoothly; the bar tracks the finger
+    player.seek(fraction); // VOD seeks smoothly; the bar tracks the finger
   }
 
   function endDrag(e: React.PointerEvent<HTMLDivElement>) {
     if (dragFraction === null) return;
-    seekToFraction(fractionFromClientX(e.clientX));
+    player.seek(fractionFromClientX(e.clientX));
     setDragFraction(null);
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -230,24 +101,21 @@ export function RedLinePlayer({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    const audio = audioRef.current;
-    if (!audio) return;
     if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
-      togglePlay();
+      onPlayPause();
       return;
     }
-    if (!duration) return;
+    if (!isCurrent || !duration) return;
     const step = 5;
-    let next: number | null = null;
-    if (e.key === "ArrowRight") next = Math.min(duration, audio.currentTime + step);
-    else if (e.key === "ArrowLeft") next = Math.max(0, audio.currentTime - step);
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = duration;
-    if (next !== null) {
+    let nextTime: number | null = null;
+    if (e.key === "ArrowRight") nextTime = Math.min(duration, currentTime + step);
+    else if (e.key === "ArrowLeft") nextTime = Math.max(0, currentTime - step);
+    else if (e.key === "Home") nextTime = 0;
+    else if (e.key === "End") nextTime = duration;
+    if (nextTime !== null) {
       e.preventDefault();
-      audio.currentTime = next;
-      setCurrentTime(next);
+      player.seekToTime(nextTime);
     }
   }
 
@@ -293,11 +161,9 @@ export function RedLinePlayer({
 
   return (
     <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <audio ref={audioRef} preload="metadata" />
-
       <button
         type="button"
-        onClick={togglePlay}
+        onClick={onPlayPause}
         disabled={loadError}
         aria-label={isPlaying ? `Pause ${title}` : `Play ${title}`}
         className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cert-red text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cert-red/50 disabled:opacity-40"
@@ -313,10 +179,7 @@ export function RedLinePlayer({
             </span>
             <button
               type="button"
-              onClick={() => {
-                setLoadError(false);
-                setAttempt((n) => n + 1);
-              }}
+              onClick={player.retry}
               className="rounded-md border border-cert-red/40 px-2.5 py-1 text-xs text-cert-red transition hover:bg-cert-red/10"
             >
               Try again

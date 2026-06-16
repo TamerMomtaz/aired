@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
+import { trackFromFeedWork, type Track } from "@/components/player/track";
 import { ShareButton } from "@/components/share-button";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
@@ -21,7 +22,7 @@ import {
 } from "@/lib/ledger/types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
-import { dedupeContributors } from "@/lib/works/queries";
+import { dedupeContributors, getFeed } from "@/lib/works/queries";
 
 export async function generateMetadata({
   params,
@@ -166,6 +167,38 @@ export default async function WorkPage({
     }),
   );
 
+  // The contributors who MADE this work, surfaced once each (carbon and silicon,
+  // by name — CLAUDE.md §3a) in trail order. Feeds the global player's now-playing
+  // bar and the OS media session when this track plays.
+  const contributors: Track["contributors"] = [];
+  const seenContributors = new Set<string>();
+  for (const v of volleys) {
+    const a = v.agent;
+    if (!a) continue;
+    const key = (a.profile_slug ?? a.name).toLowerCase();
+    if (seenContributors.has(key)) continue;
+    seenContributors.add(key);
+    contributors.push({ name: a.name, profile_slug: a.profile_slug });
+  }
+
+  const track: Track = {
+    id: work.id,
+    title: work.title,
+    hlsPlaylistKey: work.hls_playlist_key,
+    artworkUrl: work.artwork_url,
+    durationSeconds: work.duration_seconds,
+    contributors,
+  };
+
+  // The catalog as a queue (radio order) so "play from here" rolls onward from
+  // this song. A live work sits inside it; a draft isn't in the public feed, so
+  // PlayerStage falls back to a queue of just this track.
+  const feed = await getFeed(supabase);
+  const queue = feed
+    .map(trackFromFeedWork)
+    .filter((t) => t.hlsPlaylistKey)
+    .sort((a, b) => a.id - b.id);
+
   // Render descriptors as clean separated chips: split any comma-joined element,
   // trim, drop blanks, and de-duplicate (mirrors the declare_volley RPC merge).
   const descriptors = normalizeDescriptors(work.descriptors);
@@ -255,9 +288,8 @@ export default async function WorkPage({
       {/* Hear it → read it → see who made it: the player, then the synced
           lyrics (and the owner's tap-sync editor), then the ledger. */}
       <PlayerStage
-        hlsPlaylistKey={work.hls_playlist_key}
-        workId={work.id}
-        title={work.title}
+        track={track}
+        queue={queue}
         lyrics={work.lyrics}
         isOwner={isOwner}
       />

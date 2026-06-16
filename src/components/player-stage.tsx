@@ -1,53 +1,51 @@
 "use client";
 
-import { useRef, useState } from "react";
-
 import { RedLinePlayer } from "@/components/RedLinePlayer";
 import { LyricsSyncEditor } from "@/components/lyrics-sync-editor";
+import { usePlayer, usePlayerClock } from "@/components/player/player-provider";
+import type { Track } from "@/components/player/track";
 import { SyncedLyrics } from "@/components/synced-lyrics";
 
 // Composes the Red Line player with the synced lyrics so they share one clock:
-// the player reports time → the lyrics light up. Hear it → read it → see who
-// made it. Owners also get the tap-sync editor here (Phase 4).
+// the global engine reports time → the lyrics light up. Hear it → read it → see
+// who made it. Owners also get the tap-sync editor here (Phase 4).
+//
+// The clock only drives the lyrics while THIS work is the one playing. If the
+// listener is reading this page while a different track plays in the now-playing
+// bar, the lyrics rest until they press play here (which seeds the queue from
+// this song onward).
 export function PlayerStage({
-  hlsPlaylistKey,
-  workId,
-  title,
+  track,
+  queue,
   lyrics,
   isOwner,
 }: {
-  hlsPlaylistKey: string | null | undefined;
-  workId: number;
-  title: string;
+  track: Track;
+  queue: Track[];
   lyrics: string | null;
   isOwner: boolean;
 }) {
-  const [currentTime, setCurrentTime] = useState(0);
-  const playerRef = useRef<HTMLDivElement | null>(null);
+  const player = usePlayer();
+  const clock = usePlayerClock();
 
-  // When the owner enters sync mode its own <audio> takes over — pause the
-  // public player so the two never play at once. RedLinePlayer's API stays
-  // frozen, so we reach its element through this scoped ref.
-  function pausePublicPlayer() {
-    playerRef.current?.querySelectorAll("audio").forEach((a) => {
-      try {
-        a.pause();
-      } catch {
-        // already paused / detached — ignore
-      }
-    });
-  }
+  const isCurrent = player.current?.id === track.id;
+  const currentTime = isCurrent ? clock : 0;
+
+  // Where playing this page's song drops into the queue. A draft that isn't in
+  // the public feed falls back to a queue of just itself.
+  const found = queue.findIndex((t) => t.id === track.id);
+  const effectiveQueue = found >= 0 ? queue : [track];
+  const effectiveIndex = found >= 0 ? found : 0;
 
   const showPublicLyrics = !!(lyrics && lyrics.trim());
 
   return (
     <>
-      <section className="mb-8" ref={playerRef}>
+      <section className="mb-8">
         <RedLinePlayer
-          hlsPlaylistKey={hlsPlaylistKey}
-          workId={workId}
-          title={title}
-          onTimeUpdate={setCurrentTime}
+          track={track}
+          queue={effectiveQueue}
+          startIndex={effectiveIndex}
         />
       </section>
 
@@ -61,10 +59,10 @@ export function PlayerStage({
           <SyncedLyrics lyrics={lyrics} currentTime={currentTime} />
           {isOwner ? (
             <LyricsSyncEditor
-              workId={workId}
-              hlsPlaylistKey={hlsPlaylistKey}
+              workId={track.id}
+              hlsPlaylistKey={track.hlsPlaylistKey}
               initialLyrics={lyrics}
-              onEnterSync={pausePublicPlayer}
+              onEnterSync={player.pause}
             />
           ) : null}
         </section>

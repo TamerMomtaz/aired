@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { trackFromFeedWork } from "@/components/player/track";
 import { SearchBar } from "@/components/search-bar";
 import { WorkCard } from "@/components/work-card";
 import { getCurrentUser } from "@/lib/supabase/auth";
@@ -27,6 +28,14 @@ export default async function Home({
     getCurrentUser(),
   ]);
 
+  // One shared queue for the whole grid: every streamable work, in catalog
+  // (radio) order, so pressing play on a card rolls the catalog onward from
+  // there while the grid itself stays newest-first.
+  const queue = works
+    .map(trackFromFeedWork)
+    .filter((t) => t.hlsPlaylistKey)
+    .sort((a, b) => a.id - b.id);
+
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
       <header className="mb-7 flex flex-col gap-4">
@@ -47,7 +56,7 @@ export default async function Home({
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {works.map((work) => (
             <li key={work.id}>
-              <WorkCard work={work} />
+              <WorkCard work={work} queue={queue} />
             </li>
           ))}
         </ul>

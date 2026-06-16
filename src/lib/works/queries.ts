@@ -15,6 +15,9 @@ export type FeedWork = {
   duration_seconds: number | null;
   red_line_certified: boolean;
   created_at: string;
+  // The HLS playlist key makes every card directly enqueueable by the global
+  // player (Phase 5). Live works all carry one.
+  hls_playlist_key: string | null;
   contributors: { name: string; profile_slug: string | null }[];
 };
 
@@ -31,13 +34,14 @@ type WorkRow = {
   duration_seconds: number | null;
   red_line_certified: boolean;
   created_at: string;
+  hls_playlist_key: string | null;
   public_volley: Array<{
     agent: { name: string; profile_slug: string | null } | null;
   }>;
 };
 
 const WORK_SELECT =
-  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, public_volley(agent(name, profile_slug))";
+  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, public_volley(agent(name, profile_slug))";
 
 // A single agent may appear on several volleys per work; collapse by slug-or-name
 // so the contributor line / chips don't repeat. Generic over the agent shape so
@@ -68,6 +72,7 @@ function shape(row: WorkRow): FeedWork {
     duration_seconds: row.duration_seconds,
     red_line_certified: row.red_line_certified,
     created_at: row.created_at,
+    hls_playlist_key: row.hls_playlist_key,
     contributors: dedupeContributors(row.public_volley),
   };
 }
