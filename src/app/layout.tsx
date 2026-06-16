@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { InstallCoach } from "@/components/install/install-coach";
 import { SwRegister } from "@/components/install/sw-register";
+import { NowPlayingBar } from "@/components/player/now-playing-bar";
 import { PlayerProvider } from "@/components/player/player-provider";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
@@ -78,6 +79,7 @@ export default function RootLayout({
           <div className="flex min-h-dvh flex-col">
             <SiteHeader />
             {children}
+            <NowPlayingBar />
           </div>
         </PlayerProvider>
         <SwRegister />

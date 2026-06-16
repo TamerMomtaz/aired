@@ -165,8 +165,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       pendingPlayRef.current = true;
       setIndex(i + 1);
     } else {
-      // End of the queue — stop. No loop in v1.
+      // End of the queue — stop. No loop in v1. A natural `ended` doesn't fire a
+      // `pause` event, so settle the play state explicitly.
       audioRef.current?.pause();
+      setIsPlaying(false);
     }
   }, []);
 
@@ -209,8 +211,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onTime = () => setCurrentTime(audio.currentTime);
     const onDuration = () =>
       setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPlay = () => {
+      setIsPlaying(true);
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = "playing";
+      }
+    };
+    const onPause = () => {
+      setIsPlaying(false);
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = "paused";
+      }
+    };
     const onWaiting = () => setBuffering(true);
     const onPlaying = () => {
       setBuffering(false);
@@ -329,6 +341,49 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [currentUrl, attempt]);
+
+  // ---- OS media session: lock-screen + headphone controls (PWA) -----------
+  // Action handlers are wired once (the callbacks are stable). The metadata —
+  // title, the contributors as the "artist" line (public & celebrated, §3a),
+  // artwork — updates whenever the current track changes.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+    const ms = navigator.mediaSession;
+    ms.setActionHandler("play", () => play());
+    ms.setActionHandler("pause", () => pause());
+    ms.setActionHandler("previoustrack", () => prev());
+    ms.setActionHandler("nexttrack", () => next());
+    ms.setActionHandler("seekto", (e) => {
+      if (typeof e.seekTime === "number") seekToTime(e.seekTime);
+    });
+    return () => {
+      ms.setActionHandler("play", null);
+      ms.setActionHandler("pause", null);
+      ms.setActionHandler("previoustrack", null);
+      ms.setActionHandler("nexttrack", null);
+      ms.setActionHandler("seekto", null);
+    };
+  }, [play, pause, prev, next, seekToTime]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+    if (!current) {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: current.title,
+      artist: current.contributors.map((c) => c.name).join(", "),
+      album: "AIRED",
+      artwork: current.artworkUrl
+        ? [{ src: current.artworkUrl, sizes: "512x512" }]
+        : [],
+    });
+  }, [current]);
 
   // The stable half of the API. Memoized so its identity changes only when these
   // values actually change — NOT on every currentTime tick — keeping non-clock

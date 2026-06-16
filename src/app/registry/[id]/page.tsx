@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
-import type { Track } from "@/components/player/track";
+import { trackFromFeedWork, type Track } from "@/components/player/track";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/ledger/types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getFeed } from "@/lib/works/queries";
 
 export async function generateMetadata({
   params,
@@ -137,6 +138,15 @@ export default async function WorkPage({
     contributors,
   };
 
+  // The catalog as a queue (radio order) so "play from here" rolls onward from
+  // this song. A live work sits inside it; a draft isn't in the public feed, so
+  // PlayerStage falls back to a queue of just this track.
+  const feed = await getFeed(supabase);
+  const queue = feed
+    .map(trackFromFeedWork)
+    .filter((t) => t.hlsPlaylistKey)
+    .sort((a, b) => a.id - b.id);
+
   // Render descriptors as clean separated chips: split any comma-joined element,
   // trim, drop blanks, and de-duplicate (mirrors the declare_volley RPC merge).
   const descriptors = normalizeDescriptors(work.descriptors);
@@ -214,7 +224,7 @@ export default async function WorkPage({
           lyrics (and the owner's tap-sync editor), then the ledger. */}
       <PlayerStage
         track={track}
-        queue={[track]}
+        queue={queue}
         lyrics={work.lyrics}
         isOwner={isOwner}
       />

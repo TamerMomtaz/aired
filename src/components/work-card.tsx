@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { CardPlayButton } from "@/components/player/card-play-button";
+import type { Track } from "@/components/player/track";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
 import type { FeedWork } from "@/lib/works/queries";
@@ -17,37 +19,50 @@ const MAX_VISIBLE_CHIPS = 3;
 // into a compact "+N" chip. Chips stay outside the outer link (no nested
 // anchors). Dedupe of repeated contributors is handled at the data layer
 // (see src/lib/works/queries.ts:shape).
-export function WorkCard({ work }: { work: FeedWork }) {
+export function WorkCard({
+  work,
+  queue,
+}: {
+  work: FeedWork;
+  // The full feed as a player queue (radio order). When present and this work is
+  // streamable, the cover gets a play button that starts the queue from here.
+  queue?: Track[];
+}) {
   const visible = work.contributors.slice(0, MAX_VISIBLE_CHIPS);
   const overflow = work.contributors.length - visible.length;
 
   return (
     <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
-      <Link
-        href={`/registry/${work.id}`}
-        className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
-        aria-label={`Open AIRED-${work.id} ${work.title}`}
-      >
-        {work.artwork_url ? (
-          <Image
-            src={work.artwork_url}
-            alt=""
-            fill
-            sizes="(min-width: 1024px) 240px, (min-width: 640px) 33vw, 50vw"
-            className="object-cover transition group-hover:scale-[1.02]"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/[0.04] to-transparent text-[10px] uppercase tracking-[0.18em] text-muted/50">
-            no art
-          </div>
-        )}
-        {work.red_line_certified ? (
-          <span className="absolute left-2 top-2 rounded-full border border-cert-red/50 bg-background/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cert-red backdrop-blur">
-            Red Line
-          </span>
+      <div className="relative">
+        <Link
+          href={`/registry/${work.id}`}
+          className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
+          aria-label={`Open AIRED-${work.id} ${work.title}`}
+        >
+          {work.artwork_url ? (
+            <Image
+              src={work.artwork_url}
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 240px, (min-width: 640px) 33vw, 50vw"
+              className="object-cover transition group-hover:scale-[1.02]"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/[0.04] to-transparent text-[10px] uppercase tracking-[0.18em] text-muted/50">
+              no art
+            </div>
+          )}
+          {work.red_line_certified ? (
+            <span className="absolute left-2 top-2 rounded-full border border-cert-red/50 bg-background/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cert-red backdrop-blur">
+              Red Line
+            </span>
+          ) : null}
+        </Link>
+        {queue && work.hls_playlist_key ? (
+          <CardPlayButton queue={queue} workId={work.id} title={work.title} />
         ) : null}
-      </Link>
+      </div>
 
       <div className="flex flex-col gap-2">
         <Link
