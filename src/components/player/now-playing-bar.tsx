@@ -39,7 +39,15 @@ export function NowPlayingBar() {
   const pct = `${playedFraction * 100}%`;
   const redGlow = "0 0 10px color-mix(in srgb, var(--cert-red) 70%, transparent)";
 
-  const hasNext = player.index < player.queue.length - 1;
+  // ⏭ is live on the last track only when repeat-all is set (it wraps to the top).
+  const canSkipNext =
+    player.index < player.queue.length - 1 || player.repeatMode === "all";
+  const repeatLabel =
+    player.repeatMode === "one"
+      ? "Repeat one"
+      : player.repeatMode === "all"
+        ? "Repeat all"
+        : "Repeat off";
   const contributorNames = current.contributors.map((c) => c.name).join(" · ");
 
   function fractionFromClientX(clientX: number): number {
@@ -187,11 +195,33 @@ export function NowPlayingBar() {
             <button
               type="button"
               onClick={player.next}
-              disabled={!hasNext}
+              disabled={!canSkipNext}
               aria-label="Next track"
               className="flex size-9 items-center justify-center rounded-full text-muted transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cert-red/50 disabled:opacity-30"
             >
               <NextIcon />
+            </button>
+            <button
+              type="button"
+              onClick={player.cycleRepeatMode}
+              aria-label={repeatLabel}
+              aria-pressed={player.repeatMode !== "off"}
+              title={repeatLabel}
+              className={`relative flex size-9 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cert-red/50 ${
+                player.repeatMode === "off"
+                  ? "text-muted hover:text-foreground"
+                  : "text-cert-red hover:brightness-110"
+              }`}
+            >
+              <RepeatIcon />
+              {player.repeatMode === "one" ? (
+                <span
+                  aria-hidden
+                  className="absolute bottom-0.5 right-0.5 flex size-3 items-center justify-center rounded-full bg-cert-red text-[8px] font-bold leading-none text-white"
+                >
+                  1
+                </span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -229,6 +259,26 @@ function NextIcon() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden fill="currentColor">
       <path d="M17 6a1 1 0 0 0-2 0v5L6.6 5.4A1 1 0 0 0 5 6.2v11.6a1 1 0 0 0 1.6.8L15 13v5a1 1 0 0 0 2 0V6Z" />
+    </svg>
+  );
+}
+
+function RepeatIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-[18px]"
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17 1l4 4-4 4" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <path d="M7 23l-4-4 4-4" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
     </svg>
   );
 }
