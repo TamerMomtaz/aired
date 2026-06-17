@@ -19,6 +19,10 @@ export type FeedWork = {
   // player (Phase 5). Live works all carry one.
   hls_playlist_key: string | null;
   contributors: { name: string; profile_slug: string | null }[];
+  // Real listens, recorded server-side (src/lib/plays). Denormalized onto `work`
+  // and kept exact by a trigger, so it rides free with every work select — no
+  // extra round trip.
+  playCount: number;
 };
 
 // v1 caps the door at a reasonable slice — pagination is deferred (a later
@@ -35,13 +39,14 @@ type WorkRow = {
   red_line_certified: boolean;
   created_at: string;
   hls_playlist_key: string | null;
+  play_count: number | null;
   public_volley: Array<{
     agent: { name: string; profile_slug: string | null } | null;
   }>;
 };
 
 const WORK_SELECT =
-  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, public_volley(agent(name, profile_slug))";
+  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, play_count, public_volley(agent(name, profile_slug))";
 
 // A single agent may appear on several volleys per work; collapse by slug-or-name
 // so the contributor line / chips don't repeat. Generic over the agent shape so
@@ -73,6 +78,7 @@ function shape(row: WorkRow): FeedWork {
     red_line_certified: row.red_line_certified,
     created_at: row.created_at,
     hls_playlist_key: row.hls_playlist_key,
+    playCount: row.play_count ?? 0,
     contributors: dedupeContributors(row.public_volley),
   };
 }
@@ -169,6 +175,24 @@ export async function searchWorks(
     .in("id", Array.from(matched))
     .eq("status", "live")
     .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data ?? []) as unknown as WorkRow[]).map(shape);
+}
+
+// The "Most played" strip: live works ranked by real listens, highest first
+// (ties broken by catalog number for a stable order), each card-ready with its
+// count. A plain ORDER BY on the denormalized counter — empty until plays land.
+export async function getMostPlayed(
+  supabase: SupabaseServerClient,
+  limit = 10,
+): Promise<FeedWork[]> {
+  const { data } = await supabase
+    .from("work")
+    .select(WORK_SELECT)
+    .eq("status", "live")
+    .gt("play_count", 0)
+    .order("play_count", { ascending: false })
+    .order("id", { ascending: true })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
 }

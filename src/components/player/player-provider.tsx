@@ -11,7 +11,28 @@ import {
 } from "react";
 
 import type { Track } from "@/components/player/track";
+import { recordPlay } from "@/lib/plays/actions";
 import { buildStreamUrl } from "@/lib/stream-url";
+
+// When does a listen count? Once the track has been ACTUALLY listened to (not
+// merely seeked past) for ~15 seconds, OR 25% of a short track — whichever comes
+// first. Server-side recording + per-(session, hour) dedup live in src/lib/plays.
+const PLAY_THRESHOLD_SECONDS = 15;
+const PLAY_THRESHOLD_FRACTION = 0.25;
+// localStorage key for the anonymous, PII-free listen session id. Persisted so a
+// reload reuses it and the per-hour dedup holds across reloads.
+const PLAY_SESSION_KEY = "aired_play_sid";
+
+function makeSessionId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // crypto unavailable — fall through to the non-crypto id below.
+  }
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 // The single global audio engine. There is exactly ONE <audio> element in the
 // whole app and it lives here, in a provider that wraps the persistent app shell
@@ -109,6 +130,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     indexRef.current = index;
     repeatModeRef.current = repeatMode;
   }, [queue, index, repeatMode]);
+
+  // ---- play-count recording (real listens) --------------------------------
+  // The anonymous listen session id (set once on mount, browser-only).
+  const sessionIdRef = useRef<string | null>(null);
+  // The work currently loaded, and per-load accounting for the threshold trigger:
+  // `listenedRef` accumulates only actual playback time (seek jumps and pauses
+  // don't count), and `playRecordedRef` makes us fire at most once per loaded
+  // track. All three reset whenever the current track changes (effect below).
+  const currentIdRef = useRef<number | null>(null);
+  const listenedRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const playRecordedRef = useRef(false);
+
+  // Mint (or reuse) the anonymous listen session id once, on the client. No PII;
+  // persisted so the per-hour play dedup survives reloads. localStorage may throw
+  // (private mode) — fall back to a volatile id for the tab.
+  useEffect(() => {
+    try {
+      let sid = window.localStorage.getItem(PLAY_SESSION_KEY);
+      if (!sid) {
+        sid = makeSessionId();
+        window.localStorage.setItem(PLAY_SESSION_KEY, sid);
+      }
+      sessionIdRef.current = sid;
+    } catch {
+      sessionIdRef.current = sessionIdRef.current ?? makeSessionId();
+    }
+  }, []);
+
+  // A new track is loaded: reset the per-track play accounting so the next listen
+  // is measured (and recorded) on its own. Repeat-one replays the same `current`
+  // without a reset, so a loop won't re-record — and the RPC would dedup it anyway.
+  useEffect(() => {
+    currentIdRef.current = current?.id ?? null;
+    listenedRef.current = 0;
+    lastTimeRef.current = null;
+    playRecordedRef.current = false;
+  }, [current]);
 
   // When true, the element should start playing as soon as it's ready — set by
   // user-initiated playQueue and by the auto-advance in next()/prev().
@@ -258,7 +317,40 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTime = () => setCurrentTime(audio.currentTime);
+    const onTime = () => {
+      const t = audio.currentTime;
+      setCurrentTime(t);
+
+      // Accumulate ACTUAL listened time so a real listen — not a scrub or a
+      // background tab — is what crosses the threshold. Count only small forward
+      // steps (normal playback ticks ~4×/s); ignore backward/large jumps (seeks)
+      // and anything while paused.
+      const last = lastTimeRef.current;
+      if (last !== null && !audio.paused) {
+        const delta = t - last;
+        if (delta > 0 && delta < 1.5) listenedRef.current += delta;
+      }
+      lastTimeRef.current = t;
+
+      // Record one honest play once enough has actually been heard. Fire-and-
+      // forget; the RPC dedups per (session, work, hour), so this is safe even if
+      // it slips through twice. At most once per loaded track (the ref guard).
+      if (playRecordedRef.current) return;
+      const workId = currentIdRef.current;
+      const sid = sessionIdRef.current;
+      if (workId === null || !sid) return;
+      const dur =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : null;
+      const threshold = dur
+        ? Math.min(PLAY_THRESHOLD_SECONDS, dur * PLAY_THRESHOLD_FRACTION)
+        : PLAY_THRESHOLD_SECONDS;
+      if (listenedRef.current >= threshold) {
+        playRecordedRef.current = true;
+        void recordPlay(workId, sid).catch(() => {});
+      }
+    };
     const onDuration = () =>
       setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
     const onPlay = () => {

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { CardPlayButton } from "@/components/player/card-play-button";
 import type { Track } from "@/components/player/track";
+import { PlayCount } from "@/components/play-count";
 import { ShareButton } from "@/components/share-button";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
@@ -118,9 +119,17 @@ export function WorkCard({
           ) : null}
         </ul>
 
-        <span className="block h-4 font-mono text-[11px] leading-4 text-muted/60">
-          {work.duration_seconds != null ? formatDuration(work.duration_seconds) : ""}
-        </span>
+        <div className="flex h-4 items-center gap-2 font-mono text-[11px] leading-4 text-muted/60">
+          <PlayCount count={work.playCount} />
+          {work.duration_seconds != null ? (
+            <>
+              <span aria-hidden className="text-muted/30">
+                ·
+              </span>
+              <span>{formatDuration(work.duration_seconds)}</span>
+            </>
+          ) : null}
+        </div>
       </div>
     </article>
   );
