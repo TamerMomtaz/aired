@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@vercel/analytics";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -45,6 +46,12 @@ export function InstallCoach() {
     };
     const onInstalled = () => {
       setDeferred(null);
+      // Record the install. The browser fires `appinstalled` once per
+      // successful add-to-home-screen (Android prompt accepted, or iOS/desktop
+      // manual install), and InstallCoach mounts once in the layout — so this
+      // counts each install exactly once. Event name only: no PII in the
+      // payload.
+      track("app_installed");
     };
     const onShow = () => {
       setDismissed(false);
