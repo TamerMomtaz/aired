@@ -6,6 +6,9 @@
   --foreground: #ededed;
   --cert-red: #ff2d2d;
   --muted: #8a8a8a;
+  /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer.
+     cert-red stays the platform's one accent everywhere else. */
+  --matrix-blue: #2f6bff;
 }
 
 @theme inline {
@@ -13,6 +16,7 @@
   --color-foreground: var(--foreground);
   --color-cert-red: var(--cert-red);
   --color-muted: var(--muted);
+  --color-matrix-blue: var(--matrix-blue);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -88,5 +92,93 @@ body {
   .redline-fill {
     animation: none;
     width: 38%;
+  }
+}
+
+/* First-visit onboarding (src/components/onboarding) ----------------------- */
+
+/* Each screen rises gently into place when it becomes active. */
+@keyframes aired-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboard-step {
+  animation: aired-fade-up 0.5s ease-out both;
+}
+
+/* The two Matrix pills drift between cert-red and the blue pill. They run the
+   same loop half a cycle apart (the right pill gets a negative animation-delay
+   in the component) so one is red while the other is blue — undecided. */
+@keyframes aired-pill-shimmer {
+  0%,
+  100% {
+    background-color: var(--cert-red);
+    box-shadow:
+      0 0 26px -2px color-mix(in srgb, var(--cert-red) 75%, transparent),
+      inset 0 2px 3px rgba(255, 255, 255, 0.28),
+      inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    background-color: var(--matrix-blue);
+    box-shadow:
+      0 0 26px -2px color-mix(in srgb, var(--matrix-blue) 75%, transparent),
+      inset 0 2px 3px rgba(255, 255, 255, 0.28),
+      inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.onboard-pill {
+  animation: aired-pill-shimmer 3.2s ease-in-out infinite;
+}
+
+.onboard-pill-static-red {
+  background-color: var(--cert-red);
+  box-shadow:
+    0 0 26px -2px color-mix(in srgb, var(--cert-red) 75%, transparent),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+}
+
+.onboard-pill-static-blue {
+  background-color: var(--matrix-blue);
+  box-shadow:
+    0 0 26px -2px color-mix(in srgb, var(--matrix-blue) 75%, transparent),
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* The chosen pill locks to solid red with one confident pulse. */
+@keyframes aired-pill-lock {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.09);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.onboard-pill-chosen {
+  background-color: var(--cert-red) !important;
+  box-shadow:
+    0 0 48px 2px color-mix(in srgb, var(--cert-red) 85%, transparent),
+    inset 0 2px 3px rgba(255, 255, 255, 0.35) !important;
+  animation: aired-pill-lock 0.6s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboard-step,
+  .onboard-pill,
+  .onboard-pill-chosen {
+    animation: none;
   }
 }
