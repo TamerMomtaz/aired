@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { InstallTrigger } from "@/components/install/install-trigger";
+import { NavLink } from "@/components/nav/nav-link";
 import { signOut } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -26,23 +27,15 @@ export async function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
-          <Link
-            href="/"
-            className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
-          >
-            Listen
-          </Link>
+          <NavLink href="/">Listen</NavLink>
 
           <InstallTrigger />
 
           {user ? (
             <>
-              <Link
-                href="/upload"
-                className="rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110"
-              >
+              <NavLink href="/upload" variant="cta">
                 Upload
-              </Link>
+              </NavLink>
               <span
                 className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 sm:inline"
                 title={user.email ?? undefined}
