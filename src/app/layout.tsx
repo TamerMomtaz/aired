@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
@@ -90,6 +91,10 @@ export default function RootLayout({
         <Onboarding />
         <SwRegister />
         <InstallCoach />
+        {/* Vercel Web Analytics — privacy-friendly page views + custom events.
+            Renders nothing; injects the collector script. Data only flows once
+            Web Analytics is enabled for the project in the Vercel dashboard. */}
+        <Analytics />
       </body>
     </html>
   );
