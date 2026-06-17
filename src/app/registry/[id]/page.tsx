@@ -7,6 +7,7 @@ import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
 import { ShareButton } from "@/components/share-button";
+import { SongQr } from "@/components/song-qr";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
@@ -264,7 +265,7 @@ export default async function WorkPage({
           ) : null}
 
           {work.status === "live" ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               {isCertified ? (
                 <Link
                   href={`/cert/${work.id}`}
@@ -280,6 +281,7 @@ export default async function WorkPage({
                 title={work.title}
                 contributorNames={contributorNames}
               />
+              <SongQr workId={work.id} title={work.title} />
             </div>
           ) : null}
         </div>
