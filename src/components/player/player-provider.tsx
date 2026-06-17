@@ -35,6 +35,8 @@ type PlayerContextValue = {
   duration: number;
   buffering: boolean;
   loadError: boolean;
+  // How the queue loops: stop, wrap to the top, or replay the current track.
+  repeatMode: RepeatMode;
   // Actions.
   playQueue: (tracks: Track[], startIndex: number) => void;
   toggle: () => void;
@@ -45,7 +47,13 @@ type PlayerContextValue = {
   seek: (fraction: number) => void;
   seekToTime: (seconds: number) => void;
   retry: () => void;
+  // Cycle the repeat mode: off → all → one → off.
+  cycleRepeatMode: () => void;
 };
+
+// Repeat behavior for the session queue. "off" stops after the last track, "all"
+// wraps back to the top of the queue, "one" loops the current track.
+export type RepeatMode = "off" | "all" | "one";
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 // currentTime ticks several times a second; isolating it means only the handful
@@ -83,6 +91,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState(false);
   // Bumping this re-runs the attach effect — the "Try again" path after an error.
   const [attempt, setAttempt] = useState(0);
+  // Queue loop mode. Default off: the queue stops after the last track.
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
 
   const current = useMemo(
     () => (index >= 0 && index < queue.length ? queue[index] : null),
@@ -93,10 +103,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // without being re-created (which would re-subscribe the one-time listeners).
   const queueRef = useRef(queue);
   const indexRef = useRef(index);
+  const repeatModeRef = useRef(repeatMode);
   useEffect(() => {
     queueRef.current = queue;
     indexRef.current = index;
-  }, [queue, index]);
+    repeatModeRef.current = repeatMode;
+  }, [queue, index, repeatMode]);
 
   // When true, the element should start playing as soon as it's ready — set by
   // user-initiated playQueue and by the auto-advance in next()/prev().
@@ -158,19 +170,42 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Restart the current track from the top and play. Used by repeat-one, and by
+  // repeat-all when the queue is a single track — there the target index equals
+  // the current one, so the attach effect won't re-run and can't replay on its own.
+  const restartCurrent = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    setCurrentTime(0);
+    audio.play().catch(() => {});
+  }, []);
+
   const next = useCallback(() => {
     const i = indexRef.current;
     const q = queueRef.current;
-    if (i >= 0 && i + 1 < q.length) {
-      pendingPlayRef.current = true;
-      setIndex(i + 1);
-    } else {
-      // End of the queue — stop. No loop in v1. A natural `ended` doesn't fire a
-      // `pause` event, so settle the play state explicitly.
+    if (i < 0 || q.length === 0) return;
+
+    // Where does ⏭ / auto-advance land? The next track, or — under repeat-all —
+    // wrap to the top. Under repeat-off at the last track there's nowhere to go.
+    let target: number | null;
+    if (i + 1 < q.length) target = i + 1;
+    else if (repeatModeRef.current === "all") target = 0;
+    else target = null;
+
+    if (target === null) {
+      // End of the queue — stop. A natural `ended` doesn't fire a `pause` event,
+      // so settle the play state explicitly.
       audioRef.current?.pause();
       setIsPlaying(false);
+    } else if (target === i) {
+      // Single-track repeat-all: same index, so the source won't re-attach.
+      restartCurrent();
+    } else {
+      pendingPlayRef.current = true;
+      setIndex(target);
     }
-  }, []);
+  }, [restartCurrent]);
 
   const prev = useCallback(() => {
     const audio = audioRef.current;
@@ -196,12 +231,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setAttempt((n) => n + 1);
   }, []);
 
+  const cycleRepeatMode = useCallback(() => {
+    setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
+  }, []);
+
+  // The element's `ended`: repeat-one replays the current track in place without
+  // advancing; every other mode hands off to next() (which stops, advances, or
+  // wraps to the top depending on the mode).
+  const handleEnded = useCallback(() => {
+    if (repeatModeRef.current === "one") {
+      restartCurrent();
+      return;
+    }
+    next();
+  }, [next, restartCurrent]);
+
   // The element fires `ended` from a listener bound once (below); route it through
-  // a ref so it always calls the latest next().
-  const endedRef = useRef(next);
+  // a ref so it always calls the latest handler.
+  const endedRef = useRef(handleEnded);
   useEffect(() => {
-    endedRef.current = next;
-  }, [next]);
+    endedRef.current = handleEnded;
+  }, [handleEnded]);
 
   // ---- element listeners: bound once (the <audio> never unmounts) ----------
   useEffect(() => {
@@ -397,6 +447,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       duration,
       buffering,
       loadError,
+      repeatMode,
       playQueue,
       toggle,
       play,
@@ -406,6 +457,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       seek,
       seekToTime,
       retry,
+      cycleRepeatMode,
     }),
     [
       queue,
@@ -415,6 +467,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       duration,
       buffering,
       loadError,
+      repeatMode,
       playQueue,
       toggle,
       play,
@@ -424,6 +477,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       seek,
       seekToTime,
       retry,
+      cycleRepeatMode,
     ],
   );
 
