@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PlayCount } from "@/components/play-count";
 import { WorkTitle } from "@/components/work-title";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -15,7 +16,7 @@ export default async function RegistryPage() {
 
   const { data: works, error } = await supabase
     .from("work")
-    .select("id, title, status, red_line_certified, created_at")
+    .select("id, title, status, red_line_certified, created_at, play_count")
     .order("id", { ascending: true });
 
   let hasAgent = false;
@@ -64,6 +65,12 @@ export default async function RegistryPage() {
               >
                 <WorkTitle id={work.id} title={work.title} />
                 <div className="flex shrink-0 items-center gap-2">
+                  {work.status === "live" ? (
+                    <PlayCount
+                      count={work.play_count ?? 0}
+                      className="font-mono text-[11px] text-muted/60"
+                    />
+                  ) : null}
                   {work.status === "draft" ? (
                     <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-muted">
                       Draft

@@ -5,7 +5,17 @@ import { SearchBar } from "@/components/search-bar";
 import { WorkCard } from "@/components/work-card";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getFeed, searchWorks } from "@/lib/works/queries";
+import {
+  getFeed,
+  getMostPlayed,
+  searchWorks,
+  type FeedWork,
+} from "@/lib/works/queries";
+
+// Only crown a "Most played" strip once a few works have real listens — a
+// one-item shelf isn't a ranking. Below this it stays hidden (counts still show
+// on every card and song page).
+const MOST_PLAYED_MIN = 3;
 
 export const metadata = { title: "AIRED — AI-ed and proud" };
 
@@ -23,18 +33,25 @@ export default async function Home({
   const isSearching = q.length > 0;
 
   const supabase = await createClient();
-  const [works, user] = await Promise.all([
+  // Every card carries its real listen count for free — play_count rides along
+  // in the feed/search select (denormalized on `work`).
+  const [works, user, mostPlayed] = await Promise.all([
     isSearching ? searchWorks(supabase, q) : getFeed(supabase),
     getCurrentUser(),
+    // The Most Played strip only makes sense on the default Browse view.
+    isSearching ? Promise.resolve<FeedWork[]>([]) : getMostPlayed(supabase, 10),
   ]);
 
   // One shared queue for the whole grid: every streamable work, in catalog
   // (radio) order, so pressing play on a card rolls the catalog onward from
-  // there while the grid itself stays newest-first.
+  // there while the grid itself stays newest-first. The Most Played strip reuses
+  // it, so play-from-there continues the catalog too.
   const queue = works
     .map(trackFromFeedWork)
     .filter((t) => t.hlsPlaylistKey)
     .sort((a, b) => a.id - b.id);
+
+  const showMostPlayed = !isSearching && mostPlayed.length >= MOST_PLAYED_MIN;
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
@@ -51,6 +68,21 @@ export default async function Home({
         </div>
         <SearchBar initial={q} autoFocus={isSearching} />
       </header>
+
+      {showMostPlayed ? (
+        <section className="mb-8 flex flex-col gap-3">
+          <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
+            Most played
+          </h2>
+          <ul className="flex gap-4 overflow-x-auto pb-1">
+            {mostPlayed.map((work) => (
+              <li key={work.id} className="w-40 shrink-0 sm:w-48">
+                <WorkCard work={work} queue={queue} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {works.length > 0 ? (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

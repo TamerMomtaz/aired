@@ -13,7 +13,7 @@ import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail"
 import { WorkTitle } from "@/components/work-title";
 import { type ContributorSummary } from "@/lib/agents/actions";
 import { formatCatalogId } from "@/lib/catalog";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, formatPlays } from "@/lib/format";
 import { normalizeDescriptors } from "@/lib/ledger/descriptors";
 import {
   type AgentType,
@@ -127,7 +127,7 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -208,6 +208,10 @@ export default async function WorkPage({
   // the public feed (see src/lib/works/queries.ts).
   const contributorNames = dedupeContributors(volleys).map((a) => a.name);
 
+  // Real listens for this work — denormalized onto `work`, kept exact by a
+  // trigger. Drafts never accrue plays, so this reads 0 for an unpublished work.
+  const playCount = work.play_count ?? 0;
+
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
   if (isOwner) {
@@ -258,6 +262,14 @@ export default async function WorkPage({
             <span className="text-muted/70">
               {formatDuration(work.duration_seconds)}
             </span>
+            {work.status === "live" ? (
+              <>
+                <span aria-hidden className="text-muted/40">
+                  ·
+                </span>
+                <span className="text-muted/70">{formatPlays(playCount)}</span>
+              </>
+            ) : null}
           </div>
 
           {isOwner && work.status === "draft" ? (
