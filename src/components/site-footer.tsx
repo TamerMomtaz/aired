@@ -34,6 +34,12 @@ export function SiteFooter() {
           <Link href="/terms" className="transition hover:text-foreground">
             Covenant
           </Link>
+          <a
+            href="mailto:contact@ai-red.io"
+            className="transition hover:text-foreground"
+          >
+            Contact
+          </a>
           <IntroReplayLink />
           <span className="font-mono text-muted/50">Σ I · {year}</span>
         </nav>
