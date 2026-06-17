@@ -3,8 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { InstallCoach } from "@/components/install/install-coach";
 import { SwRegister } from "@/components/install/sw-register";
+import { Onboarding } from "@/components/onboarding/onboarding";
 import { NowPlayingBar } from "@/components/player/now-playing-bar";
 import { PlayerProvider } from "@/components/player/player-provider";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -79,9 +81,13 @@ export default function RootLayout({
           <div className="flex min-h-dvh flex-col">
             <SiteHeader />
             {children}
+            <SiteFooter />
             <NowPlayingBar />
           </div>
         </PlayerProvider>
+        {/* Above the player bar (z-30) and header (z-20): the first-visit
+            onboarding takes over the whole screen for a brand-new visitor. */}
+        <Onboarding />
         <SwRegister />
         <InstallCoach />
       </body>
