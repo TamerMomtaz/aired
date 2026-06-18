@@ -127,7 +127,7 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -212,6 +212,17 @@ export default async function WorkPage({
   // trigger. Drafts never accrue plays, so this reads 0 for an unpublished work.
   const playCount = work.play_count ?? 0;
 
+  // Status chrome: live is emerald, an in-review hold is amber, draft is muted.
+  // A 'pending' work reads as "In review" — and only its owner ever sees it here
+  // (RLS 404s it for anon/non-owner; an admin works the queue from /review).
+  const statusLabel = work.status === "pending" ? "In review" : work.status;
+  const statusClass =
+    work.status === "live"
+      ? "border-emerald-400/40 text-emerald-300"
+      : work.status === "pending"
+        ? "border-amber-400/40 text-amber-300"
+        : "border-white/15 text-muted";
+
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
   if (isOwner) {
@@ -246,13 +257,9 @@ export default async function WorkPage({
           <WorkTitle id={work.id} title={work.title} size="lg" />
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             <span
-              className={
-                work.status === "live"
-                  ? "rounded-full border border-emerald-400/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-emerald-300"
-                  : "rounded-full border border-white/15 px-2.5 py-0.5 uppercase tracking-[0.14em] text-muted"
-              }
+              className={`rounded-full border px-2.5 py-0.5 uppercase tracking-[0.14em] ${statusClass}`}
             >
-              {work.status}
+              {statusLabel}
             </span>
             {isCertified ? (
               <span className="rounded-full border border-cert-red/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-cert-red">
@@ -271,6 +278,20 @@ export default async function WorkPage({
               </>
             ) : null}
           </div>
+
+          {isOwner && work.status === "pending" ? (
+            <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground">
+              In review — an admin is taking a quick look. The moment it&apos;s
+              approved, {formatCatalogId(work.id)} goes live. Nothing else to do.
+            </p>
+          ) : null}
+
+          {isOwner && work.status === "draft" && work.moderation_note ? (
+            <p className="rounded-lg border border-cert-red/30 bg-cert-red/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground">
+              <span className="font-medium">Sent back for a change:</span>{" "}
+              {work.moderation_note} Make the change, then publish again.
+            </p>
+          ) : null}
 
           {isOwner && work.status === "draft" ? (
             <GoLiveButton workId={work.id} />
