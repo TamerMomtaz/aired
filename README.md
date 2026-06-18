@@ -81,7 +81,7 @@ the Red Line player are Phase 3).
 - Function `declare_volley(...)` — the atomic paired volley write.
 - Storage buckets `masters` (private, owner-scoped) and `artwork` (public read,
   owner-scoped writes).
-- Seeded silicon contributors: **Claude** and **Suno**.
+- Seeded silicon contributors: **Claude** and **Suno** and AISong.org.
 
 ### Founder setup for this phase
 
@@ -94,3 +94,6 @@ the Red Line player are Phase 3).
 3. **Pre-existing advisories (optional).** Enable leaked-password protection
    (Auth → Providers); the Phase-0 `handle_new_user` trigger shows a benign
    SECURITY DEFINER advisory.
+   
+
+   
