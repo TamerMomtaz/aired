@@ -1,12 +1,13 @@
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AlbumCard } from "@/components/album-card";
 import { trackFromFeedWork } from "@/components/player/track";
 import { WorkCard } from "@/components/work-card";
 import {
   getArtistAlbums,
-  getArtistHeader,
+  isUuid,
+  resolveArtistHeader,
 } from "@/lib/albums/public-queries";
 import { createClient } from "@/lib/supabase/server";
 import { getArtistSingles } from "@/lib/works/queries";
@@ -14,11 +15,11 @@ import { getArtistSingles } from "@/lib/works/queries";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ handle: string }>;
 }) {
-  const { id } = await params;
+  const { handle } = await params;
   const supabase = await createClient();
-  const header = await getArtistHeader(supabase, id);
+  const header = await resolveArtistHeader(supabase, handle);
   if (!header) return { title: "Artist · AIRED" };
   return {
     title: `${header.displayName} · AIRED`,
@@ -28,27 +29,30 @@ export async function generateMetadata({
   };
 }
 
-// A public artist page (the artist IS a profile — one account = one artist, v1;
-// keyed by profile id since handles arrive later with the newcomer journey).
-// Header (name, mascot, bio, avatar) + their ALBUMS (≥1 live song) + their
-// SINGLES (album-less live works). Live content only: albums with no live song
-// are hidden, and the owner's drafts/pending never show here (getArtistSingles /
-// getArtistAlbums filter status='live' explicitly — never trusting RLS, which
-// would hand non-live rows to the owner or an admin).
+// A public artist page (the artist IS a profile — one account = one artist, v1).
+// Addressed canonically by HANDLE (/artist/[handle]); a legacy id-shaped URL
+// (/artist/<uuid>) still resolves, and redirects to the handle when the artist
+// has one. Header (name, mascot, bio, avatar) + their ALBUMS (≥1 live song) +
+// their SINGLES (album-less live works). Live content only: the owner's
+// drafts/pending and any taken-down work never show here (getArtistSingles /
+// getArtistAlbums filter status='live' AND taken_down=false explicitly).
 export default async function ArtistPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ handle: string }>;
 }) {
-  const { id } = await params;
+  const { handle: param } = await params;
   const supabase = await createClient();
 
-  const header = await getArtistHeader(supabase, id);
+  const header = await resolveArtistHeader(supabase, param);
   if (!header) notFound();
+  // Canonicalize: an id-shaped URL for an artist who has a handle redirects to
+  // the pretty /artist/[handle] form. Id-only artists (no handle yet) render here.
+  if (isUuid(param) && header.handle) redirect(`/artist/${header.handle}`);
 
   const [albums, singles] = await Promise.all([
-    getArtistAlbums(supabase, id, header.displayName),
-    getArtistSingles(supabase, id),
+    getArtistAlbums(supabase, header.id, header.displayName, header.handle),
+    getArtistSingles(supabase, header.id),
   ]);
 
   // Singles queue: this artist's album-less live works, catalog order.
@@ -85,6 +89,9 @@ export default async function ArtistPage({
           <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
             {header.displayName}
           </h1>
+          {header.handle ? (
+            <p className="font-mono text-xs text-muted/60">@{header.handle}</p>
+          ) : null}
           {header.mascotName ? (
             <p className="text-sm text-muted">
               AI voices as{" "}

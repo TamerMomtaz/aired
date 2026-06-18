@@ -4,9 +4,10 @@ import Link from "next/link";
 import type { AlbumCardData } from "@/lib/albums/public-queries";
 
 // One album on the Listen shelf (and on an artist page): a cover that opens to
-// its songs, the title, the artist (a separate link to /artist/[id]), and the
-// live-song count. The artist link is a sibling of the cover/title links — never
-// nested — so there are no nested anchors (mirrors WorkCard's share-button rule).
+// its songs, the title, the artist (a separate link to /artist/[handle], falling
+// back to the profile id), and the live-song count. The artist link is a sibling
+// of the cover/title links — never nested — so there are no nested anchors
+// (mirrors WorkCard's share-button rule).
 export function AlbumCard({ album }: { album: AlbumCardData }) {
   const count = album.liveSongCount;
   return (
@@ -46,7 +47,7 @@ export function AlbumCard({ album }: { album: AlbumCardData }) {
         </Link>
 
         <Link
-          href={`/artist/${album.artistId}`}
+          href={`/artist/${album.artistHandle ?? album.artistId}`}
           className="block max-w-full truncate text-[13px] text-muted transition hover:text-foreground"
         >
           {album.artistName}

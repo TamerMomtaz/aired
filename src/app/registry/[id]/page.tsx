@@ -24,7 +24,8 @@ import {
   type VolleyOrigin,
   type VolleyRole,
 } from "@/lib/ledger/types";
-import { getCurrentUser } from "@/lib/supabase/auth";
+import { AdminTakedownControls } from "@/components/works/admin-takedown";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { dedupeContributors, getFeed } from "@/lib/works/queries";
 
@@ -130,13 +131,18 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note, album_id",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note, album_id, taken_down, takedown_reason",
     )
     .eq("id", workId)
     .maybeSingle();
   if (!work) notFound();
 
   const isOwner = !!user && user.id === work.creator_id;
+  // Admin governance: an admin may take ANY work down (and restore it). is_admin
+  // comes from the cached profile (shares getCurrentUser's round-trip).
+  const profile = await getCurrentProfile();
+  const isAdmin = !!profile?.is_admin;
+  const takenDown = !!work.taken_down;
 
   // RLS on `certification` is `select using (true)` — fine to fetch for anyone.
   // We only need to know whether one exists, to decide "Issue" vs "View" in the
@@ -268,6 +274,11 @@ export default async function WorkPage({
             >
               {statusLabel}
             </span>
+            {takenDown ? (
+              <span className="rounded-full border border-cert-red/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-cert-red">
+                Taken down
+              </span>
+            ) : null}
             {isCertified ? (
               <span className="rounded-full border border-cert-red/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-cert-red">
                 Red Line
@@ -286,7 +297,18 @@ export default async function WorkPage({
             ) : null}
           </div>
 
-          {isOwner && work.status === "pending" ? (
+          {isOwner && takenDown ? (
+            <p className="rounded-lg border border-cert-red/40 bg-cert-red/[0.08] px-4 py-3 text-sm leading-relaxed text-foreground">
+              <span className="font-medium">
+                Taken down by AIRED
+                {work.takedown_reason ? ` — ${work.takedown_reason}` : ""}.
+              </span>{" "}
+              It&apos;s off the public shelf. You can still edit or appeal
+              (contact@ai-red.io), but only AIRED can put it back.
+            </p>
+          ) : null}
+
+          {isOwner && !takenDown && work.status === "pending" ? (
             <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground">
               In review — an admin is taking a quick look. The moment it&apos;s
               approved, {formatCatalogId(work.id)} goes live. Nothing else to do.
@@ -300,11 +322,19 @@ export default async function WorkPage({
             </p>
           ) : null}
 
-          {isOwner && work.status === "draft" ? (
+          {isOwner && work.status === "draft" && !takenDown ? (
             <GoLiveButton workId={work.id} />
           ) : null}
 
-          {work.status === "live" ? (
+          {isAdmin ? (
+            <AdminTakedownControls
+              workId={work.id}
+              takenDown={takenDown}
+              reason={work.takedown_reason ?? null}
+            />
+          ) : null}
+
+          {work.status === "live" && !takenDown ? (
             <div className="flex flex-wrap items-start gap-2">
               {isCertified ? (
                 <Link

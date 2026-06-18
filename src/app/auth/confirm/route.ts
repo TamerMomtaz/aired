@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { safeNext } from "@/lib/auth/safe-redirect";
+import { postAuthDestination } from "@/lib/identity/onboarding";
 import { createClient } from "@/lib/supabase/server";
 
 // The email one-time-token flow: magic links, recovery, and confirmation emails
@@ -28,7 +29,8 @@ export async function GET(request: Request) {
       token_hash: tokenHash,
     });
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      const dest = await postAuthDestination(supabase, next);
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
 

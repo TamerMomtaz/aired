@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { safeNext } from "@/lib/auth/safe-redirect";
+import { postAuthDestination } from "@/lib/identity/onboarding";
 import { createClient } from "@/lib/supabase/server";
 
 // Result returned to the form via useActionState. `error` shows inline; `notice`
@@ -46,9 +47,12 @@ export async function signIn(
     return { error: error.message };
   }
 
+  // A user who hasn't finished the guided first-run lands in /welcome; everyone
+  // else proceeds to their intended destination.
+  const dest = await postAuthDestination(supabase, next);
   // The root layout reads the user, so refresh it before leaving.
   revalidatePath("/", "layout");
-  redirect(next);
+  redirect(dest);
 }
 
 export async function signUp(
@@ -81,8 +85,9 @@ export async function signUp(
   // If the project has email confirmation off, signUp returns a live session and
   // the user is already in. Otherwise we wait for them to confirm by email.
   if (data.session) {
+    const dest = await postAuthDestination(supabase, next);
     revalidatePath("/", "layout");
-    redirect(next);
+    redirect(dest);
   }
 
   return {

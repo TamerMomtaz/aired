@@ -85,3 +85,66 @@ export async function trustArtist(profileId: string): Promise<ReviewResult> {
   revalidatePath("/review");
   return { ok: true };
 }
+
+// Take a work DOWN off every public surface — admin governance that works on ANY
+// work, including a LIVE one already approved through Review. A thin wrapper over
+// the SECURITY DEFINER admin_takedown_work RPC, which asserts is_admin inside the
+// DB; the signed-out bail here is just for a clean message. A reason is required
+// so the owner always learns why. The guard_work_takedown trigger means even a
+// trusted creator can't undo this — only an admin's Restore can.
+export async function takedownWork(
+  workId: number,
+  reason: string,
+): Promise<ReviewResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in as an admin to take down a work." };
+
+  const trimmed = (reason ?? "").trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      error: "Add a short reason — the owner will see why it was taken down.",
+    };
+  }
+
+  const { error } = await supabase.rpc("admin_takedown_work", {
+    p_work_id: workId,
+    p_reason: trimmed,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  // It must vanish from every public surface at once (the RLS change is the real
+  // gate; these revalidations refresh the cached renders).
+  revalidatePath("/");
+  revalidatePath("/registry");
+  revalidatePath(`/registry/${workId}`);
+  revalidatePath("/review");
+  revalidatePath("/review/taken-down");
+  return { ok: true };
+}
+
+// Restore a taken-down work — admin-only, clears taken_down + reason via the
+// admin_restore_work RPC. The work returns to whatever status it held (a live one
+// reappears on the public shelf immediately).
+export async function restoreWork(workId: number): Promise<ReviewResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in as an admin to restore a work." };
+
+  const { error } = await supabase.rpc("admin_restore_work", {
+    p_work_id: workId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/");
+  revalidatePath("/registry");
+  revalidatePath(`/registry/${workId}`);
+  revalidatePath("/review");
+  revalidatePath("/review/taken-down");
+  return { ok: true };
+}

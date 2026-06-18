@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { safeNext } from "@/lib/auth/safe-redirect";
+import { postAuthDestination } from "@/lib/identity/onboarding";
 import { createClient } from "@/lib/supabase/server";
 
 // Where the OAuth handshake and the (default) email-confirmation link land. Both
@@ -15,14 +16,17 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // First sign-in with no finished walk lands in /welcome; otherwise the
+      // intended destination.
+      const dest = await postAuthDestination(supabase, next);
       // Behind Vercel the public host is in x-forwarded-host, not the internal
       // origin. Honour it in production so the redirect keeps the right domain.
       const forwardedHost = request.headers.get("x-forwarded-host");
       const isLocal = process.env.NODE_ENV === "development";
       if (!isLocal && forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`);
+        return NextResponse.redirect(`https://${forwardedHost}${dest}`);
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
 

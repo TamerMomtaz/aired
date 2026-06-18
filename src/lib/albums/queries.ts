@@ -76,6 +76,10 @@ export type ManageWork = {
   // Line, needs the stronger confirm.
   playCount: number;
   certified: boolean;
+  // Admin governance: the owner still sees their own taken-down work here, with
+  // the reason — they can edit or appeal it, but never re-publish it.
+  takenDown: boolean;
+  takedownReason: string | null;
 };
 
 type AlbumRow = {
@@ -97,6 +101,8 @@ type WorkRow = {
   lyrics: string | null;
   play_count: number | null;
   red_line_certified: boolean | null;
+  taken_down: boolean | null;
+  takedown_reason: string | null;
 };
 
 // Everything the /manage surface needs in two owner-scoped reads: the caller's
@@ -117,7 +123,7 @@ export async function getManageData(
     supabase
       .from("work")
       .select(
-        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, play_count, red_line_certified",
+        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, play_count, red_line_certified, taken_down, takedown_reason",
       )
       .eq("creator_id", userId)
       .order("id", { ascending: false }),
@@ -172,6 +178,8 @@ export async function getManageData(
     artworkUrl: w.artwork_url,
     playCount: w.play_count ?? 0,
     certified: !!w.red_line_certified,
+    takenDown: !!w.taken_down,
+    takedownReason: w.takedown_reason,
   }));
 
   return { albums, works };

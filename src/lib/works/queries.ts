@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 // Search. Both return the same `FeedWork` shape so cards render uniformly.
 //
 // Live-only filtering is owed to RLS (`work_read_live_or_owner` returns drafts
-// only to their creator); the anon/session client cannot see them otherwise.
-// We still pass `.eq("status","live")` so the query plan stays predictable for
-// the signed-in owner case.
+// only to their creator, and hides a taken_down work from everyone but its
+// owner); the anon/session client cannot see them otherwise. We still pass
+// `.eq("status","live").eq("taken_down", false)` explicitly on every public read
+// so the signed-in owner / admin (who CAN read those rows) never leaks one onto
+// a public surface, and the query plan stays predictable.
 
 export type FeedWork = {
   id: number;
@@ -98,6 +100,7 @@ export async function getFeed(
     .from("work")
     .select(WORK_SELECT)
     .eq("status", "live")
+    .eq("taken_down", false)
     .order("created_at", { ascending: false })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
@@ -118,6 +121,7 @@ export async function getWorkById(
     .select(WORK_SELECT)
     .eq("id", workId)
     .eq("status", "live")
+    .eq("taken_down", false)
     .maybeSingle();
   return data ? shape(data as unknown as WorkRow) : null;
 }
@@ -159,6 +163,7 @@ export async function searchWorks(
       .from("work")
       .select("id")
       .eq("status", "live")
+      .eq("taken_down", false)
       .ilike("title", pattern)
       .limit(limit),
     supabase
@@ -196,6 +201,7 @@ export async function searchWorks(
           .from("work")
           .select("id")
           .eq("status", "live")
+          .eq("taken_down", false)
           .in("album_id", albumIds)
           .limit(limit)
       : Promise.resolve({ data: [] as { id: number }[] }),
@@ -204,6 +210,7 @@ export async function searchWorks(
           .from("work")
           .select("id")
           .eq("status", "live")
+          .eq("taken_down", false)
           .in("creator_id", artistIds)
           .limit(limit)
       : Promise.resolve({ data: [] as { id: number }[] }),
@@ -219,6 +226,7 @@ export async function searchWorks(
     .select(WORK_SELECT)
     .in("id", Array.from(matched))
     .eq("status", "live")
+    .eq("taken_down", false)
     .order("created_at", { ascending: false })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
@@ -271,6 +279,7 @@ export async function getMostPlayed(
     .from("work")
     .select(WORK_SELECT)
     .eq("status", "live")
+    .eq("taken_down", false)
     .gt("play_count", 0)
     .order("play_count", { ascending: false })
     .order("id", { ascending: true })
@@ -292,6 +301,7 @@ export async function getAlbumSongs(
     .select(WORK_SELECT)
     .eq("album_id", albumId)
     .eq("status", "live")
+    .eq("taken_down", false)
     .order("id", { ascending: true });
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
 }
@@ -309,6 +319,7 @@ export async function getArtistSingles(
     .select(WORK_SELECT)
     .eq("creator_id", profileId)
     .eq("status", "live")
+    .eq("taken_down", false)
     .is("album_id", null)
     .order("created_at", { ascending: false })
     .limit(limit);
