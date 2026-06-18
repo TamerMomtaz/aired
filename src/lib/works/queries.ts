@@ -18,6 +18,10 @@ export type FeedWork = {
   // The HLS playlist key makes every card directly enqueueable by the global
   // player (Phase 5). Live works all carry one.
   hls_playlist_key: string | null;
+  // The album this work is filed under, or null for a single. Carried on the
+  // feed so Browse can split the catalog into an album shelf + a singles shelf
+  // (BROWSE-AS-LABEL) without a second query. Cards ignore it.
+  album_id: string | null;
   contributors: { name: string; profile_slug: string | null }[];
   // Real listens, recorded server-side (src/lib/plays). Denormalized onto `work`
   // and kept exact by a trigger, so it rides free with every work select — no
@@ -39,6 +43,7 @@ type WorkRow = {
   red_line_certified: boolean;
   created_at: string;
   hls_playlist_key: string | null;
+  album_id: string | null;
   play_count: number | null;
   public_volley: Array<{
     agent: { name: string; profile_slug: string | null } | null;
@@ -46,7 +51,7 @@ type WorkRow = {
 };
 
 const WORK_SELECT =
-  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, play_count, public_volley(agent(name, profile_slug))";
+  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, album_id, play_count, public_volley(agent(name, profile_slug))";
 
 // A single agent may appear on several volleys per work; collapse by slug-or-name
 // so the contributor line / chips don't repeat. Generic over the agent shape so
@@ -78,6 +83,7 @@ function shape(row: WorkRow): FeedWork {
     red_line_certified: row.red_line_certified,
     created_at: row.created_at,
     hls_playlist_key: row.hls_playlist_key,
+    album_id: row.album_id,
     playCount: row.play_count ?? 0,
     contributors: dedupeContributors(row.public_volley),
   };
@@ -125,8 +131,11 @@ export function parseCatalogQuery(q: string): number | null {
   return n;
 }
 
-// Search live works by title, catalog number, or contributor name. Same shape
-// as the feed so the home page renders both with one card. Live-only by RLS.
+// Search live works by title, catalog number, or contributor name — and, because
+// Browse is now a label, also by ALBUM title and ARTIST (creator) name, expanding
+// either into its live works. Same FeedWork shape so the home page renders the
+// hits with one card. Live-only is enforced on every leg (RLS + explicit
+// status='live'), so search never surfaces a draft / in-review work.
 export async function searchWorks(
   supabase: SupabaseServerClient,
   query: string,
@@ -137,22 +146,31 @@ export async function searchWorks(
 
   const num = parseCatalogQuery(q);
   const matched = new Set<number>();
+  // ilike wildcards (% and _) in user input just widen the match — supabase-js
+  // URL-encodes the value, so there's no injection surface.
+  const pattern = `%${q}%`;
 
-  // Title contains. ilike wildcards (% and _) in user input just widen the
-  // match — supabase-js URL-encodes the value, so no injection surface.
-  // Contributor name via an inner-join embed on agent: the join + the agent.name
+  // First pass, in parallel: direct work hits (title, contributor agent name) and
+  // the two label dimensions (album title, artist display_name) we expand below.
+  // Contributor name uses an inner-join embed on agent: the join + the agent.name
   // filter both constrain the public_volley rows the server returns.
-  const [titleRes, contribRes] = await Promise.all([
+  const [titleRes, contribRes, albumRes, artistRes] = await Promise.all([
     supabase
       .from("work")
       .select("id")
       .eq("status", "live")
-      .ilike("title", `%${q}%`)
+      .ilike("title", pattern)
       .limit(limit),
     supabase
       .from("public_volley")
       .select("work_id, agent:agent_id!inner(name)")
-      .ilike("agent.name", `%${q}%`)
+      .ilike("agent.name", pattern)
+      .limit(limit),
+    supabase.from("album").select("id").ilike("title", pattern).limit(limit),
+    supabase
+      .from("profile")
+      .select("id")
+      .ilike("display_name", pattern)
       .limit(limit),
   ]);
 
@@ -166,6 +184,33 @@ export async function searchWorks(
   // Catalog hit: the hydration step's .in() + status=live double-checks it
   // exists and is live, so we can speculatively add it.
   if (num !== null) matched.add(num);
+
+  // Second pass: expand matched albums / artists into their LIVE works.
+  const albumIds = ((albumRes.data ?? []) as { id: string }[]).map((a) => a.id);
+  const artistIds = ((artistRes.data ?? []) as { id: string }[]).map(
+    (p) => p.id,
+  );
+  const [albumWorks, artistWorks] = await Promise.all([
+    albumIds.length
+      ? supabase
+          .from("work")
+          .select("id")
+          .eq("status", "live")
+          .in("album_id", albumIds)
+          .limit(limit)
+      : Promise.resolve({ data: [] as { id: number }[] }),
+    artistIds.length
+      ? supabase
+          .from("work")
+          .select("id")
+          .eq("status", "live")
+          .in("creator_id", artistIds)
+          .limit(limit)
+      : Promise.resolve({ data: [] as { id: number }[] }),
+  ]);
+  for (const r of (albumWorks.data ?? []) as { id: number }[]) matched.add(r.id);
+  for (const r of (artistWorks.data ?? []) as { id: number }[])
+    matched.add(r.id);
 
   if (matched.size === 0) return [];
 
@@ -229,6 +274,43 @@ export async function getMostPlayed(
     .gt("play_count", 0)
     .order("play_count", { ascending: false })
     .order("id", { ascending: true })
+    .limit(limit);
+  return ((data ?? []) as unknown as WorkRow[]).map(shape);
+}
+
+// The LIVE songs filed in one album, in catalog (track) order — the album page's
+// body and its play queue (BROWSE-AS-LABEL). status='live' is filtered EXPLICITLY,
+// not left to RLS: an admin (work_admin_read) or the album owner can read non-live
+// rows, but a public album page must never surface a draft / in-review song. So a
+// pending or draft work filed in this album simply never appears here.
+export async function getAlbumSongs(
+  supabase: SupabaseServerClient,
+  albumId: string,
+): Promise<FeedWork[]> {
+  const { data } = await supabase
+    .from("work")
+    .select(WORK_SELECT)
+    .eq("album_id", albumId)
+    .eq("status", "live")
+    .order("id", { ascending: true });
+  return ((data ?? []) as unknown as WorkRow[]).map(shape);
+}
+
+// An artist's album-less LIVE works — their singles shelf on the artist page.
+// creator_id scopes to the one artist; the explicit status='live' keeps it
+// public-safe (same reasoning as getAlbumSongs — never trust RLS alone here).
+export async function getArtistSingles(
+  supabase: SupabaseServerClient,
+  profileId: string,
+  limit = FEED_LIMIT,
+): Promise<FeedWork[]> {
+  const { data } = await supabase
+    .from("work")
+    .select(WORK_SELECT)
+    .eq("creator_id", profileId)
+    .eq("status", "live")
+    .is("album_id", null)
+    .order("created_at", { ascending: false })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
 }
