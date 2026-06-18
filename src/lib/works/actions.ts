@@ -16,11 +16,21 @@ import { triggerTranscode } from "./transcode";
 // Phase-2 holding column — Rule 6 keeps audio off Supabase serving; R2 + HLS is
 // Phase 3). Artwork is a public URL.
 
+// Where the new work is filed at creation. "existing" picks one of the creator's
+// own albums; "new" creates one inline (its cover is derived from this work's
+// artwork — no separate cover upload); "single" leaves album_id NULL on purpose.
+export type CreateWorkAlbum =
+  | { kind: "existing"; albumId: string }
+  | { kind: "new"; title: string; description?: string | null }
+  | { kind: "single" };
+
 export type CreateWorkInput = {
   title: string;
   durationSeconds: number | null;
   masterPath: string;
   artworkUrl: string | null;
+  // The album step. Defaults to a single if omitted.
+  album?: CreateWorkAlbum;
 };
 
 export type CreateWorkResult =
@@ -51,6 +61,35 @@ export async function createWork(
       ? Math.max(0, Math.round(input.durationSeconds))
       : null;
 
+  // Resolve the album step into an album_id (or null for a single). A "new"
+  // choice creates the album first as a normal owner insert (album_owner_ins);
+  // its cover is left to derivation (this work's artwork). The
+  // enforce_album_ownership trigger validates the link on the work insert below,
+  // so an "existing" id that isn't the caller's own album is rejected there.
+  const album = input.album ?? { kind: "single" };
+  let albumId: string | null = null;
+  if (album.kind === "existing") {
+    albumId = album.albumId;
+  } else if (album.kind === "new") {
+    const albumTitle = (album.title ?? "").trim().slice(0, 200);
+    if (!albumTitle) {
+      return { ok: false, error: "Name the new album, or release as a single." };
+    }
+    const albumDesc = (album.description ?? "").trim().slice(0, 2000) || null;
+    const { data: createdAlbum, error: albumError } = await supabase
+      .from("album")
+      .insert({ title: albumTitle, description: albumDesc, profile_id: user.id })
+      .select("id")
+      .single();
+    if (albumError || !createdAlbum) {
+      return {
+        ok: false,
+        error: albumError?.message ?? "Couldn't create the album.",
+      };
+    }
+    albumId = createdAlbum.id as string;
+  }
+
   // RLS (work_owner_ins) enforces creator_id = auth.uid(); we set it explicitly
   // from the verified server session.
   const { data, error } = await supabase
@@ -61,6 +100,7 @@ export async function createWork(
       duration_seconds: duration,
       master_storage_path: input.masterPath,
       artwork_url: input.artworkUrl,
+      album_id: albumId,
       status: "draft",
     })
     .select("id")
@@ -79,6 +119,9 @@ export async function createWork(
   after(() => triggerTranscode(workId));
 
   revalidatePath("/registry");
+  // The new work (and any inline-created album) shows up on the creator's
+  // manage surface immediately.
+  revalidatePath("/manage");
   return { ok: true, workId };
 }
 
