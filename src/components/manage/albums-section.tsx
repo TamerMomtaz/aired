@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import type { ManageAlbum } from "@/lib/albums/queries";
+import { uploadArtworkImage } from "@/lib/artwork/upload-client";
 import {
   createAlbum,
   deleteAlbum,
   setAlbumCover,
+  setAlbumCoverUpload,
   updateAlbum,
 } from "@/lib/albums/actions";
 
@@ -23,6 +25,8 @@ const btnClass =
   "rounded-lg border border-white/12 px-3.5 py-2 text-sm text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50";
 const primaryBtnClass =
   "rounded-lg bg-cert-red px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50";
+const fileClass =
+  "w-full rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-3.5 py-3 text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-white/15 disabled:opacity-50";
 
 export function AlbumsSection({ albums }: { albums: ManageAlbum[] }) {
   const router = useRouter();
@@ -134,6 +138,28 @@ function AlbumRow({ album }: { album: ManageAlbum }) {
     setTitle(album.title);
     setDescription(album.description ?? "");
     setMode("edit");
+  }
+
+  // Upload a cover image from the device → set it as this album's cover. Goes
+  // through the same public artwork-bucket path as song artwork, then
+  // setAlbumCoverUpload (owner-scoped, validates it's our own image).
+  function uploadCover(file: File | null) {
+    if (!file) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const { publicUrl } = await uploadArtworkImage(file);
+        const r = await setAlbumCoverUpload(album.id, publicUrl);
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        setMode("view");
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't upload the cover.");
+      }
+    });
   }
 
   return (
@@ -256,9 +282,22 @@ function AlbumRow({ album }: { album: ManageAlbum }) {
             </>
           ) : (
             <span className="text-xs text-muted">
-              Add a song with artwork to this album to set a cover.
+              No songs with artwork yet — upload a cover from your device below.
             </span>
           )}
+          <div className="flex flex-col gap-1.5 border-t border-white/8 pt-3">
+            <span className="text-xs text-muted">
+              Or upload a cover from your device:
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              className={fileClass}
+              disabled={pending}
+              onChange={(e) => uploadCover(e.target.files?.[0] ?? null)}
+              aria-label="Upload an album cover"
+            />
+          </div>
           <div className="flex items-center justify-end gap-2">
             {album.hasCustomCover ? (
               <button

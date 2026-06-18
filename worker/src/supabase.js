@@ -60,3 +60,18 @@ export async function updateWorkKeys(workId, { audioMasterKey, hlsPlaylistKey })
     throw new Error(`Could not update work ${workId}: ${error.message}`);
   }
 }
+
+// Remove the private transcode source from Supabase Storage (EDIT & TIDY —
+// Discard). Service-role, so it isn't bound by Storage RLS. Best-effort: a
+// missing object is not an error worth failing the purge over (the row is
+// already gone), so the caller logs and continues.
+export async function deleteMasterObject(path) {
+  if (!path) return { removed: 0 };
+  const { error } = await supabase.storage
+    .from(config.supabaseMastersBucket)
+    .remove([path]);
+  if (error) {
+    throw new Error(`Could not delete master ${path}: ${error.message}`);
+  }
+  return { removed: 1 };
+}

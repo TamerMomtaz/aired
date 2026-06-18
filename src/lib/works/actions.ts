@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
+import { sanitizeDescriptorList } from "@/lib/ledger/sanitizeReference";
 import { createClient } from "@/lib/supabase/server";
+import { triggerPurge } from "./purge";
 import { triggerTranscode } from "./transcode";
 
 // Create a draft work AFTER its media has been uploaded directly to Supabase
@@ -348,5 +350,168 @@ export async function saveLyrics(
   }
 
   revalidatePath(`/registry/${workId}`);
+  return { ok: true };
+}
+
+// Edit a work IN PLACE (EDIT & TIDY — the orphan-killer). Updates title, lyrics,
+// artwork, descriptors, and album on the SAME row — NO new row, so the AIRED
+// number (work.id, minted into certs / QR / share cards / registry URLs) never
+// changes. Authorized by work_owner_upd (creator_id = auth.uid()); album_id is
+// still vetted by the enforce_album_ownership trigger. status and creator_id are
+// never touched, so a live work stays live (v1-simple: a creator's edits to a
+// live work do not re-enter Review).
+//
+// Field semantics let the editor send only what changed:
+//   • title / descriptors / album_id — always set (descriptors re-sanitized).
+//   • artworkUrl / lyrics — `undefined` leaves the column as-is; a value sets it;
+//     `null` clears it. So editing the title can never clobber a synced LRC.
+export type UpdateWorkInput = {
+  workId: number;
+  title: string;
+  // Free-text descriptor list (comma/newline separated), sanitized server-side.
+  descriptors: string;
+  // The chosen album, or null for a single.
+  albumId: string | null;
+  // undefined = leave; string = set; null = clear.
+  artworkUrl?: string | null;
+  lyrics?: string | null;
+};
+
+export type UpdateWorkResult =
+  | { ok: true; droppedNames: string[] }
+  | { ok: false; error: string };
+
+export async function updateWork(
+  input: UpdateWorkInput,
+): Promise<UpdateWorkResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to edit your work." };
+  }
+
+  const title = (input.title ?? "").trim().slice(0, 200);
+  if (!title) {
+    return { ok: false, error: "Give the work a title." };
+  }
+
+  // Reference-sanitizer at the boundary — the SAME guard the upload path runs,
+  // so no third-party name reaches the public, searchable descriptor set (Rule
+  // 2). Names typed here are dropped and reported back to the editor.
+  const { descriptors, dropped } = sanitizeDescriptorList(input.descriptors ?? "");
+
+  const patch: Record<string, unknown> = {
+    title,
+    descriptors,
+    album_id: input.albumId ?? null,
+  };
+  if (input.artworkUrl !== undefined) {
+    patch.artwork_url = input.artworkUrl;
+  }
+  if (input.lyrics !== undefined) {
+    patch.lyrics =
+      input.lyrics && input.lyrics.trim().length > 0 ? input.lyrics : null;
+  }
+
+  const { error } = await supabase
+    .from("work")
+    .update(patch)
+    .eq("id", input.workId);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/registry/${input.workId}`);
+  revalidatePath("/registry");
+  revalidatePath("/manage");
+  // A live work's title/artwork show on the public feed too.
+  revalidatePath("/");
+  return { ok: true, droppedNames: dropped };
+}
+
+export type DiscardWorkResult =
+  | { ok: true }
+  | { ok: false; error: string; requiresForce?: boolean };
+
+// Discard a work (EDIT & TIDY — your cleanup tool). Deletes the row through
+// work_owner_del (creator_id = auth.uid()); the existing ON DELETE CASCADE on
+// work's FKs removes its public_volley / private_volley / certification / play
+// rows. Then (after the response) the worker sweeps the work's R2 objects +
+// private master so nothing is stranded. Other works' AIRED numbers are
+// untouched — gaps are fine and deliberate (CLAUDE.md §2).
+//
+// Safety gate: a plain draft deletes on the first confirm. A LIVE work — or one
+// that already has plays or a minted Red Line — carries history the cascade will
+// destroy (its certificate + play counts), so it requires an explicit second
+// confirm (`force`). The same gate is re-checked here, not just in the UI, so a
+// direct POST can't skip it.
+export async function discardWork(
+  workId: number,
+  opts: { force?: boolean } = {},
+): Promise<DiscardWorkResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to discard a work." };
+  }
+
+  // RLS returns this row to its owner (or an admin); we still assert ownership so
+  // ONLY the creator can discard their own work — never an admin via this path,
+  // and never someone else's stranded draft.
+  const { data: work, error: readErr } = await supabase
+    .from("work")
+    .select(
+      "id, creator_id, status, master_storage_path, play_count, red_line_certified",
+    )
+    .eq("id", workId)
+    .maybeSingle();
+  if (readErr) {
+    return { ok: false, error: readErr.message };
+  }
+  if (!work) {
+    return { ok: false, error: "Couldn't find this work." };
+  }
+  if (work.creator_id !== user.id) {
+    return { ok: false, error: "Only the work's owner can discard it." };
+  }
+
+  const hasHistory =
+    work.status === "live" ||
+    (work.play_count ?? 0) > 0 ||
+    !!work.red_line_certified;
+  if (hasHistory && !opts.force) {
+    return {
+      ok: false,
+      requiresForce: true,
+      error:
+        "This work is live and has history — confirm again to remove it for good.",
+    };
+  }
+
+  const { error: delErr } = await supabase
+    .from("work")
+    .delete()
+    .eq("id", workId);
+  if (delErr) {
+    return { ok: false, error: delErr.message };
+  }
+
+  // Sweep the work's stored blobs after the response — best-effort; the row (the
+  // ghost) is already gone whether or not the worker is reachable.
+  after(() =>
+    triggerPurge(workId, { masterStoragePath: work.master_storage_path }),
+  );
+
+  revalidatePath("/manage");
+  revalidatePath("/upload");
+  revalidatePath("/registry");
+  if (work.status === "live") {
+    revalidatePath("/");
+    revalidatePath(`/registry/${workId}`);
+  }
   return { ok: true };
 }

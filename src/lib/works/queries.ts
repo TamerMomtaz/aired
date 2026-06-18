@@ -179,6 +179,42 @@ export async function searchWorks(
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
 }
 
+export type DraftWork = {
+  id: number;
+  title: string;
+  artworkUrl: string | null;
+  createdAt: string;
+};
+
+// The signed-in creator's unpublished drafts (EDIT & TIDY — Resume). Surfaced on
+// /upload so a creator continues an in-progress work rather than starting fresh
+// and minting another orphan. Owner-scoped (status='draft' + creator_id), and
+// RLS (work_read_live_or_owner) backs that — a draft is only ever its creator's.
+export async function getMyDrafts(
+  supabase: SupabaseServerClient,
+  userId: string,
+): Promise<DraftWork[]> {
+  const { data } = await supabase
+    .from("work")
+    .select("id, title, artwork_url, created_at")
+    .eq("creator_id", userId)
+    .eq("status", "draft")
+    .order("id", { ascending: false });
+  return (
+    (data ?? []) as Array<{
+      id: number;
+      title: string;
+      artwork_url: string | null;
+      created_at: string;
+    }>
+  ).map((w) => ({
+    id: w.id,
+    title: w.title,
+    artworkUrl: w.artwork_url,
+    createdAt: w.created_at,
+  }));
+}
+
 // The "Most played" strip: live works ranked by real listens, highest first
 // (ties broken by catalog number for a stable order), each card-ready with its
 // count. A plain ORDER BY on the denormalized counter — empty until plays land.

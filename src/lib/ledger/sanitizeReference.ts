@@ -124,3 +124,51 @@ export function sanitizeReference(input: string): SanitizeResult {
     promptForDescriptors: false,
   };
 }
+
+export type DescriptorSanitizeResult = {
+  /** Safe, de-duplicated descriptor tokens for the public, searchable set. */
+  descriptors: string[];
+  /** Tokens that read like a third-party name and were removed (Rule 2). */
+  dropped: string[];
+};
+
+// Sanitize a free-text descriptor LIST (the in-place work editor — EDIT & TIDY).
+// The editor lets a creator retype the public descriptors directly, so the SAME
+// reference-sanitizer that guards the upload/volley path runs here too: every
+// comma- or newline-separated token is passed through `sanitizeReference`, so a
+// bare artist name is dropped (never public — Rule 2) while genres/descriptors
+// pass through. Known references expand to their descriptors and the name is
+// discarded. Output mirrors the `declare_volley` merge: split, trim, drop blanks,
+// de-duplicate (case-insensitive) with first-seen order preserved. PURE, so the
+// editor's live preview (client) and the `updateWork` enforcement (server) agree.
+export function sanitizeDescriptorList(input: string): DescriptorSanitizeResult {
+  const seen = new Set<string>();
+  const descriptors: string[] = [];
+  const droppedSeen = new Set<string>();
+  const dropped: string[] = [];
+
+  const tokens = (input ?? "")
+    .split(/[\n,]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  for (const token of tokens) {
+    const r = sanitizeReference(token);
+    if (r.unknownReference) {
+      const key = token.toLowerCase();
+      if (!droppedSeen.has(key)) {
+        droppedSeen.add(key);
+        dropped.push(token);
+      }
+      continue;
+    }
+    for (const d of r.descriptors) {
+      const key = d.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      descriptors.push(d);
+    }
+  }
+
+  return { descriptors, dropped };
+}

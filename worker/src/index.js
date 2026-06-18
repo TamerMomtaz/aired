@@ -8,6 +8,7 @@ import { timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { log, logErr } from "./logger.js";
 import { transcodeWork } from "./transcode.js";
+import { purgeWork } from "./purge.js";
 
 // Refuse to expose the endpoint without a secret to guard it.
 if (!config.sharedSecret) {
@@ -108,6 +109,49 @@ const server = createServer(async (req, res) => {
         });
       } finally {
         inFlight.delete(workId);
+      }
+    }
+
+    // Storage purge for a discarded work (EDIT & TIDY). Same Bearer-secret guard
+    // as /transcode. The caller (the discard server action) has already deleted
+    // the work row; this removes its R2 objects + the private master source.
+    if (req.method === "POST" && url.pathname === "/purge") {
+      if (!secretOk(extractSecret(req))) {
+        return sendJson(res, 401, { ok: false, error: "unauthorized" });
+      }
+
+      let workId = Number(url.searchParams.get("work_id"));
+      let masterStoragePath = null;
+      const raw = await readBody(req);
+      if (raw.trim()) {
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return sendJson(res, 400, { ok: false, error: "invalid JSON body" });
+        }
+        if (!workId) workId = Number(parsed.work_id);
+        if (typeof parsed.master_storage_path === "string") {
+          masterStoragePath = parsed.master_storage_path;
+        }
+      }
+      if (!Number.isInteger(workId) || workId <= 0) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: "work_id must be a positive integer",
+        });
+      }
+
+      try {
+        const result = await purgeWork(workId, { masterStoragePath });
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (err) {
+        logErr(`work=${workId} purge failed`, err);
+        return sendJson(res, 500, {
+          ok: false,
+          workId,
+          error: err?.message ?? "purge failed",
+        });
       }
     }
 
