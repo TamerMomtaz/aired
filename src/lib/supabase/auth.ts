@@ -20,6 +20,9 @@ export type CurrentProfile = {
   trusted: boolean;
   display_name: string | null;
   handle: string | null;
+  // NULL ⇒ the guided first-run walk hasn't been completed. Pages gate on this
+  // to send a not-yet-set-up creator into /welcome.
+  onboarded_at: string | null;
 };
 
 // The signed-in user's profile row, carrying the two trust/role flags the Review
@@ -36,7 +39,7 @@ export const getCurrentProfile = cache(
     const supabase = await createClient();
     const { data } = await supabase
       .from("profile")
-      .select("id, is_admin, trusted, display_name, handle")
+      .select("id, is_admin, trusted, display_name, handle, onboarded_at")
       .eq("id", user.id)
       .maybeSingle();
     return {
@@ -45,6 +48,7 @@ export const getCurrentProfile = cache(
       trusted: !!data?.trusted,
       display_name: data?.display_name ?? null,
       handle: data?.handle ?? null,
+      onboarded_at: data?.onboarded_at ?? null,
     };
   },
 );

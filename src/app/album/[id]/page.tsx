@@ -88,7 +88,7 @@ export default async function AlbumPage({
             {meta.title}
           </h1>
           <Link
-            href={`/artist/${meta.artistId}`}
+            href={`/artist/${meta.artistHandle ?? meta.artistId}`}
             className="self-start text-sm text-muted transition hover:text-foreground"
           >
             {meta.artistName}

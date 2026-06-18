@@ -63,12 +63,13 @@ export async function SiteHeader() {
               <NavLink href="/upload" variant="cta">
                 Upload
               </NavLink>
-              <span
-                className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 sm:inline"
-                title={user.email ?? undefined}
+              <Link
+                href="/settings"
+                className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 transition hover:text-foreground sm:inline"
+                title={`${user.email ?? "Your account"} — edit your identity`}
               >
                 {user.email}
-              </span>
+              </Link>
               <form action={signOut}>
                 <button
                   type="submit"

@@ -34,9 +34,11 @@ export type AlbumCardData = {
   id: string;
   title: string;
   coverUrl: string | null;
-  // The artist = the album's owning profile. id drives /artist/[id] (handles are
-  // null for now); name is the display_name (with fallback).
+  // The artist = the album's owning profile. Links resolve by handle when the
+  // artist has one (/artist/[handle]), falling back to the profile id otherwise;
+  // name is the display_name (with fallback).
   artistId: string;
+  artistHandle: string | null;
   artistName: string;
   liveSongCount: number;
 };
@@ -50,12 +52,14 @@ export type AlbumMeta = {
   // resolveAlbumCover with the newest live member's artwork.
   coverUrlRaw: string | null;
   artistId: string;
+  artistHandle: string | null;
   artistName: string;
 };
 
 // Header metadata for an artist page (their albums + singles come separately).
 export type ArtistHeader = {
   id: string;
+  handle: string | null;
   displayName: string;
   mascotName: string | null;
   bio: string | null;
@@ -107,7 +111,7 @@ type AlbumMetaRow = {
   cover_url: string | null;
   profile_id: string;
   // PostgREST returns this FK embed as a single object (many-to-one).
-  profile: { display_name: string | null } | null;
+  profile: { display_name: string | null; handle: string | null } | null;
 };
 
 // Build album cards from album rows + their live-member aggregate, dropping any
@@ -127,6 +131,7 @@ function buildAlbumCards(
         title: a.title,
         coverUrl: resolveAlbumCover(a.cover_url, ag.coverArtwork),
         artistId: a.profile_id,
+        artistHandle: a.profile?.handle ?? null,
         artistName: artistName(a.profile?.display_name ?? null),
         liveSongCount: ag.count,
       },
@@ -147,6 +152,7 @@ export async function getBrowseAlbums(
     .from("work")
     .select("album_id, artwork_url, created_at")
     .eq("status", "live")
+    .eq("taken_down", false)
     .not("album_id", "is", null);
 
   const agg = aggregateLiveMembers((memberData ?? []) as MemberRow[]);
@@ -154,7 +160,9 @@ export async function getBrowseAlbums(
 
   const { data: albumData } = await supabase
     .from("album")
-    .select("id, title, cover_url, profile_id, profile:profile_id(display_name)")
+    .select(
+      "id, title, cover_url, profile_id, profile:profile_id(display_name, handle)",
+    )
     .in("id", Array.from(agg.keys()));
 
   return buildAlbumCards((albumData ?? []) as unknown as AlbumMetaRow[], agg);
@@ -167,6 +175,7 @@ export async function getArtistAlbums(
   supabase: SupabaseServerClient,
   profileId: string,
   displayName: string,
+  handle: string | null,
 ): Promise<AlbumCardData[]> {
   const { data: albumData } = await supabase
     .from("album")
@@ -183,6 +192,7 @@ export async function getArtistAlbums(
     .from("work")
     .select("album_id, artwork_url, created_at")
     .eq("status", "live")
+    .eq("taken_down", false)
     .in(
       "album_id",
       albums.map((a) => a.id),
@@ -197,7 +207,7 @@ export async function getArtistAlbums(
     title: a.title,
     cover_url: a.cover_url,
     profile_id: profileId,
-    profile: { display_name: name },
+    profile: { display_name: name, handle },
   }));
   return buildAlbumCards(metaRows, agg);
 }
@@ -211,7 +221,7 @@ export async function getAlbumMeta(
   const { data } = await supabase
     .from("album")
     .select(
-      "id, title, description, cover_url, profile_id, profile:profile_id(display_name)",
+      "id, title, description, cover_url, profile_id, profile:profile_id(display_name, handle)",
     )
     .eq("id", albumId)
     .maybeSingle();
@@ -223,13 +233,39 @@ export async function getAlbumMeta(
     description: a.description ?? null,
     coverUrlRaw: a.cover_url,
     artistId: a.profile_id,
+    artistHandle: a.profile?.handle ?? null,
     artistName: artistName(a.profile?.display_name ?? null),
   };
 }
 
-// Artist page header (the artist IS a profile — one account = one artist, v1).
-// Returns null for a malformed id or a missing profile (→ 404). profile is
-// public-read by RLS, so anon gets the name/mascot/bio/avatar.
+// The columns an artist header needs, and the reshape from a profile row. The
+// artist IS a profile (one account = one artist, v1); profile is public-read by
+// RLS, so anon gets the name/handle/mascot/bio/avatar.
+const ARTIST_HEADER_SELECT =
+  "id, handle, display_name, mascot_name, bio, avatar_url";
+
+type ArtistHeaderRow = {
+  id: string;
+  handle: string | null;
+  display_name: string | null;
+  mascot_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+};
+
+function shapeArtistHeader(p: ArtistHeaderRow): ArtistHeader {
+  return {
+    id: p.id,
+    handle: p.handle?.trim() || null,
+    displayName: artistName(p.display_name),
+    mascotName: p.mascot_name?.trim() || null,
+    bio: p.bio?.trim() || null,
+    avatarUrl: p.avatar_url ?? null,
+  };
+}
+
+// Artist page header by profile id (the /artist/[id] fallback path). Returns null
+// for a malformed id or a missing profile (→ 404).
 export async function getArtistHeader(
   supabase: SupabaseServerClient,
   profileId: string,
@@ -237,22 +273,38 @@ export async function getArtistHeader(
   if (!isUuid(profileId)) return null;
   const { data } = await supabase
     .from("profile")
-    .select("id, display_name, mascot_name, bio, avatar_url")
+    .select(ARTIST_HEADER_SELECT)
     .eq("id", profileId)
     .maybeSingle();
   if (!data) return null;
-  const p = data as {
-    id: string;
-    display_name: string | null;
-    mascot_name: string | null;
-    bio: string | null;
-    avatar_url: string | null;
-  };
-  return {
-    id: p.id,
-    displayName: artistName(p.display_name),
-    mascotName: p.mascot_name?.trim() || null,
-    bio: p.bio?.trim() || null,
-    avatarUrl: p.avatar_url ?? null,
-  };
+  return shapeArtistHeader(data as ArtistHeaderRow);
+}
+
+// Artist page header by handle (the canonical /artist/[handle] path). handle is
+// unique, so this is an exact lookup. Returns null for a missing handle (→ 404).
+export async function getArtistHeaderByHandle(
+  supabase: SupabaseServerClient,
+  handle: string,
+): Promise<ArtistHeader | null> {
+  const h = handle.trim().toLowerCase();
+  if (!h) return null;
+  const { data } = await supabase
+    .from("profile")
+    .select(ARTIST_HEADER_SELECT)
+    .eq("handle", h)
+    .maybeSingle();
+  if (!data) return null;
+  return shapeArtistHeader(data as ArtistHeaderRow);
+}
+
+// Resolve an /artist/[param] segment that may be a handle OR a legacy profile id
+// (UUID). Used by the page + its metadata. The page itself redirects an id-shaped
+// hit to the handle URL when one exists (see the route).
+export async function resolveArtistHeader(
+  supabase: SupabaseServerClient,
+  param: string,
+): Promise<ArtistHeader | null> {
+  return isUuid(param)
+    ? getArtistHeader(supabase, param)
+    : getArtistHeaderByHandle(supabase, param);
 }

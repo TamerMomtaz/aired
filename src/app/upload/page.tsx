@@ -6,7 +6,7 @@ import { UploadForm } from "@/components/upload/upload-form";
 import { WorkTitle } from "@/components/work-title";
 import { DiscardButton } from "@/components/works/discard-button";
 import { getMyAlbumOptions } from "@/lib/albums/queries";
-import { getCurrentUser } from "@/lib/supabase/auth";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getMyDrafts } from "@/lib/works/queries";
 
@@ -18,6 +18,11 @@ export const metadata = { title: "Upload · AIRED" };
 export default async function UploadPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/upload");
+
+  // A creator who hasn't finished the guided first-run gets it before they can
+  // upload — so every work files into a named home (THE JOURNEY).
+  const profile = await getCurrentProfile();
+  if (profile && !profile.onboarded_at) redirect("/welcome");
 
   // The album step's picker, and any unpublished drafts to RESUME — surfaced so a
   // creator continues an in-progress work instead of starting fresh and minting

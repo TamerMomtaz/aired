@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { RedLinePlayer } from "@/components/RedLinePlayer";
@@ -7,7 +8,10 @@ import { ReviewActions } from "@/components/review/review-actions";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
 import { parseLrc } from "@/lib/lyrics/lrc";
-import { getPendingReviewWorks } from "@/lib/review/queries";
+import {
+  getPendingReviewWorks,
+  getTakenDownCount,
+} from "@/lib/review/queries";
 import { getCurrentProfile } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,12 +27,23 @@ export default async function ReviewPage() {
   if (!profile?.is_admin) redirect("/");
 
   const supabase = await createClient();
-  const works = await getPendingReviewWorks(supabase);
+  const [works, takenDownCount] = await Promise.all([
+    getPendingReviewWorks(supabase),
+    getTakenDownCount(supabase),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10">
-      <header className="mb-8 flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">Review</h1>
+      <header className="mb-8 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Review</h1>
+          <Link
+            href="/review/taken-down"
+            className="rounded-lg border border-white/12 px-3.5 py-1.5 text-sm text-muted transition hover:border-cert-red/40 hover:text-foreground"
+          >
+            Taken down{takenDownCount > 0 ? ` (${takenDownCount})` : ""}
+          </Link>
+        </div>
         <p className="text-sm text-muted">
           Newcomers&apos; publishes wait here for a look. Trusted creators skip
           the line. AIRED&apos;s single rule: no hate, no violence, no

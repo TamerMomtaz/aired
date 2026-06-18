@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AlbumsSection } from "@/components/manage/albums-section";
 import { WorksSection } from "@/components/manage/works-section";
 import { getManageData } from "@/lib/albums/queries";
-import { getCurrentUser } from "@/lib/supabase/auth";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Manage · AIRED" };
@@ -17,6 +17,11 @@ export const metadata = { title: "Manage · AIRED" };
 export default async function ManagePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/manage");
+
+  // Send a not-yet-set-up creator through the guided first-run before Manage —
+  // even one (Taim) who already has works but no named home (THE JOURNEY).
+  const profile = await getCurrentProfile();
+  if (profile && !profile.onboarded_at) redirect("/welcome");
 
   const supabase = await createClient();
   const { albums, works } = await getManageData(supabase, user.id);

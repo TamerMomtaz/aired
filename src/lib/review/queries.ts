@@ -89,3 +89,67 @@ export async function getPendingReviewCount(
     .eq("status", "pending");
   return count ?? 0;
 }
+
+// A work an admin has pulled off the public shelf — the Taken-down list. status
+// rides along so the admin sees what it WAS (often 'live'); the reason is what
+// the owner sees too. work_admin_read is what lets these (otherwise public-hidden)
+// rows be read across ownership.
+export type TakenDownWork = {
+  id: number;
+  title: string;
+  artworkUrl: string | null;
+  status: string;
+  takedownReason: string | null;
+  createdAt: string;
+  creatorId: string;
+  uploaderName: string;
+};
+
+type TakenDownRow = {
+  id: number;
+  title: string;
+  artwork_url: string | null;
+  status: string;
+  takedown_reason: string | null;
+  created_at: string;
+  creator_id: string;
+  uploader: { display_name: string | null; handle: string | null } | null;
+};
+
+const TAKEN_DOWN_SELECT =
+  "id, title, artwork_url, status, takedown_reason, created_at, creator_id, uploader:creator_id(display_name, handle)";
+
+// Every taken-down work, most recently pulled first. Admin-only surface.
+export async function getTakenDownWorks(
+  supabase: SupabaseServerClient,
+): Promise<TakenDownWork[]> {
+  const { data } = await supabase
+    .from("work")
+    .select(TAKEN_DOWN_SELECT)
+    .eq("taken_down", true)
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as TakenDownRow[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    artworkUrl: row.artwork_url,
+    status: row.status,
+    takedownReason: row.takedown_reason,
+    createdAt: row.created_at,
+    creatorId: row.creator_id,
+    uploaderName:
+      row.uploader?.display_name?.trim() ||
+      row.uploader?.handle?.trim() ||
+      "A creator",
+  }));
+}
+
+// How many works are currently taken down — for the admin link to the list.
+export async function getTakenDownCount(
+  supabase: SupabaseServerClient,
+): Promise<number> {
+  const { count } = await supabase
+    .from("work")
+    .select("id", { count: "exact", head: true })
+    .eq("taken_down", true);
+  return count ?? 0;
+}

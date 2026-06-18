@@ -35,10 +35,27 @@ export function WorksSection({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-col gap-1.5">
                   <WorkTitle id={work.id} title={work.title} size="sm" />
-                  <StatusBadge status={work.status} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={work.status} />
+                    {work.takenDown ? (
+                      <span className="w-fit rounded-full border border-cert-red/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cert-red">
+                        Taken down
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <WorkAlbumSelect work={work} albums={albums} />
               </div>
+              {work.takenDown ? (
+                <p className="rounded-lg border border-cert-red/30 bg-cert-red/[0.06] px-3 py-2 text-xs leading-relaxed text-foreground">
+                  <span className="font-medium">
+                    Taken down by AIRED
+                    {work.takedownReason ? ` — ${work.takedownReason}` : ""}.
+                  </span>{" "}
+                  You can edit or appeal (contact@ai-red.io), but only AIRED can
+                  put it back.
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <WorkEditor
                   workId={work.id}
