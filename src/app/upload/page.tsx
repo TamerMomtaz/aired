@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { UploadForm } from "@/components/upload/upload-form";
+import { getMyAlbumOptions } from "@/lib/albums/queries";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Upload · AIRED" };
 
@@ -12,6 +14,10 @@ export const metadata = { title: "Upload · AIRED" };
 export default async function UploadPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/upload");
+
+  // The album step's picker: the creator's own albums, newest first.
+  const supabase = await createClient();
+  const albums = await getMyAlbumOptions(supabase, user.id);
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-5 py-10">
@@ -25,7 +31,7 @@ export default async function UploadPage() {
         </p>
       </header>
 
-      <UploadForm />
+      <UploadForm albums={albums} />
 
       <p className="mt-6 text-center text-xs text-muted/70">
         Haven&apos;t claimed your name yet?{" "}

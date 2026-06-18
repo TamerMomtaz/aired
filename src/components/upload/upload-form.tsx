@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-import { createWork } from "@/lib/works/actions";
+import type { AlbumOption } from "@/lib/albums/queries";
+import { createWork, type CreateWorkAlbum } from "@/lib/works/actions";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/format";
 
@@ -12,6 +13,11 @@ const inputClass =
 
 const fileClass =
   "w-full rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-3.5 py-3 text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-white/15";
+
+// One selectable album choice (radio + its inline fields), styled as a card.
+const albumOptionClass =
+  "flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-3 transition has-[:checked]:border-cert-red/50 has-[:checked]:bg-cert-red/[0.04]";
+const albumRadioClass = "mt-0.5 size-4 shrink-0 accent-cert-red";
 
 function fileExt(name: string, fallback: string): string {
   const ext = name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -38,7 +44,11 @@ function readDuration(file: File): Promise<number | null> {
 
 type Phase = "idle" | "reading" | "uploading" | "saving";
 
-export function UploadForm() {
+// The album step. "existing" files into one of the creator's albums; "new"
+// creates one inline; "single" leaves the work album-less on purpose.
+type AlbumMode = "existing" | "new" | "single";
+
+export function UploadForm({ albums }: { albums: AlbumOption[] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [audio, setAudio] = useState<File | null>(null);
@@ -47,6 +57,16 @@ export function UploadForm() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Default: file into your newest album if you have one, else release as a
+  // single. Either way the choice is explicit and visible — no more works that
+  // fall album-less by accident.
+  const [albumMode, setAlbumMode] = useState<AlbumMode>(
+    albums.length > 0 ? "existing" : "single",
+  );
+  const [albumId, setAlbumId] = useState<string>(albums[0]?.id ?? "");
+  const [newAlbumTitle, setNewAlbumTitle] = useState("");
+  const [newAlbumDesc, setNewAlbumDesc] = useState("");
 
   const busy = phase !== "idle";
 
@@ -65,6 +85,21 @@ export function UploadForm() {
 
     if (!title.trim()) return setError("Give the work a title.");
     if (!audio) return setError("Choose an audio master to upload.");
+    if (albumMode === "existing" && !albumId)
+      return setError("Pick an album, or release as a single.");
+    if (albumMode === "new" && !newAlbumTitle.trim())
+      return setError("Name the new album, or release as a single.");
+
+    const album: CreateWorkAlbum =
+      albumMode === "existing"
+        ? { kind: "existing", albumId }
+        : albumMode === "new"
+          ? {
+              kind: "new",
+              title: newAlbumTitle.trim(),
+              description: newAlbumDesc.trim() || null,
+            }
+          : { kind: "single" };
 
     const supabase = createClient();
     const {
@@ -117,6 +152,7 @@ export function UploadForm() {
         durationSeconds: duration,
         masterPath,
         artworkUrl,
+        album,
       });
       if (!result.ok) throw new Error(result.error);
 
@@ -184,6 +220,94 @@ export function UploadForm() {
           disabled={busy}
         />
       </label>
+
+      <fieldset className="flex flex-col gap-2" disabled={busy}>
+        <legend className="mb-1 text-xs font-medium text-muted">Album</legend>
+
+        {albums.length > 0 ? (
+          <label className={albumOptionClass}>
+            <input
+              type="radio"
+              name="album-step"
+              className={albumRadioClass}
+              checked={albumMode === "existing"}
+              onChange={() => setAlbumMode("existing")}
+            />
+            <span className="flex min-w-0 flex-1 flex-col gap-2">
+              <span className="text-sm text-foreground">
+                Add to one of your albums
+              </span>
+              {albumMode === "existing" ? (
+                <select
+                  className={inputClass}
+                  value={albumId}
+                  onChange={(e) => setAlbumId(e.target.value)}
+                  aria-label="Choose an album"
+                >
+                  {albums.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.title}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </span>
+          </label>
+        ) : null}
+
+        <label className={albumOptionClass}>
+          <input
+            type="radio"
+            name="album-step"
+            className={albumRadioClass}
+            checked={albumMode === "new"}
+            onChange={() => setAlbumMode("new")}
+          />
+          <span className="flex min-w-0 flex-1 flex-col gap-2">
+            <span className="text-sm text-foreground">Start a new album</span>
+            {albumMode === "new" ? (
+              <span className="flex flex-col gap-2">
+                <input
+                  className={inputClass}
+                  value={newAlbumTitle}
+                  onChange={(e) => setNewAlbumTitle(e.target.value)}
+                  placeholder="Album title"
+                  maxLength={200}
+                  aria-label="New album title"
+                />
+                <input
+                  className={inputClass}
+                  value={newAlbumDesc}
+                  onChange={(e) => setNewAlbumDesc(e.target.value)}
+                  placeholder="Description (optional)"
+                  maxLength={2000}
+                  aria-label="New album description"
+                />
+                <span className="text-[11px] text-muted/60">
+                  Its cover comes from this song&apos;s artwork — set a custom one
+                  later in Manage.
+                </span>
+              </span>
+            ) : null}
+          </span>
+        </label>
+
+        <label className={albumOptionClass}>
+          <input
+            type="radio"
+            name="album-step"
+            className={albumRadioClass}
+            checked={albumMode === "single"}
+            onChange={() => setAlbumMode("single")}
+          />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-sm text-foreground">Release as a single</span>
+            <span className="text-[11px] text-muted/60">
+              No album — an intentional single, easy to file later in Manage.
+            </span>
+          </span>
+        </label>
+      </fieldset>
 
       {error ? (
         <p role="alert" className="text-sm text-cert-red">

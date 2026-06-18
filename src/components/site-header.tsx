@@ -59,6 +59,7 @@ export async function SiteHeader() {
 
           {user ? (
             <>
+              <NavLink href="/manage">Manage</NavLink>
               <NavLink href="/upload" variant="cta">
                 Upload
               </NavLink>
