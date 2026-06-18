@@ -82,18 +82,24 @@ export async function createWork(
   return { ok: true, workId };
 }
 
-export type GoLiveResult = { ok: true } | { ok: false; error: string };
+export type GoLiveResult =
+  | { ok: true; status: "live" | "pending" }
+  | { ok: false; error: string };
 
-// Publish a draft work — the Phase 4 "Go Live" action. One-directional for now:
-// draft → live, never back. We use the session-bound server client (NOT the
-// service role), so RLS runs as the user: `work_owner_upd` (creator_id =
-// auth.uid()) is what actually enforces ownership. The `status = 'draft'` guard
-// scopes the flip and makes a re-click a harmless no-op once the work is live.
+// Publish a draft work — the "Go Live" action, now gated by the Review Gate.
+// We use the session-bound server client (NOT the service role), so RLS runs as
+// the user: `work_owner_upd` (creator_id = auth.uid()) is what actually enforces
+// ownership. The `status = 'draft'` guard scopes the flip and makes a re-click a
+// harmless no-op once the work has left draft (live or pending).
 //
-// Phase 4 #2 — go-live also records the Community Covenant acceptance. The
-// modal in GoLiveButton requires the owner to tick the checkbox before this
-// runs; we set `terms_accepted_at = now()` alongside the status flip, so a work
-// cannot reach `live` without an agreement on file.
+// The gate: the creator's own `profile.trusted` decides the destination —
+//   trusted   → 'live' instantly, released_at stamped (unchanged behavior);
+//   untrusted → 'pending' (the Review queue) — hidden from the public until an
+//               admin approves; released_at stays NULL until then.
+// Either way go-live records the Community Covenant acceptance: the modal in
+// GoLiveButton requires the owner to tick the checkbox before this runs, and we
+// set `terms_accepted_at = now()` alongside the status flip — the covenant is
+// accepted at submit, whichever side of the gate the work lands on.
 export async function goLive(workId: number): Promise<GoLiveResult> {
   const supabase = await createClient();
   const {
@@ -103,9 +109,23 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
     return { ok: false, error: "Sign in to publish a work." };
   }
 
+  // Read the author's trust at publish time. profile_read_all lets the owner read
+  // their own flag; a missing row reads as untrusted (the safe default).
+  const { data: profile } = await supabase
+    .from("profile")
+    .select("trusted")
+    .eq("id", user.id)
+    .maybeSingle();
+  const trusted = !!profile?.trusted;
+
+  const now = new Date().toISOString();
+  const patch = trusted
+    ? { status: "live" as const, released_at: now, terms_accepted_at: now }
+    : { status: "pending" as const, terms_accepted_at: now };
+
   const { error } = await supabase
     .from("work")
-    .update({ status: "live", terms_accepted_at: new Date().toISOString() })
+    .update(patch)
     .eq("id", workId)
     .eq("status", "draft");
 
@@ -115,7 +135,11 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
 
   revalidatePath(`/registry/${workId}`);
   revalidatePath("/registry");
-  return { ok: true };
+  // A trusted publish enters the public feed; an untrusted one enters the admin
+  // Review queue — refresh both so neither shows stale.
+  revalidatePath("/");
+  revalidatePath("/review");
+  return { ok: true, status: trusted ? "live" : "pending" };
 }
 
 export type IssueCertificateResult =

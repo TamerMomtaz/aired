@@ -3,7 +3,9 @@ import Link from "next/link";
 import { InstallTrigger } from "@/components/install/install-trigger";
 import { NavLink } from "@/components/nav/nav-link";
 import { signOut } from "@/lib/auth/actions";
-import { getCurrentUser } from "@/lib/supabase/auth";
+import { getPendingReviewCount } from "@/lib/review/queries";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/server";
 
 // The app shell's top bar. Server-rendered so it knows who's signed in. It's
 // revalidated on sign-in/out (see lib/auth/actions) so the state never goes
@@ -14,7 +16,18 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 // is routed via /signup?next=/upload — landing them at the upload form the
 // moment they finish signing up.
 export async function SiteHeader() {
-  const user = await getCurrentUser();
+  const [user, profile] = await Promise.all([
+    getCurrentUser(),
+    getCurrentProfile(),
+  ]);
+
+  // The Review link and its waiting-count are admin-only — and we only run the
+  // count query for an admin, so a normal visitor's header never pays for it.
+  let pendingCount = 0;
+  if (profile?.is_admin) {
+    const supabase = await createClient();
+    pendingCount = await getPendingReviewCount(supabase);
+  }
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/8 bg-background/80 backdrop-blur">
@@ -28,6 +41,19 @@ export async function SiteHeader() {
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
           <NavLink href="/">Listen</NavLink>
+
+          {profile?.is_admin ? (
+            <NavLink href="/review">
+              <span className="inline-flex items-center gap-1.5">
+                Review
+                {pendingCount > 0 ? (
+                  <span className="rounded-full bg-cert-red px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                    {pendingCount}
+                  </span>
+                ) : null}
+              </span>
+            </NavLink>
+          ) : null}
 
           <InstallTrigger />
 

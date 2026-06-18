@@ -3,14 +3,16 @@ import { notFound } from "next/navigation";
 
 import { WorkTitle } from "@/components/work-title";
 import { AGENT_TYPE_LABELS, type AgentType } from "@/lib/ledger/types";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 type WorkRow = {
   id: number;
   title: string;
-  status: "draft" | "live";
+  status: "draft" | "live" | "pending";
   red_line_certified: boolean;
   created_at: string;
+  creator_id: string;
 };
 
 export async function generateMetadata({
@@ -43,12 +45,18 @@ export default async function AgentPage({
     .maybeSingle();
   if (!agent) notFound();
 
-  // Discography: works this agent appears on. RLS returns live works to anyone,
-  // plus the viewer's own drafts. Dedupe (an agent may have several volleys per
-  // work).
+  // Discography: works this agent appears on. A public discography shows only
+  // live works; the viewer's own non-live works (drafts / 'In review') also
+  // appear to them. We filter "live OR mine" in code — never another creator's
+  // unpublished work, not even for an admin, whose broad read (work_admin_read)
+  // exists for the Review queue, not this page. Dedupe (an agent may carry
+  // several volleys per work).
+  const user = await getCurrentUser();
   const { data: volleyRows } = await supabase
     .from("public_volley")
-    .select("work:work_id ( id, title, status, red_line_certified, created_at )")
+    .select(
+      "work:work_id ( id, title, status, red_line_certified, created_at, creator_id )",
+    )
     .eq("agent_id", agent.id);
 
   // PostgREST returns the FK embed `work` as a single object (many-to-one); the
@@ -57,7 +65,10 @@ export default async function AgentPage({
   const seen = new Set<number>();
   for (const row of (volleyRows ?? []) as unknown as { work: WorkRow | null }[]) {
     const w = row.work;
-    if (w && !seen.has(w.id)) {
+    if (!w) continue;
+    const mine = !!user && w.creator_id === user.id;
+    if (w.status !== "live" && !mine) continue;
+    if (!seen.has(w.id)) {
       seen.add(w.id);
       works.push(w);
     }
@@ -107,6 +118,11 @@ export default async function AgentPage({
                     {work.status === "draft" ? (
                       <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-muted">
                         Draft
+                      </span>
+                    ) : null}
+                    {work.status === "pending" ? (
+                      <span className="rounded-full border border-amber-400/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-300">
+                        In review
                       </span>
                     ) : null}
                     {work.red_line_certified ? (

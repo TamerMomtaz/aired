@@ -7,17 +7,24 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Registry · AIRED" };
 
-// The catalog. RLS returns every live work to the world, plus the viewer's own
-// drafts — so a signed-in creator sees their in-progress works here too, badged
-// as drafts, while the public sees only what's live.
+// The catalog. The public sees only what's live; a signed-in creator also sees
+// their own in-progress works here (drafts, and anything held 'In review'),
+// badged. We filter to "live OR mine" EXPLICITLY rather than leaning on RLS
+// alone: admins can now read every work (the Review queue needs that), and this
+// public list must never become a window onto other creators' unpublished
+// works — not even for an admin. Their pending items live in /review, never here.
 export default async function RegistryPage() {
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const { data: works, error } = await supabase
+  const worksQuery = supabase
     .from("work")
     .select("id, title, status, red_line_certified, created_at, play_count")
     .order("id", { ascending: true });
+
+  const { data: works, error } = await (user
+    ? worksQuery.or(`status.eq.live,creator_id.eq.${user.id}`)
+    : worksQuery.eq("status", "live"));
 
   let hasAgent = false;
   if (user) {
@@ -74,6 +81,11 @@ export default async function RegistryPage() {
                   {work.status === "draft" ? (
                     <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-muted">
                       Draft
+                    </span>
+                  ) : null}
+                  {work.status === "pending" ? (
+                    <span className="rounded-full border border-amber-400/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-300">
+                      In review
                     </span>
                   ) : null}
                   {work.red_line_certified ? (
