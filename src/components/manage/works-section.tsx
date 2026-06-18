@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { WorkTitle } from "@/components/work-title";
+import { DiscardButton } from "@/components/works/discard-button";
+import { WorkEditor } from "@/components/works/work-editor";
 import { setWorkAlbum } from "@/lib/albums/actions";
 import type { ManageWork, WorkStatus } from "@/lib/albums/queries";
 
@@ -29,15 +31,31 @@ export function WorksSection({
       {works.length > 0 ? (
         <ul className="flex flex-col divide-y divide-white/8 overflow-hidden rounded-xl border border-white/8">
           {works.map((work) => (
-            <li
-              key={work.id}
-              className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <WorkTitle id={work.id} title={work.title} size="sm" />
-                <StatusBadge status={work.status} />
+            <li key={work.id} className="flex flex-col gap-3 px-4 py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <WorkTitle id={work.id} title={work.title} size="sm" />
+                  <StatusBadge status={work.status} />
+                </div>
+                <WorkAlbumSelect work={work} albums={albums} />
               </div>
-              <WorkAlbumSelect work={work} albums={albums} />
+              <div className="flex flex-wrap items-center gap-2">
+                <WorkEditor
+                  workId={work.id}
+                  initialTitle={work.title}
+                  initialDescriptors={work.descriptors}
+                  initialLyrics={work.lyrics}
+                  initialArtworkUrl={work.artworkUrl}
+                  initialAlbumId={work.albumId}
+                  albums={albums}
+                />
+                <DiscardButton
+                  workId={work.id}
+                  status={work.status}
+                  playCount={work.playCount}
+                  certified={work.certified}
+                />
+              </div>
             </li>
           ))}
         </ul>

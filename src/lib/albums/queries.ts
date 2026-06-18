@@ -1,3 +1,4 @@
+import { normalizeDescriptors } from "@/lib/ledger/descriptors";
 import { createClient } from "@/lib/supabase/server";
 
 // Read side of ORGANIZE: a creator's own albums and works, plus the cover
@@ -66,6 +67,15 @@ export type ManageWork = {
   status: WorkStatus;
   albumId: string | null;
   albumTitle: string | null;
+  // Editable state, so Manage → Edit opens the in-place editor without a second
+  // fetch. descriptors arrive normalized (split/trimmed/deduped) for the editor.
+  descriptors: string[];
+  lyrics: string | null;
+  artworkUrl: string | null;
+  // Discard confirm-level gating: a live work, or one with plays / a minted Red
+  // Line, needs the stronger confirm.
+  playCount: number;
+  certified: boolean;
 };
 
 type AlbumRow = {
@@ -83,6 +93,10 @@ type WorkRow = {
   album_id: string | null;
   artwork_url: string | null;
   created_at: string;
+  descriptors: string[] | null;
+  lyrics: string | null;
+  play_count: number | null;
+  red_line_certified: boolean | null;
 };
 
 // Everything the /manage surface needs in two owner-scoped reads: the caller's
@@ -102,7 +116,9 @@ export async function getManageData(
       .order("created_at", { ascending: false }),
     supabase
       .from("work")
-      .select("id, title, status, album_id, artwork_url, created_at")
+      .select(
+        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, play_count, red_line_certified",
+      )
       .eq("creator_id", userId)
       .order("id", { ascending: false }),
   ]);
@@ -151,6 +167,11 @@ export async function getManageData(
     status: w.status,
     albumId: w.album_id,
     albumTitle: w.album_id ? (titleById.get(w.album_id) ?? null) : null,
+    descriptors: normalizeDescriptors(w.descriptors),
+    lyrics: w.lyrics,
+    artworkUrl: w.artwork_url,
+    playCount: w.play_count ?? 0,
+    certified: !!w.red_line_certified,
   }));
 
   return { albums, works };

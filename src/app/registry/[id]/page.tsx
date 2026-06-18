@@ -11,7 +11,10 @@ import { SongQr } from "@/components/song-qr";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
 import { WorkTitle } from "@/components/work-title";
+import { DiscardButton } from "@/components/works/discard-button";
+import { WorkEditor } from "@/components/works/work-editor";
 import { type ContributorSummary } from "@/lib/agents/actions";
+import { getMyAlbumOptions, type AlbumOption } from "@/lib/albums/queries";
 import { formatCatalogId } from "@/lib/catalog";
 import { formatDuration, formatPlays } from "@/lib/format";
 import { normalizeDescriptors } from "@/lib/ledger/descriptors";
@@ -127,7 +130,7 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note, album_id",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -225,6 +228,7 @@ export default async function WorkPage({
 
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
+  let albumOptions: AlbumOption[] = [];
   if (isOwner) {
     const { data: agentData } = await supabase
       .from("agent")
@@ -233,6 +237,9 @@ export default async function WorkPage({
     agents = (agentData ?? []) as ContributorSummary[];
     const maxSeq = volleys.reduce((m, v) => Math.max(m, Number(v.seq)), -1);
     suggestedSeq = volleys.length ? Math.floor(maxSeq) + 1 : 0;
+    // The album picker for the in-place editor — the owner's own albums.
+    // isOwner ⇒ work.creator_id is this signed-in owner's id.
+    albumOptions = await getMyAlbumOptions(supabase, work.creator_id);
   }
 
   return (
@@ -315,6 +322,30 @@ export default async function WorkPage({
                 contributorNames={contributorNames}
               />
               <SongQr workId={work.id} title={work.title} />
+            </div>
+          ) : null}
+
+          {/* Owner tools (EDIT & TIDY): fix this work in place — the wizard's
+              "Back to a field without restarting" — or discard the attempt. NO
+              new row; the AIRED number is unchanged. */}
+          {isOwner ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <WorkEditor
+                workId={work.id}
+                initialTitle={work.title}
+                initialDescriptors={descriptors}
+                initialLyrics={work.lyrics}
+                initialArtworkUrl={work.artwork_url}
+                initialAlbumId={work.album_id}
+                albums={albumOptions}
+              />
+              <DiscardButton
+                workId={work.id}
+                status={work.status}
+                playCount={playCount}
+                certified={isCertified}
+                redirectTo="/manage"
+              />
             </div>
           ) : null}
         </div>

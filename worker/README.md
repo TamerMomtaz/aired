@@ -98,6 +98,30 @@ synchronously and returns JSON:
 Errors return `{ "ok": false, "error": "…" }` with a 4xx/5xx status. A second
 request for a work already transcoding gets `409`.
 
+## Purge a discarded work (EDIT & TIDY)
+
+When a creator **discards** a work, the web app deletes the `work` row (and its
+cascaded volley / cert / play rows) and then calls this endpoint to sweep the
+work's stored blobs — the only component that holds R2 credentials. Same
+`Authorization: Bearer $TRANSCODE_SHARED_SECRET` guard as `/transcode`.
+
+```bash
+curl -X POST "$WORKER_URL/purge" \
+  -H "Authorization: Bearer $TRANSCODE_SHARED_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"work_id": 23, "master_storage_path": "<uid>/<uuid>/master.mp3"}'
+```
+
+It deletes, by `work/<id>/` prefix, everything under `aired-masters` and
+`aired-hls`, plus the private transcode source at `masters/<master_storage_path>`
+if given. Artwork (public bucket) is left alone — an album cover may reference a
+song's image. The keys are derived from `work_id`, so the purge needs no DB row
+(the row is already gone). Response:
+
+```json
+{ "ok": true, "workId": 23, "mastersDeleted": 1, "hlsDeleted": 57, "sourceDeleted": 1 }
+```
+
 ### CLI (no HTTP, no shared secret)
 
 Good for a one-off run, or a very long master that could outlast an HTTP timeout:

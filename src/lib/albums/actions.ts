@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { SUPABASE_URL } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
 // Write side of ORGANIZE — a creator filing and shaping their OWN albums. Every
@@ -120,6 +121,41 @@ export async function setAlbumCover(
   const { error } = await supabase
     .from("album")
     .update({ cover_url: artworkUrl })
+    .eq("id", albumId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/manage");
+  return { ok: true };
+}
+
+// Set an album's cover from an image the owner just uploaded from their device
+// (EDIT & TIDY). Complements setAlbumCover's "pick from a member song": here the
+// cover comes from a fresh upload to the public `artwork` bucket. We accept ONLY
+// a URL into our own artwork bucket AND within the caller's own folder — never an
+// arbitrary external URL — so cover_url stays honest (album_owner_upd already
+// pins the write to the owner). cover_url already exists; no schema change.
+export async function setAlbumCoverUpload(
+  albumId: string,
+  publicUrl: string,
+): Promise<AlbumActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to edit your album." };
+
+  const base = `${SUPABASE_URL}/storage/v1/object/public/artwork/`;
+  const url = (publicUrl ?? "").trim();
+  if (
+    !url.startsWith(base) ||
+    !url.slice(base.length).startsWith(`${user.id}/`)
+  ) {
+    return { ok: false, error: "Upload an image to use as a cover." };
+  }
+
+  const { error } = await supabase
+    .from("album")
+    .update({ cover_url: url })
     .eq("id", albumId);
   if (error) return { ok: false, error: error.message };
 
