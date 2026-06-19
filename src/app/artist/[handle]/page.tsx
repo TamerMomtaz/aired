@@ -3,14 +3,16 @@ import { notFound, redirect } from "next/navigation";
 
 import { AlbumCard } from "@/components/album-card";
 import { trackFromFeedWork } from "@/components/player/track";
+import { ShareSheet } from "@/components/share-sheet";
 import { WorkCard } from "@/components/work-card";
 import {
   getArtistAlbums,
   isUuid,
   resolveArtistHeader,
 } from "@/lib/albums/public-queries";
+import { artistShareProps } from "@/lib/share/props";
 import { createClient } from "@/lib/supabase/server";
-import { getArtistSingles } from "@/lib/works/queries";
+import { dedupeContributors, getArtistSingles } from "@/lib/works/queries";
 
 export async function generateMetadata({
   params,
@@ -21,11 +23,25 @@ export async function generateMetadata({
   const supabase = await createClient();
   const header = await resolveArtistHeader(supabase, handle);
   if (!header) return { title: "Artist · AIRED" };
+  const title = `${header.displayName} · AIRED`;
+  const description =
+    header.bio ??
+    `${header.displayName} on AIRED — albums and singles, credited by name, carbon and silicon alike.`;
+  const canonical = `/artist/${header.handle ?? header.id}`;
+  // The colocated opengraph-image supplies the publicity card; these hints make
+  // the unfurl a large-image card and give it a canonical URL + site name.
   return {
-    title: `${header.displayName} · AIRED`,
-    description:
-      header.bio ??
-      `${header.displayName} on AIRED — albums and singles, credited by name, carbon and silicon alike.`,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "profile",
+      title,
+      description,
+      url: canonical,
+      siteName: "AIRED",
+    },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -63,6 +79,14 @@ export default async function ArtistPage({
 
   const hasContent = albums.length > 0 || singles.length > 0;
   const initial = header.displayName.trim().charAt(0).toUpperCase() || "·";
+
+  // Collaborators surfaced from this artist's singles (carbon and silicon, by
+  // name) — names the share copy. The publicity card computes the full set
+  // across their whole live catalogue server-side.
+  const collaborators = dedupeContributors(
+    singles.flatMap((s) => s.contributors.map((agent) => ({ agent }))),
+  ).map((c) => c.name);
+  const shareId = header.handle ?? header.id;
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-10">
@@ -103,6 +127,16 @@ export default async function ArtistPage({
               {header.bio}
             </p>
           ) : null}
+          <div className="mt-1">
+            <ShareSheet
+              {...artistShareProps(
+                shareId,
+                header.displayName,
+                header.handle,
+                collaborators,
+              )}
+            />
+          </div>
         </div>
       </header>
 

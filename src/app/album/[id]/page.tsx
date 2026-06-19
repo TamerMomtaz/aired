@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { trackFromFeedWork } from "@/components/player/track";
+import { ShareSheet } from "@/components/share-sheet";
 import { WorkCard } from "@/components/work-card";
 import { getAlbumMeta } from "@/lib/albums/public-queries";
 import { resolveAlbumCover } from "@/lib/albums/queries";
+import { albumShareProps } from "@/lib/share/props";
 import { createClient } from "@/lib/supabase/server";
-import { getAlbumSongs } from "@/lib/works/queries";
+import { dedupeContributors, getAlbumSongs } from "@/lib/works/queries";
 
 export async function generateMetadata({
   params,
@@ -18,9 +20,23 @@ export async function generateMetadata({
   const supabase = await createClient();
   const meta = await getAlbumMeta(supabase, id);
   if (!meta) return { title: "Album · AIRED" };
+  const title = `${meta.title} · ${meta.artistName} · AIRED`;
+  const description = `${meta.title} by ${meta.artistName} — an album on AIRED. Made by carbon and silicon, credited by name.`;
+  const canonical = `/album/${meta.id}`;
+  // The colocated opengraph-image supplies the publicity card; these hints make
+  // the unfurl a large-image card and give it a canonical URL + site name.
   return {
-    title: `${meta.title} · ${meta.artistName} · AIRED`,
-    description: `${meta.title} by ${meta.artistName} — an album on AIRED. Made by carbon and silicon, credited by name.`,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "music.album",
+      title,
+      description,
+      url: canonical,
+      siteName: "AIRED",
+    },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -62,6 +78,12 @@ export default async function AlbumPage({
 
   const count = songs.length;
 
+  // The distinct makers across the album's live songs (carbon and silicon, by
+  // name) — names the share copy and the album's publicity card.
+  const names = dedupeContributors(
+    songs.flatMap((s) => s.contributors.map((agent) => ({ agent }))),
+  ).map((c) => c.name);
+
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-10">
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start">
@@ -101,6 +123,11 @@ export default async function AlbumPage({
               {meta.description}
             </p>
           ) : null}
+          <div className="mt-1">
+            <ShareSheet
+              {...albumShareProps(meta.id, meta.title, meta.artistName, names)}
+            />
+          </div>
         </div>
       </header>
 

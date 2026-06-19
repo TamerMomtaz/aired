@@ -4,9 +4,10 @@ import Link from "next/link";
 import { CardPlayButton } from "@/components/player/card-play-button";
 import type { Track } from "@/components/player/track";
 import { PlayCount } from "@/components/play-count";
-import { ShareButton } from "@/components/share-button";
+import { ShareSheet } from "@/components/share-sheet";
 import { WorkTitle } from "@/components/work-title";
 import { formatDuration } from "@/lib/format";
+import { songShareProps } from "@/lib/share/props";
 import type { FeedWork } from "@/lib/works/queries";
 
 // Cap visible contributor chips so a 2-contributor card and a 7-contributor
@@ -63,12 +64,14 @@ export function WorkCard({
             </span>
           ) : null}
         </Link>
-        <ShareButton
-          workId={work.id}
-          title={work.title}
-          contributorNames={work.contributors.map((c) => c.name)}
+        <ShareSheet
+          {...songShareProps(
+            work.id,
+            work.title,
+            work.contributors.map((c) => c.name),
+          )}
           compact
-          className="absolute right-2 top-2 z-10 inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-background/70 text-foreground backdrop-blur transition hover:border-white/30 hover:bg-background/85 active:scale-95"
+          triggerClassName="absolute right-2 top-2 z-10 inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-background/70 text-foreground backdrop-blur transition hover:border-white/30 hover:bg-background/85 active:scale-95"
         />
         {queue && work.hls_playlist_key ? (
           <CardPlayButton queue={queue} workId={work.id} title={work.title} />
