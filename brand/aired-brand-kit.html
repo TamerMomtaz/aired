@@ -3,23 +3,19 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AIRED — Brand Asset Kit</title>
+<title>AIRED — Brand Asset Kit (Metallic)</title>
 <style>
   :root{
-    --bg:#0a0a0a;        /* matte black */
-    --fg:#ededed;        /* near-white wordmark */
-    --muted:#8a8a8a;
-    --red:#e10600;       /* signal red — the red line */
-    --bronze:#b08d57;    /* faint circuit filigree */
+    --bg:#0a0a0a; --fg:#ededed; --muted:#8a8a8a; --red:#e10600; --bronze:#b08d57;
     --hair:rgba(237,237,237,.10);
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--fg);
-    font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased;}
   .wrap{max-width:1180px;margin:0 auto;padding:56px 28px 96px}
-  header.kit{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;border-bottom:1px solid var(--hair);padding-bottom:22px;margin-bottom:10px}
-  header.kit h1{font-size:20px;font-weight:600;letter-spacing:.32em;margin:0;text-transform:uppercase}
+  header.kit{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;border-bottom:1px solid var(--hair);padding-bottom:22px}
+  header.kit h1{font-size:20px;font-weight:600;letter-spacing:.30em;margin:0;text-transform:uppercase}
   header.kit .dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 12px 1px var(--red);align-self:center}
   header.kit p{margin:0;color:var(--muted);font-size:13px;letter-spacing:.02em}
   .palette{display:flex;gap:14px;flex-wrap:wrap;margin:26px 0 8px}
@@ -34,9 +30,7 @@
   .asset .meta a:hover{border-color:var(--red);color:#fff}
   .stage{padding:26px;display:flex;justify-content:center}
   .frame{width:100%;line-height:0}
-  .frame.sq{max-width:560px}
-  .frame.wide{max-width:980px}
-  .frame.ic{max-width:300px}
+  .frame.sq{max-width:560px}.frame.wide{max-width:980px}.frame.ic{max-width:300px}
   .frame svg{width:100%;height:auto;display:block;border-radius:8px}
   footer.kit{margin-top:64px;color:var(--muted);font-size:12px;letter-spacing:.03em;line-height:1.7;border-top:1px solid var(--hair);padding-top:22px}
 </style>
@@ -46,16 +40,15 @@
 
   <header class="kit">
     <span class="dot"></span>
-    <h1>AIRED · Brand Asset Kit</h1>
-    <p>AI-ed and proud — credited, not thanked. Matte black &amp; one signal-red line.</p>
+    <h1>AIRED · Brand Asset Kit — Metallic</h1>
+    <p>Brushed-steel badging &amp; red lacquer on matte black. Warm, posh, hypnotic.</p>
   </header>
 
   <div class="palette">
     <span class="sw"><span class="chip" style="background:#0a0a0a"></span>#0A0A0A · matte black</span>
-    <span class="sw"><span class="chip" style="background:#ededed"></span>#EDEDED · wordmark</span>
-    <span class="sw"><span class="chip" style="background:#e10600"></span>#E10600 · signal red</span>
-    <span class="sw"><span class="chip" style="background:#b08d57"></span>#B08D57 · bronze filigree</span>
-    <span class="sw"><span class="chip" style="background:#8a8a8a"></span>#8A8A8A · muted</span>
+    <span class="sw"><span class="chip" style="background:linear-gradient(#f5f5f5,#6a6a6a)"></span>steel · #F5F5F5→#6A6A6A (base #EDEDED)</span>
+    <span class="sw"><span class="chip" style="background:linear-gradient(#ff3a30,#b00500)"></span>red lacquer · core #E10600</span>
+    <span class="sw"><span class="chip" style="background:linear-gradient(135deg,#d9b87a,#7a5c2e)"></span>bronze inlay · #D9B87A→#7A5C2E</span>
   </div>
 
   <!-- ============================ PROFILE MARK ============================ -->
@@ -64,73 +57,93 @@
       <h2>Profile mark</h2>
       <span class="sz">1080 × 1080</span>
       <a href="png/aired-profile-1080.png" download>Download PNG ↓</a>
-      <p class="desc">Centered AIRED wordmark with the red line beneath, faint concentric sacred-geometry rings and a hexagram behind. The lockup sits inside a center safe-zone so it reads cleanly when cropped to a circle (avatars).</p>
+      <p class="desc">Embossed brushed-steel “AIRED” over a lacquered red line, with a faint bronze-inlay hexagram and rings behind. Lockup held inside a center safe-zone so it survives a circle crop.</p>
     </div>
     <div class="stage"><div class="frame sq">
 <!--ASSET:profile-->
 <svg id="asset-profile" width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED">
-  <title>AIRED — profile mark</title>
+  <title>AIRED — profile mark (metallic)</title>
   <defs>
-    <linearGradient id="redFadeP" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="780" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.16" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.84" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <!-- brushed steel: light top -> grey lower third (local cap space) -->
+    <linearGradient id="steelP" gradientUnits="userSpaceOnUse" x1="0" y1="-2" x2="0" y2="102">
+      <stop offset="0" stop-color="#f5f5f5"/>
+      <stop offset="0.07" stop-color="#ededed"/>
+      <stop offset="0.16" stop-color="#ededed"/>
+      <stop offset="0.40" stop-color="#b9b9b9"/>
+      <stop offset="0.66" stop-color="#6a6a6a"/>
+      <stop offset="1" stop-color="#6a6a6a"/>
     </linearGradient>
-    <!-- AIRED wordmark, geometric monoline, local box ~404 x 100 -->
-    <g id="airedP" fill="none" stroke="#ededed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8,100 L39,0 L70,100"/>
-      <path d="M20,62 L58,62"/>
+    <!-- red lacquer sheen across the line's thickness -->
+    <linearGradient id="lacquerP" gradientUnits="userSpaceOnUse" x1="0" y1="657.5" x2="0" y2="666.5">
+      <stop offset="0" stop-color="#ff3a30"/>
+      <stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/>
+      <stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <!-- horizontal luminous end-falloff, as a mask -->
+    <linearGradient id="fadeGradP" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="780" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.16" stop-color="#fff"/>
+      <stop offset="0.84" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskP" maskUnits="userSpaceOnUse" x="288" y="644" width="504" height="36">
+      <rect x="288" y="644" width="504" height="36" fill="url(#fadeGradP)"/>
+    </mask>
+    <!-- bronze/gold inlay, diagonal so the geometry shimmers -->
+    <linearGradient id="goldP" gradientUnits="userSpaceOnUse" x1="150" y1="150" x2="940" y2="940">
+      <stop offset="0" stop-color="#d9b87a"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#7a5c2e"/>
+    </linearGradient>
+    <g id="wmP" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8,100 L39,0 L70,100"/><path d="M20,62 L58,62"/>
       <path d="M114,0 L114,100"/>
-      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/>
-      <path d="M180,52 L214,100"/>
-      <path d="M302,0 L252,0 L252,100 L302,100"/>
-      <path d="M252,50 L294,50"/>
-      <path d="M340,0 L340,100"/>
-      <path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
+      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/><path d="M180,52 L214,100"/>
+      <path d="M302,0 L252,0 L252,100 L302,100"/><path d="M252,50 L294,50"/>
+      <path d="M340,0 L340,100"/><path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
     </g>
   </defs>
 
   <rect width="1080" height="1080" fill="#0a0a0a"/>
 
-  <!-- faint sacred geometry behind -->
-  <g fill="none" stroke="#ededed">
-    <g stroke-opacity="0.05" stroke-width="1.5">
-      <circle cx="540" cy="540" r="160"/>
-      <circle cx="540" cy="540" r="250"/>
-      <circle cx="540" cy="540" r="340"/>
-      <circle cx="540" cy="540" r="430"/>
+  <!-- faint bronze-inlay sacred geometry -->
+  <g fill="none" stroke="url(#goldP)">
+    <g stroke-opacity="0.16" stroke-width="1.5">
+      <circle cx="540" cy="540" r="160"/><circle cx="540" cy="540" r="250"/>
+      <circle cx="540" cy="540" r="340"/><circle cx="540" cy="540" r="430"/>
     </g>
-    <g stroke-opacity="0.045" stroke-width="1.2">
+    <g stroke-opacity="0.13" stroke-width="1.2">
       <polygon points="840,540 690,280 390,280 240,540 390,800 690,800"/>
       <polygon points="800,390 540,240 280,390 280,690 540,840 800,690"/>
     </g>
-    <line x1="540" y1="70" x2="540" y2="1010" stroke-opacity="0.028" stroke-width="1"/>
-  </g>
-  <!-- faint dial ticks on the outer ring -->
-  <g stroke="#ededed" stroke-opacity="0.07" stroke-width="1.6" stroke-linecap="round">
-    <line x1="540" y1="100" x2="540" y2="124"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(30,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(60,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(90,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(120,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(150,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(180,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(210,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(240,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(270,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(300,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(330,540,540)"/>
+    <line x1="540" y1="70" x2="540" y2="1010" stroke-opacity="0.05" stroke-width="1"/>
+    <g stroke-opacity="0.18" stroke-width="1.6" stroke-linecap="round">
+      <line x1="540" y1="100" x2="540" y2="124"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(30,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(60,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(90,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(120,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(150,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(180,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(210,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(240,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(270,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(300,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(330,540,540)"/>
+    </g>
   </g>
 
-  <!-- wordmark -->
-  <use href="#airedP" transform="translate(210,458.3) scale(1.634)"/>
+  <!-- the red lacquer line, beneath the wordmark -->
+  <g mask="url(#fadeMaskP)">
+    <line x1="300" y1="662" x2="780" y2="662" stroke="#e10600" stroke-width="22" opacity="0.12" stroke-linecap="round"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke="#e10600" stroke-width="13" opacity="0.26" stroke-linecap="round"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke="url(#lacquerP)" stroke-width="8" stroke-linecap="round"/>
+    <line x1="305" y1="659.4" x2="775" y2="659.4" stroke="#ff3a30" stroke-width="1.5" opacity="0.6" stroke-linecap="round"/>
+  </g>
 
-  <!-- the red line, beneath the wordmark (layered strokes = glow) -->
-  <g stroke="url(#redFadeP)" stroke-linecap="round" fill="none">
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="22" opacity="0.13"/>
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="13" opacity="0.28"/>
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="7"/>
+  <!-- embossed brushed-steel wordmark: bevel + specular + steel face -->
+  <g transform="translate(210,458.3) scale(1.634)">
+    <use href="#wmP" stroke="#1b1b1b" transform="translate(0,0.85)"/>
+    <use href="#wmP" stroke="#fbfbfb" opacity="0.6" transform="translate(0,-0.85)"/>
+    <use href="#wmP" stroke="url(#steelP)"/>
   </g>
 </svg>
 <!--/ASSET:profile-->
@@ -143,83 +156,97 @@
       <h2>Cover banner</h2>
       <span class="sz">1640 × 856</span>
       <a href="png/aired-cover-1640x856.png" download>Download PNG ↓</a>
-      <p class="desc">Wordmark left-of-center; the red line runs the full width as a pulse / circuit trace with faint nodes in the negative space; the tagline sits beneath in a thin serif; bronze circuit filigree haunts the corners.</p>
+      <p class="desc">Embossed steel wordmark left-of-center; a lacquered red line as a full-width pulse with circuit nodes in the open space; a silver-metallic serif tagline; bronze-inlay filigree in the corners. Lots of negative space.</p>
     </div>
     <div class="stage"><div class="frame wide">
 <!--ASSET:cover-->
 <svg id="asset-cover" width="1640" height="856" viewBox="0 0 1640 856" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED — AI-ed and proud, credited not thanked">
-  <title>AIRED — cover banner</title>
+  <title>AIRED — cover banner (metallic)</title>
   <defs>
-    <linearGradient id="redFadeC" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1640" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.035" stop-color="#e10600" stop-opacity="0.85"/>
-      <stop offset="0.5" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.965" stop-color="#e10600" stop-opacity="0.85"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <linearGradient id="steelC" gradientUnits="userSpaceOnUse" x1="0" y1="-2" x2="0" y2="102">
+      <stop offset="0" stop-color="#f5f5f5"/>
+      <stop offset="0.07" stop-color="#ededed"/>
+      <stop offset="0.16" stop-color="#ededed"/>
+      <stop offset="0.40" stop-color="#b9b9b9"/>
+      <stop offset="0.66" stop-color="#6a6a6a"/>
+      <stop offset="1" stop-color="#6a6a6a"/>
     </linearGradient>
-    <g id="airedC" fill="none" stroke="#ededed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8,100 L39,0 L70,100"/>
-      <path d="M20,62 L58,62"/>
+    <linearGradient id="lacquerC" gradientUnits="userSpaceOnUse" x1="0" y1="383.5" x2="0" y2="390.5">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <linearGradient id="fadeGradC" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1640" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.025" stop-color="#fff"/>
+      <stop offset="0.975" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskC" maskUnits="userSpaceOnUse" x="0" y="372" width="1640" height="30">
+      <rect x="0" y="372" width="1640" height="30" fill="url(#fadeGradC)"/>
+    </mask>
+    <!-- silver tagline -->
+    <linearGradient id="silverC" gradientUnits="userSpaceOnUse" x1="0" y1="497" x2="0" y2="522">
+      <stop offset="0" stop-color="#f2f2f2"/><stop offset="1" stop-color="#8a8a8a"/>
+    </linearGradient>
+    <!-- bronze inlay for the filigree, in filigree-local space so each corner shimmers toward its corner -->
+    <linearGradient id="goldFil" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="240" y2="260">
+      <stop offset="0" stop-color="#e0c084"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#6f521f"/>
+    </linearGradient>
+    <g id="wmC" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8,100 L39,0 L70,100"/><path d="M20,62 L58,62"/>
       <path d="M114,0 L114,100"/>
-      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/>
-      <path d="M180,52 L214,100"/>
-      <path d="M302,0 L252,0 L252,100 L302,100"/>
-      <path d="M252,50 L294,50"/>
-      <path d="M340,0 L340,100"/>
-      <path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
+      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/><path d="M180,52 L214,100"/>
+      <path d="M302,0 L252,0 L252,100 L302,100"/><path d="M252,50 L294,50"/>
+      <path d="M340,0 L340,100"/><path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
     </g>
-    <!-- corner circuit filigree, drawn from the top-left origin -->
-    <g id="filigree" fill="none" stroke="#b08d57" stroke-width="1.4" stroke-opacity="0.17" stroke-linecap="round" stroke-linejoin="round">
+    <g id="filC" fill="none" stroke="url(#goldFil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M0,128 L92,128 L92,84 L176,84"/>
       <path d="M0,190 L132,190 L132,146 L232,146"/>
       <path d="M52,0 L52,66 L104,66 L104,108"/>
       <path d="M0,250 L70,250"/>
-      <circle cx="176" cy="84" r="3.4" fill="#b08d57" stroke="none"/>
-      <circle cx="232" cy="146" r="3.4" fill="#b08d57" stroke="none"/>
-      <circle cx="104" cy="108" r="2.8" fill="#b08d57" stroke="none"/>
-      <circle cx="70" cy="250" r="2.6" fill="#b08d57" stroke="none"/>
+      <circle cx="176" cy="84" r="3.4" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="232" cy="146" r="3.4" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="104" cy="108" r="2.8" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="70" cy="250" r="2.6" fill="url(#goldFil)" stroke="none"/>
     </g>
   </defs>
 
   <rect width="1640" height="856" fill="#0a0a0a"/>
 
-  <!-- corner filigree: top-left, top-right, bottom-right (bottom-left left clear for FB avatar) -->
-  <use href="#filigree"/>
-  <use href="#filigree" transform="translate(1640,0) scale(-1,1)"/>
-  <use href="#filigree" transform="translate(1640,856) scale(-1,-1)"/>
+  <!-- corner filigree (top-left, top-right, bottom-right; bottom-left clear for FB avatar) -->
+  <g stroke-opacity="0.55"><use href="#filC"/></g>
+  <g stroke-opacity="0.55"><use href="#filC" transform="translate(1640,0) scale(-1,1)"/></g>
+  <g stroke-opacity="0.55"><use href="#filC" transform="translate(1640,856) scale(-1,-1)"/></g>
 
-  <!-- the red line: full-width pulse / circuit trace, behind the wordmark (layered = glow) -->
-  <g stroke="url(#redFadeC)" fill="none">
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="16" opacity="0.12"/>
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="9" opacity="0.26"/>
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="5"/>
+  <!-- the red lacquer line: full-width pulse / circuit trace, behind the wordmark -->
+  <g mask="url(#fadeMaskC)">
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="#e10600" stroke-width="16" opacity="0.11"/>
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="#e10600" stroke-width="9" opacity="0.24"/>
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="url(#lacquerC)" stroke-width="7"/>
+    <line x1="0" y1="384.6" x2="1640" y2="384.6" stroke="#ff3a30" stroke-width="1.4" opacity="0.5"/>
   </g>
-  <!-- circuit nodes / vias riding the trace in the open space -->
+  <!-- circuit nodes / vias riding the trace -->
   <g stroke="#e10600" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
     <path d="M70,387 L70,346 L96,346"/>
     <path d="M1140,387 L1140,432 L1168,432"/>
     <path d="M1455,387 L1455,346 L1481,346"/>
   </g>
   <g fill="#e10600" stroke="none">
-    <!-- soft halos for the junctions sitting on the trace -->
-    <circle cx="980" cy="387" r="10" opacity="0.16"/>
-    <circle cx="1300" cy="387" r="9" opacity="0.16"/>
-    <!-- node dots -->
-    <circle cx="96" cy="346" r="3.4"/>
-    <circle cx="980" cy="387" r="4.6"/>
-    <circle cx="1168" cy="432" r="3.4"/>
-    <circle cx="1300" cy="387" r="4"/>
-    <circle cx="1481" cy="346" r="3.4"/>
+    <circle cx="980" cy="387" r="10" opacity="0.16"/><circle cx="1300" cy="387" r="9" opacity="0.16"/>
+    <circle cx="96" cy="346" r="3.4"/><circle cx="980" cy="387" r="4.6"/>
+    <circle cx="1168" cy="432" r="3.4"/><circle cx="1300" cy="387" r="4"/><circle cx="1481" cy="346" r="3.4"/>
   </g>
 
-  <!-- wordmark, left-of-center, over the trace -->
-  <use href="#airedC" transform="translate(150,312) scale(1.5)"/>
+  <!-- embossed steel wordmark, left-of-center, over the trace -->
+  <g transform="translate(150,312) scale(1.5)">
+    <use href="#wmC" stroke="#1b1b1b" transform="translate(0,0.85)"/>
+    <use href="#wmC" stroke="#fbfbfb" opacity="0.6" transform="translate(0,-0.85)"/>
+    <use href="#wmC" stroke="url(#steelC)"/>
+  </g>
 
-  <!-- tagline, thin elegant serif, centered under the wordmark -->
-  <text x="453" y="520" text-anchor="middle"
+  <!-- silver-metallic serif tagline, centered under the wordmark -->
+  <text x="453" y="514" text-anchor="middle"
         font-family="'Liberation Serif','DejaVu Serif',Georgia,'Times New Roman',serif"
-        font-size="30" letter-spacing="3.5" fill="#bdbdbd" font-style="italic">AI-ed and proud
-    <tspan font-style="normal" fill="#e10600" font-size="26" dx="2" dy="-1">·</tspan><tspan font-style="italic" fill="#bdbdbd" dx="2" dy="1"> credited not thanked</tspan></text>
+        font-size="30" letter-spacing="3.5" fill="url(#silverC)" font-style="italic">AI-ed and proud<tspan font-style="normal" fill="#e10600" font-size="26" dx="2" dy="-1">·</tspan><tspan font-style="italic" dx="2" dy="1"> credited not thanked</tspan></text>
 </svg>
 <!--/ASSET:cover-->
     </div></div>
@@ -231,36 +258,56 @@
       <h2>App-icon monogram</h2>
       <span class="sz">512 × 512</span>
       <a href="png/aired-icon-512.png" download>Download PNG ↓</a>
-      <p class="desc">The red-line motif distilled: a stylized “A” whose crossbar <em>is</em> the luminous red line, piercing a faint dark sacred-geometry ring. For favicon and avatar use.</p>
+      <p class="desc">A raised red-lacquer “A” whose crossbar is the luminous line — filament under glass — bisecting a faint bronze-inlay ring. For favicon and avatar use.</p>
     </div>
     <div class="stage"><div class="frame ic">
 <!--ASSET:icon-->
 <svg id="asset-icon" width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED monogram">
-  <title>AIRED — app icon</title>
+  <title>AIRED — app icon (metallic)</title>
   <defs>
-    <linearGradient id="redFadeI" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="392" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.14" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.86" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <!-- lacquer down the A legs -->
+    <linearGradient id="lacquerLegsI" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="366">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
     </linearGradient>
+    <!-- lacquer across the crossbar thickness -->
+    <linearGradient id="lacquerBarI" gradientUnits="userSpaceOnUse" x1="0" y1="246.5" x2="0" y2="265.5">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <linearGradient id="fadeGradI" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="392" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.14" stop-color="#fff"/>
+      <stop offset="0.86" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskI" maskUnits="userSpaceOnUse" x="110" y="234" width="292" height="44">
+      <rect x="110" y="234" width="292" height="44" fill="url(#fadeGradI)"/>
+    </mask>
+    <linearGradient id="goldI" gradientUnits="userSpaceOnUse" x1="110" y1="80" x2="402" y2="432">
+      <stop offset="0" stop-color="#d9b87a"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#7a5c2e"/>
+    </linearGradient>
+    <g id="legsI" fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M256,150 L186,366"/><path d="M256,150 L326,366"/>
+    </g>
   </defs>
 
   <rect width="512" height="512" fill="#0a0a0a"/>
 
-  <!-- faint sacred-geometry ring(s) -->
-  <circle cx="256" cy="256" r="200" fill="#0d0d0d" stroke="#ededed" stroke-opacity="0.07" stroke-width="2"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#ededed" stroke-opacity="0.04" stroke-width="1.4"/>
+  <!-- faint bronze-inlay ring(s) over a barely-raised disc -->
+  <circle cx="256" cy="256" r="200" fill="#0d0d0d" stroke="url(#goldI)" stroke-opacity="0.24" stroke-width="2"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#goldI)" stroke-opacity="0.13" stroke-width="1.4"/>
 
-  <!-- the A: two legs in red, crossbar = the luminous red line bisecting the circle -->
-  <g fill="none" stroke="#e10600" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256,150 L186,366" stroke-width="19" stroke-opacity="0.92"/>
-    <path d="M256,150 L326,366" stroke-width="19" stroke-opacity="0.92"/>
-  </g>
-  <g stroke="url(#redFadeI)" stroke-linecap="round" fill="none">
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="34" opacity="0.13"/>
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="24" opacity="0.26"/>
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="19"/>
+  <!-- raised lacquer A legs: bevel + specular + lacquer face -->
+  <use href="#legsI" stroke="#7a0400" transform="translate(0,1.6)"/>
+  <use href="#legsI" stroke="#ff3a30" opacity="0.5" transform="translate(0,-1.6)"/>
+  <use href="#legsI" stroke="url(#lacquerLegsI)"/>
+
+  <!-- the crossbar = the luminous red line, bisecting the circle -->
+  <g mask="url(#fadeMaskI)">
+    <line x1="120" y1="256" x2="392" y2="256" stroke="#e10600" stroke-width="34" opacity="0.12" stroke-linecap="round"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke="#e10600" stroke-width="24" opacity="0.22" stroke-linecap="round"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke="url(#lacquerBarI)" stroke-width="19" stroke-linecap="round"/>
+    <line x1="128" y1="251.5" x2="384" y2="251.5" stroke="#ff3a30" stroke-width="2.4" opacity="0.6" stroke-linecap="round"/>
   </g>
 </svg>
 <!--/ASSET:icon-->
@@ -268,9 +315,9 @@
   </section>
 
   <footer class="kit">
-    Self-contained: every mark above is inline SVG — no external fonts, scripts, or images.<br/>
-    Colours are exact (matte black #0A0A0A · signal red #E10600). The wordmark is drawn as geometry, so it renders identically everywhere.<br/>
-    PNG exports are written beside this file in <code>png/</code> by <code>render.cjs</code>. Within the without · Σ I.
+    Self-contained: every mark is inline SVG — no external fonts, scripts, or images.<br/>
+    The metallic finish is built only from <em>tonal shades of the core palette</em> — brushed steel is light→dark grey around the #EDEDED wordmark, the line is red lacquer through #E10600, the inlay is bronze. Core values #0A0A0A · #E10600 · #EDEDED remain exact and present.<br/>
+    PNG + SVG exports are written beside this file by <code>render.cjs</code>; <code>verify.cjs</code> asserts exact sizes and palette. Within the without · Σ I.
   </footer>
 
 </div>

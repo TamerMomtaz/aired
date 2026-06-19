@@ -70,8 +70,8 @@ const CHECKS = [
     h: 1080,
     points: [
       { label: "bg corner", x: 20, y: 20, expect: "#0a0a0a" },
-      { label: "red line core", x: 540, y: 662, expect: "#e10600" },
-      { label: "wordmark stroke", x: 396, y: 540, expect: "#ededed" },
+      { label: "red lacquer core", x: 540, y: 662, expect: "#e10600" },
+      { label: "steel base #ededed", x: 396, y: 475, expect: "#ededed" },
     ],
   },
   {
@@ -80,7 +80,8 @@ const CHECKS = [
     h: 856,
     points: [
       { label: "bg lower area", x: 820, y: 760, expect: "#0a0a0a" },
-      { label: "red line core", x: 820, y: 387, expect: "#e10600" },
+      { label: "red lacquer core", x: 820, y: 387, expect: "#e10600" },
+      { label: "steel base #ededed", x: 321, y: 327, expect: "#ededed" },
     ],
   },
   {
@@ -89,7 +90,7 @@ const CHECKS = [
     h: 512,
     points: [
       { label: "bg corner", x: 18, y: 18, expect: "#0a0a0a" },
-      { label: "red crossbar core", x: 256, y: 256, expect: "#e10600" },
+      { label: "red lacquer core", x: 256, y: 256, expect: "#e10600" },
     ],
   },
 ];

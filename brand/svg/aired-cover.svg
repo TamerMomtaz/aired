@@ -1,75 +1,89 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg id="asset-cover" width="1640" height="856" viewBox="0 0 1640 856" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED — AI-ed and proud, credited not thanked">
-  <title>AIRED — cover banner</title>
+  <title>AIRED — cover banner (metallic)</title>
   <defs>
-    <linearGradient id="redFadeC" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1640" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.035" stop-color="#e10600" stop-opacity="0.85"/>
-      <stop offset="0.5" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.965" stop-color="#e10600" stop-opacity="0.85"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <linearGradient id="steelC" gradientUnits="userSpaceOnUse" x1="0" y1="-2" x2="0" y2="102">
+      <stop offset="0" stop-color="#f5f5f5"/>
+      <stop offset="0.07" stop-color="#ededed"/>
+      <stop offset="0.16" stop-color="#ededed"/>
+      <stop offset="0.40" stop-color="#b9b9b9"/>
+      <stop offset="0.66" stop-color="#6a6a6a"/>
+      <stop offset="1" stop-color="#6a6a6a"/>
     </linearGradient>
-    <g id="airedC" fill="none" stroke="#ededed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8,100 L39,0 L70,100"/>
-      <path d="M20,62 L58,62"/>
+    <linearGradient id="lacquerC" gradientUnits="userSpaceOnUse" x1="0" y1="383.5" x2="0" y2="390.5">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <linearGradient id="fadeGradC" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1640" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.025" stop-color="#fff"/>
+      <stop offset="0.975" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskC" maskUnits="userSpaceOnUse" x="0" y="372" width="1640" height="30">
+      <rect x="0" y="372" width="1640" height="30" fill="url(#fadeGradC)"/>
+    </mask>
+    <!-- silver tagline -->
+    <linearGradient id="silverC" gradientUnits="userSpaceOnUse" x1="0" y1="497" x2="0" y2="522">
+      <stop offset="0" stop-color="#f2f2f2"/><stop offset="1" stop-color="#8a8a8a"/>
+    </linearGradient>
+    <!-- bronze inlay for the filigree, in filigree-local space so each corner shimmers toward its corner -->
+    <linearGradient id="goldFil" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="240" y2="260">
+      <stop offset="0" stop-color="#e0c084"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#6f521f"/>
+    </linearGradient>
+    <g id="wmC" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8,100 L39,0 L70,100"/><path d="M20,62 L58,62"/>
       <path d="M114,0 L114,100"/>
-      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/>
-      <path d="M180,52 L214,100"/>
-      <path d="M302,0 L252,0 L252,100 L302,100"/>
-      <path d="M252,50 L294,50"/>
-      <path d="M340,0 L340,100"/>
-      <path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
+      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/><path d="M180,52 L214,100"/>
+      <path d="M302,0 L252,0 L252,100 L302,100"/><path d="M252,50 L294,50"/>
+      <path d="M340,0 L340,100"/><path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
     </g>
-    <!-- corner circuit filigree, drawn from the top-left origin -->
-    <g id="filigree" fill="none" stroke="#b08d57" stroke-width="1.4" stroke-opacity="0.17" stroke-linecap="round" stroke-linejoin="round">
+    <g id="filC" fill="none" stroke="url(#goldFil)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M0,128 L92,128 L92,84 L176,84"/>
       <path d="M0,190 L132,190 L132,146 L232,146"/>
       <path d="M52,0 L52,66 L104,66 L104,108"/>
       <path d="M0,250 L70,250"/>
-      <circle cx="176" cy="84" r="3.4" fill="#b08d57" stroke="none"/>
-      <circle cx="232" cy="146" r="3.4" fill="#b08d57" stroke="none"/>
-      <circle cx="104" cy="108" r="2.8" fill="#b08d57" stroke="none"/>
-      <circle cx="70" cy="250" r="2.6" fill="#b08d57" stroke="none"/>
+      <circle cx="176" cy="84" r="3.4" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="232" cy="146" r="3.4" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="104" cy="108" r="2.8" fill="url(#goldFil)" stroke="none"/>
+      <circle cx="70" cy="250" r="2.6" fill="url(#goldFil)" stroke="none"/>
     </g>
   </defs>
 
   <rect width="1640" height="856" fill="#0a0a0a"/>
 
-  <!-- corner filigree: top-left, top-right, bottom-right (bottom-left left clear for FB avatar) -->
-  <use href="#filigree"/>
-  <use href="#filigree" transform="translate(1640,0) scale(-1,1)"/>
-  <use href="#filigree" transform="translate(1640,856) scale(-1,-1)"/>
+  <!-- corner filigree (top-left, top-right, bottom-right; bottom-left clear for FB avatar) -->
+  <g stroke-opacity="0.55"><use href="#filC"/></g>
+  <g stroke-opacity="0.55"><use href="#filC" transform="translate(1640,0) scale(-1,1)"/></g>
+  <g stroke-opacity="0.55"><use href="#filC" transform="translate(1640,856) scale(-1,-1)"/></g>
 
-  <!-- the red line: full-width pulse / circuit trace, behind the wordmark (layered = glow) -->
-  <g stroke="url(#redFadeC)" fill="none">
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="16" opacity="0.12"/>
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="9" opacity="0.26"/>
-    <line x1="0" y1="387" x2="1640" y2="387" stroke-width="5"/>
+  <!-- the red lacquer line: full-width pulse / circuit trace, behind the wordmark -->
+  <g mask="url(#fadeMaskC)">
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="#e10600" stroke-width="16" opacity="0.11"/>
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="#e10600" stroke-width="9" opacity="0.24"/>
+    <line x1="0" y1="387" x2="1640" y2="387" stroke="url(#lacquerC)" stroke-width="7"/>
+    <line x1="0" y1="384.6" x2="1640" y2="384.6" stroke="#ff3a30" stroke-width="1.4" opacity="0.5"/>
   </g>
-  <!-- circuit nodes / vias riding the trace in the open space -->
+  <!-- circuit nodes / vias riding the trace -->
   <g stroke="#e10600" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
     <path d="M70,387 L70,346 L96,346"/>
     <path d="M1140,387 L1140,432 L1168,432"/>
     <path d="M1455,387 L1455,346 L1481,346"/>
   </g>
   <g fill="#e10600" stroke="none">
-    <!-- soft halos for the junctions sitting on the trace -->
-    <circle cx="980" cy="387" r="10" opacity="0.16"/>
-    <circle cx="1300" cy="387" r="9" opacity="0.16"/>
-    <!-- node dots -->
-    <circle cx="96" cy="346" r="3.4"/>
-    <circle cx="980" cy="387" r="4.6"/>
-    <circle cx="1168" cy="432" r="3.4"/>
-    <circle cx="1300" cy="387" r="4"/>
-    <circle cx="1481" cy="346" r="3.4"/>
+    <circle cx="980" cy="387" r="10" opacity="0.16"/><circle cx="1300" cy="387" r="9" opacity="0.16"/>
+    <circle cx="96" cy="346" r="3.4"/><circle cx="980" cy="387" r="4.6"/>
+    <circle cx="1168" cy="432" r="3.4"/><circle cx="1300" cy="387" r="4"/><circle cx="1481" cy="346" r="3.4"/>
   </g>
 
-  <!-- wordmark, left-of-center, over the trace -->
-  <use href="#airedC" transform="translate(150,312) scale(1.5)"/>
+  <!-- embossed steel wordmark, left-of-center, over the trace -->
+  <g transform="translate(150,312) scale(1.5)">
+    <use href="#wmC" stroke="#1b1b1b" transform="translate(0,0.85)"/>
+    <use href="#wmC" stroke="#fbfbfb" opacity="0.6" transform="translate(0,-0.85)"/>
+    <use href="#wmC" stroke="url(#steelC)"/>
+  </g>
 
-  <!-- tagline, thin elegant serif, centered under the wordmark -->
-  <text x="453" y="520" text-anchor="middle"
+  <!-- silver-metallic serif tagline, centered under the wordmark -->
+  <text x="453" y="514" text-anchor="middle"
         font-family="'Liberation Serif','DejaVu Serif',Georgia,'Times New Roman',serif"
-        font-size="30" letter-spacing="3.5" fill="#bdbdbd" font-style="italic">AI-ed and proud
-    <tspan font-style="normal" fill="#e10600" font-size="26" dx="2" dy="-1">·</tspan><tspan font-style="italic" fill="#bdbdbd" dx="2" dy="1"> credited not thanked</tspan></text>
+        font-size="30" letter-spacing="3.5" fill="url(#silverC)" font-style="italic">AI-ed and proud<tspan font-style="normal" fill="#e10600" font-size="26" dx="2" dy="-1">·</tspan><tspan font-style="italic" dx="2" dy="1"> credited not thanked</tspan></text>
 </svg>

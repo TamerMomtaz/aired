@@ -1,66 +1,86 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg id="asset-profile" width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED">
-  <title>AIRED — profile mark</title>
+  <title>AIRED — profile mark (metallic)</title>
   <defs>
-    <linearGradient id="redFadeP" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="780" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.16" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.84" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <!-- brushed steel: light top -> grey lower third (local cap space) -->
+    <linearGradient id="steelP" gradientUnits="userSpaceOnUse" x1="0" y1="-2" x2="0" y2="102">
+      <stop offset="0" stop-color="#f5f5f5"/>
+      <stop offset="0.07" stop-color="#ededed"/>
+      <stop offset="0.16" stop-color="#ededed"/>
+      <stop offset="0.40" stop-color="#b9b9b9"/>
+      <stop offset="0.66" stop-color="#6a6a6a"/>
+      <stop offset="1" stop-color="#6a6a6a"/>
     </linearGradient>
-    <!-- AIRED wordmark, geometric monoline, local box ~404 x 100 -->
-    <g id="airedP" fill="none" stroke="#ededed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8,100 L39,0 L70,100"/>
-      <path d="M20,62 L58,62"/>
+    <!-- red lacquer sheen across the line's thickness -->
+    <linearGradient id="lacquerP" gradientUnits="userSpaceOnUse" x1="0" y1="657.5" x2="0" y2="666.5">
+      <stop offset="0" stop-color="#ff3a30"/>
+      <stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/>
+      <stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <!-- horizontal luminous end-falloff, as a mask -->
+    <linearGradient id="fadeGradP" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="780" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.16" stop-color="#fff"/>
+      <stop offset="0.84" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskP" maskUnits="userSpaceOnUse" x="288" y="644" width="504" height="36">
+      <rect x="288" y="644" width="504" height="36" fill="url(#fadeGradP)"/>
+    </mask>
+    <!-- bronze/gold inlay, diagonal so the geometry shimmers -->
+    <linearGradient id="goldP" gradientUnits="userSpaceOnUse" x1="150" y1="150" x2="940" y2="940">
+      <stop offset="0" stop-color="#d9b87a"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#7a5c2e"/>
+    </linearGradient>
+    <g id="wmP" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8,100 L39,0 L70,100"/><path d="M20,62 L58,62"/>
       <path d="M114,0 L114,100"/>
-      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/>
-      <path d="M180,52 L214,100"/>
-      <path d="M302,0 L252,0 L252,100 L302,100"/>
-      <path d="M252,50 L294,50"/>
-      <path d="M340,0 L340,100"/>
-      <path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
+      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/><path d="M180,52 L214,100"/>
+      <path d="M302,0 L252,0 L252,100 L302,100"/><path d="M252,50 L294,50"/>
+      <path d="M340,0 L340,100"/><path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
     </g>
   </defs>
 
   <rect width="1080" height="1080" fill="#0a0a0a"/>
 
-  <!-- faint sacred geometry behind -->
-  <g fill="none" stroke="#ededed">
-    <g stroke-opacity="0.05" stroke-width="1.5">
-      <circle cx="540" cy="540" r="160"/>
-      <circle cx="540" cy="540" r="250"/>
-      <circle cx="540" cy="540" r="340"/>
-      <circle cx="540" cy="540" r="430"/>
+  <!-- faint bronze-inlay sacred geometry -->
+  <g fill="none" stroke="url(#goldP)">
+    <g stroke-opacity="0.16" stroke-width="1.5">
+      <circle cx="540" cy="540" r="160"/><circle cx="540" cy="540" r="250"/>
+      <circle cx="540" cy="540" r="340"/><circle cx="540" cy="540" r="430"/>
     </g>
-    <g stroke-opacity="0.045" stroke-width="1.2">
+    <g stroke-opacity="0.13" stroke-width="1.2">
       <polygon points="840,540 690,280 390,280 240,540 390,800 690,800"/>
       <polygon points="800,390 540,240 280,390 280,690 540,840 800,690"/>
     </g>
-    <line x1="540" y1="70" x2="540" y2="1010" stroke-opacity="0.028" stroke-width="1"/>
-  </g>
-  <!-- faint dial ticks on the outer ring -->
-  <g stroke="#ededed" stroke-opacity="0.07" stroke-width="1.6" stroke-linecap="round">
-    <line x1="540" y1="100" x2="540" y2="124"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(30,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(60,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(90,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(120,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(150,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(180,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(210,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(240,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(270,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(300,540,540)"/>
-    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(330,540,540)"/>
+    <line x1="540" y1="70" x2="540" y2="1010" stroke-opacity="0.05" stroke-width="1"/>
+    <g stroke-opacity="0.18" stroke-width="1.6" stroke-linecap="round">
+      <line x1="540" y1="100" x2="540" y2="124"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(30,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(60,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(90,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(120,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(150,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(180,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(210,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(240,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(270,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(300,540,540)"/>
+      <line x1="540" y1="100" x2="540" y2="124" transform="rotate(330,540,540)"/>
+    </g>
   </g>
 
-  <!-- wordmark -->
-  <use href="#airedP" transform="translate(210,458.3) scale(1.634)"/>
+  <!-- the red lacquer line, beneath the wordmark -->
+  <g mask="url(#fadeMaskP)">
+    <line x1="300" y1="662" x2="780" y2="662" stroke="#e10600" stroke-width="22" opacity="0.12" stroke-linecap="round"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke="#e10600" stroke-width="13" opacity="0.26" stroke-linecap="round"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke="url(#lacquerP)" stroke-width="8" stroke-linecap="round"/>
+    <line x1="305" y1="659.4" x2="775" y2="659.4" stroke="#ff3a30" stroke-width="1.5" opacity="0.6" stroke-linecap="round"/>
+  </g>
 
-  <!-- the red line, beneath the wordmark (layered strokes = glow) -->
-  <g stroke="url(#redFadeP)" stroke-linecap="round" fill="none">
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="22" opacity="0.13"/>
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="13" opacity="0.28"/>
-    <line x1="300" y1="662" x2="780" y2="662" stroke-width="7"/>
+  <!-- embossed brushed-steel wordmark: bevel + specular + steel face -->
+  <g transform="translate(210,458.3) scale(1.634)">
+    <use href="#wmP" stroke="#1b1b1b" transform="translate(0,0.85)"/>
+    <use href="#wmP" stroke="#fbfbfb" opacity="0.6" transform="translate(0,-0.85)"/>
+    <use href="#wmP" stroke="url(#steelP)"/>
   </g>
 </svg>

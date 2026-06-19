@@ -1,29 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg id="asset-icon" width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED monogram">
-  <title>AIRED — app icon</title>
+  <title>AIRED — app icon (metallic)</title>
   <defs>
-    <linearGradient id="redFadeI" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="392" y2="0">
-      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
-      <stop offset="0.14" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="0.86" stop-color="#e10600" stop-opacity="1"/>
-      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    <!-- lacquer down the A legs -->
+    <linearGradient id="lacquerLegsI" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="366">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
     </linearGradient>
+    <!-- lacquer across the crossbar thickness -->
+    <linearGradient id="lacquerBarI" gradientUnits="userSpaceOnUse" x1="0" y1="246.5" x2="0" y2="265.5">
+      <stop offset="0" stop-color="#ff3a30"/><stop offset="0.40" stop-color="#e10600"/>
+      <stop offset="0.60" stop-color="#e10600"/><stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <linearGradient id="fadeGradI" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="392" y2="0">
+      <stop offset="0" stop-color="#000"/><stop offset="0.14" stop-color="#fff"/>
+      <stop offset="0.86" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fadeMaskI" maskUnits="userSpaceOnUse" x="110" y="234" width="292" height="44">
+      <rect x="110" y="234" width="292" height="44" fill="url(#fadeGradI)"/>
+    </mask>
+    <linearGradient id="goldI" gradientUnits="userSpaceOnUse" x1="110" y1="80" x2="402" y2="432">
+      <stop offset="0" stop-color="#d9b87a"/><stop offset="0.5" stop-color="#a8824a"/>
+      <stop offset="1" stop-color="#7a5c2e"/>
+    </linearGradient>
+    <g id="legsI" fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M256,150 L186,366"/><path d="M256,150 L326,366"/>
+    </g>
   </defs>
 
   <rect width="512" height="512" fill="#0a0a0a"/>
 
-  <!-- faint sacred-geometry ring(s) -->
-  <circle cx="256" cy="256" r="200" fill="#0d0d0d" stroke="#ededed" stroke-opacity="0.07" stroke-width="2"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#ededed" stroke-opacity="0.04" stroke-width="1.4"/>
+  <!-- faint bronze-inlay ring(s) over a barely-raised disc -->
+  <circle cx="256" cy="256" r="200" fill="#0d0d0d" stroke="url(#goldI)" stroke-opacity="0.24" stroke-width="2"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#goldI)" stroke-opacity="0.13" stroke-width="1.4"/>
 
-  <!-- the A: two legs in red, crossbar = the luminous red line bisecting the circle -->
-  <g fill="none" stroke="#e10600" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256,150 L186,366" stroke-width="19" stroke-opacity="0.92"/>
-    <path d="M256,150 L326,366" stroke-width="19" stroke-opacity="0.92"/>
-  </g>
-  <g stroke="url(#redFadeI)" stroke-linecap="round" fill="none">
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="34" opacity="0.13"/>
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="24" opacity="0.26"/>
-    <line x1="120" y1="256" x2="392" y2="256" stroke-width="19"/>
+  <!-- raised lacquer A legs: bevel + specular + lacquer face -->
+  <use href="#legsI" stroke="#7a0400" transform="translate(0,1.6)"/>
+  <use href="#legsI" stroke="#ff3a30" opacity="0.5" transform="translate(0,-1.6)"/>
+  <use href="#legsI" stroke="url(#lacquerLegsI)"/>
+
+  <!-- the crossbar = the luminous red line, bisecting the circle -->
+  <g mask="url(#fadeMaskI)">
+    <line x1="120" y1="256" x2="392" y2="256" stroke="#e10600" stroke-width="34" opacity="0.12" stroke-linecap="round"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke="#e10600" stroke-width="24" opacity="0.22" stroke-linecap="round"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke="url(#lacquerBarI)" stroke-width="19" stroke-linecap="round"/>
+    <line x1="128" y1="251.5" x2="384" y2="251.5" stroke="#ff3a30" stroke-width="2.4" opacity="0.6" stroke-linecap="round"/>
   </g>
 </svg>
