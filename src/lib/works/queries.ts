@@ -268,10 +268,11 @@ export async function getMyDrafts(
   }));
 }
 
-// The "Most played" strip: live works ranked by real listens, highest first
+// The "Most Aired" strip: live works ranked by real listens, highest first
 // (ties broken by catalog number for a stable order), each card-ready with its
 // count. A plain ORDER BY on the denormalized counter — empty until plays land.
-export async function getMostPlayed(
+// This is the one cross-artist, mixed row on Browse (no artist grouping).
+export async function getMostAired(
   supabase: SupabaseServerClient,
   limit = 10,
 ): Promise<FeedWork[]> {
@@ -324,4 +325,87 @@ export async function getArtistSingles(
     .order("created_at", { ascending: false })
     .limit(limit);
   return ((data ?? []) as unknown as WorkRow[]).map(shape);
+}
+
+// ── Browse-as-label, artist-grouped shelves ────────────────────────────────
+// The Listen page bands ALBUMS and SINGLES into one horizontal row PER ARTIST.
+// Rows are ordered by the artist's total live play_count (most-aired first), so
+// both shelves share one per-artist stat: total listens + the newest work time
+// (the tie-breaker). Keyed by creator_id — which, by the album-ownership trigger,
+// equals an album's profile_id for every song it holds — so an album row and a
+// single row for the same artist resolve to the same stat.
+
+export type ArtistPlayStat = { total: number; latest: number };
+
+// Per-artist live aggregate over the whole catalog: summed play_count and the
+// freshest work's time. Light columns, no cap — accurate beyond the feed slice.
+export async function getArtistPlayStats(
+  supabase: SupabaseServerClient,
+): Promise<Map<string, ArtistPlayStat>> {
+  const { data } = await supabase
+    .from("work")
+    .select("creator_id, play_count, created_at")
+    .eq("status", "live")
+    .eq("taken_down", false);
+
+  const stats = new Map<string, ArtistPlayStat>();
+  for (const r of (data ?? []) as Array<{
+    creator_id: string | null;
+    play_count: number | null;
+    created_at: string;
+  }>) {
+    if (!r.creator_id) continue;
+    const t = new Date(r.created_at).getTime();
+    const cur = stats.get(r.creator_id);
+    if (cur) {
+      cur.total += r.play_count ?? 0;
+      if (t > cur.latest) cur.latest = t;
+    } else {
+      stats.set(r.creator_id, { total: r.play_count ?? 0, latest: t });
+    }
+  }
+  return stats;
+}
+
+// A single (album-less live work) carrying its maker's identity, so Browse can
+// group singles by artist. The raw display_name is returned as-is; the caller
+// applies the warm fallback (artistName) once, at grouping time.
+export type SingleWithArtist = {
+  work: FeedWork;
+  creatorId: string;
+  creatorName: string | null;
+  creatorHandle: string | null;
+};
+
+// Every album-less live work across all artists, newest first, each with its
+// creator (a profile, via the work.creator_id FK). Same live-only discipline as
+// the feed; the creator embed rides along for the per-artist grouping.
+export async function getSinglesWithArtist(
+  supabase: SupabaseServerClient,
+  limit = FEED_LIMIT,
+): Promise<SingleWithArtist[]> {
+  const { data } = await supabase
+    .from("work")
+    .select(`${WORK_SELECT}, creator_id, creator:creator_id(display_name, handle)`)
+    .eq("status", "live")
+    .eq("taken_down", false)
+    .is("album_id", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  return (
+    (data ?? []) as unknown as Array<
+      WorkRow & {
+        creator_id: string | null;
+        creator: { display_name: string | null; handle: string | null } | null;
+      }
+    >
+  )
+    .filter((row) => !!row.creator_id)
+    .map((row) => ({
+      work: shape(row),
+      creatorId: row.creator_id as string,
+      creatorName: row.creator?.display_name ?? null,
+      creatorHandle: row.creator?.handle ?? null,
+    }));
 }
