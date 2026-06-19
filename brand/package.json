@@ -1,0 +1,15 @@
+{
+  "name": "aired-brand-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generator for the AIRED brand kit (metallic edition) — profile, cover, icon as SVG + PNG.",
+  "scripts": {
+    "build": "node generate.mjs",
+    "verify": "node verify.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "opentype.js": "^2.0.0"
+  }
+}

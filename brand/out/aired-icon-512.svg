@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <!-- metal face: bright top → base #ededed → shadow lower third -->
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f5f5f5"/>
+      <stop offset="0.14" stop-color="#ededed"/>
+      <stop offset="0.46" stop-color="#c2c2c2"/>
+      <stop offset="0.66" stop-color="#7d7d7d"/>
+      <stop offset="1" stop-color="#6a6a6a"/>
+    </linearGradient>
+    <!-- red lacquer: sheen top → signal red → deep bottom -->
+    <linearGradient id="redLacquer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff3a30"/>
+      <stop offset="0.5" stop-color="#e10600"/>
+      <stop offset="1" stop-color="#b00500"/>
+    </linearGradient>
+    <linearGradient id="redSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- bronze inlay -->
+    <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9b87a"/>
+      <stop offset="0.5" stop-color="#a8814a"/>
+      <stop offset="1" stop-color="#7a5c2e"/>
+    </linearGradient>
+    <!-- silver serif -->
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2f2f2"/>
+      <stop offset="1" stop-color="#9a9a9a"/>
+    </linearGradient>
+    <!-- soft spotlight behind the mark (light only, no new hue) -->
+    <radialGradient id="spot" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- brushed-steel striations (very fine horizontal lines) -->
+    <pattern id="brushed" patternUnits="userSpaceOnUse" width="6" height="3">
+      <rect width="6" height="1" fill="#ffffff"/>
+    </pattern>
+    <filter id="redGlow_i" x="-50%" y="-300%" width="200%" height="700%">
+      <feGaussianBlur stdDeviation="12.3904"/>
+    </filter>
+  </defs>
+    <rect width="512" height="512" fill="#0a0a0a"/>
+    <rect width="512" height="512" fill="url(#spot)"/>
+    
+  <g opacity="0.4">
+    <!-- faint highlight edge (drawn first, sits just above) -->
+    <circle cx="256" cy="251.4894927351517" r="131.07" fill="none" stroke="#efe0bb" stroke-width="2.304" transform="translate(0 -0.6)" opacity="0.3"/>
+    <circle cx="256" cy="251.4894927351517" r="153.60" fill="none" stroke="#efe0bb" stroke-width="1.8432" transform="translate(0 -0.6)" opacity="0.22"/>
+    <polygon points="256.00,149.09 344.68,302.69 167.32,302.69" fill="none" stroke="#efe0bb" stroke-width="2.304" stroke-linejoin="round" transform="translate(0 -0.6)" opacity="0.28"/>
+    <polygon points="256.00,353.89 167.32,200.29 344.68,200.29" fill="none" stroke="#efe0bb" stroke-width="2.304" stroke-linejoin="round" transform="translate(0 -0.6)" opacity="0.28"/>
+    <!-- bronze inlay -->
+    <circle cx="256" cy="251.4894927351517" r="131.07" fill="none" stroke="url(#bronze)" stroke-width="2.304" transform="translate(0 0)" opacity="1"/>
+    <circle cx="256" cy="251.4894927351517" r="153.60" fill="none" stroke="url(#bronze)" stroke-width="1.8432" transform="translate(0 0)" opacity="1"/>
+    <polygon points="256.00,149.09 344.68,302.69 167.32,302.69" fill="none" stroke="url(#bronze)" stroke-width="2.304" stroke-linejoin="round" transform="translate(0 0)" opacity="1"/>
+    <polygon points="256.00,353.89 167.32,200.29 344.68,200.29" fill="none" stroke="url(#bronze)" stroke-width="2.304" stroke-linejoin="round" transform="translate(0 0)" opacity="1"/>
+    <circle cx="256" cy="251.4894927351517" r="3.23" fill="url(#bronze)"/>
+  </g>
+    
+  <g transform="translate(102.40 275.17)">
+    <path d="M14.722 0L-1.096 0L23.101-54.815L38.371-54.815L62.646 0L46.515 0L42.208-10.650L19.029-10.650L14.722 0M30.618-39.624L23.571-22.083L37.666-22.083L30.618-39.624M93.499 0L77.994 0L77.994-54.815L93.499-54.815L93.499 0M131.008 0L115.503 0L115.503-54.815L140.014-54.815Q152.073-54.815 158.494-49.373Q164.915-43.930 164.915-34.534Q164.915-28.504 162.096-24.080Q159.277-19.655 154.109-17.228L166.012 0L149.411 0L139.466-14.565L131.008-14.565L131.008 0M131.008-42.599L131.008-26.546L139.622-26.546Q144.477-26.546 146.866-28.661Q149.254-30.775 149.254-34.534Q149.254-38.371 146.866-40.485Q144.477-42.599 139.622-42.599L131.008-42.599M228.423 0L184.414 0L184.414-54.815L227.405-54.815L227.405-42.834L199.762-42.834L199.762-33.594L224.116-33.594L224.116-22.004L199.762-22.004L199.762-11.981L228.423-11.981L228.423 0M273.919 0L248 0L248-54.815L273.919-54.815Q283.003-54.815 289.894-51.448Q296.785-48.081 300.661-41.934Q304.538-35.786 304.538-27.408Q304.538-19.029 300.661-12.882Q296.785-6.734 289.894-3.367Q283.003 0 273.919 0M263.504-42.443L263.504-12.373L273.293-12.373Q280.262-12.373 284.569-16.366Q288.876-20.360 288.876-27.408Q288.876-34.455 284.569-38.449Q280.262-42.443 273.293-42.443" fill="#050505" transform="translate(0 1.5661483558501146)"/>
+    <path d="M14.722 0L-1.096 0L23.101-54.815L38.371-54.815L62.646 0L46.515 0L42.208-10.650L19.029-10.650L14.722 0M30.618-39.624L23.571-22.083L37.666-22.083L30.618-39.624M93.499 0L77.994 0L77.994-54.815L93.499-54.815L93.499 0M131.008 0L115.503 0L115.503-54.815L140.014-54.815Q152.073-54.815 158.494-49.373Q164.915-43.930 164.915-34.534Q164.915-28.504 162.096-24.080Q159.277-19.655 154.109-17.228L166.012 0L149.411 0L139.466-14.565L131.008-14.565L131.008 0M131.008-42.599L131.008-26.546L139.622-26.546Q144.477-26.546 146.866-28.661Q149.254-30.775 149.254-34.534Q149.254-38.371 146.866-40.485Q144.477-42.599 139.622-42.599L131.008-42.599M228.423 0L184.414 0L184.414-54.815L227.405-54.815L227.405-42.834L199.762-42.834L199.762-33.594L224.116-33.594L224.116-22.004L199.762-22.004L199.762-11.981L228.423-11.981L228.423 0M273.919 0L248 0L248-54.815L273.919-54.815Q283.003-54.815 289.894-51.448Q296.785-48.081 300.661-41.934Q304.538-35.786 304.538-27.408Q304.538-19.029 300.661-12.882Q296.785-6.734 289.894-3.367Q283.003 0 273.919 0M263.504-42.443L263.504-12.373L273.293-12.373Q280.262-12.373 284.569-16.366Q288.876-20.360 288.876-27.408Q288.876-34.455 284.569-38.449Q280.262-42.443 273.293-42.443" fill="#fbfbfb" transform="translate(0 -0.9396890135100688)"/>
+    <path d="M14.722 0L-1.096 0L23.101-54.815L38.371-54.815L62.646 0L46.515 0L42.208-10.650L19.029-10.650L14.722 0M30.618-39.624L23.571-22.083L37.666-22.083L30.618-39.624M93.499 0L77.994 0L77.994-54.815L93.499-54.815L93.499 0M131.008 0L115.503 0L115.503-54.815L140.014-54.815Q152.073-54.815 158.494-49.373Q164.915-43.930 164.915-34.534Q164.915-28.504 162.096-24.080Q159.277-19.655 154.109-17.228L166.012 0L149.411 0L139.466-14.565L131.008-14.565L131.008 0M131.008-42.599L131.008-26.546L139.622-26.546Q144.477-26.546 146.866-28.661Q149.254-30.775 149.254-34.534Q149.254-38.371 146.866-40.485Q144.477-42.599 139.622-42.599L131.008-42.599M228.423 0L184.414 0L184.414-54.815L227.405-54.815L227.405-42.834L199.762-42.834L199.762-33.594L224.116-33.594L224.116-22.004L199.762-22.004L199.762-11.981L228.423-11.981L228.423 0M273.919 0L248 0L248-54.815L273.919-54.815Q283.003-54.815 289.894-51.448Q296.785-48.081 300.661-41.934Q304.538-35.786 304.538-27.408Q304.538-19.029 300.661-12.882Q296.785-6.734 289.894-3.367Q283.003 0 273.919 0M263.504-42.443L263.504-12.373L273.293-12.373Q280.262-12.373 284.569-16.366Q288.876-20.360 288.876-27.408Q288.876-34.455 284.569-38.449Q280.262-42.443 273.293-42.443" fill="url(#metal)"/>
+    
+  </g>
+    
+  <defs>
+    <linearGradient id="ends_i" x1="102.4" y1="0" x2="409.6" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset="0.040" stop-color="#fff"/>
+      <stop offset="0.960" stop-color="#fff"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="endsMask_i" maskUnits="userSpaceOnUse" x="91.13600000000001" y="273.9351394341066" width="329.728" height="33.792">
+      <rect x="91.13600000000001" y="273.9351394341066" width="329.728" height="33.792" fill="url(#ends_i)"/>
+    </mask>
+  </defs>
+  <!-- luminous glow, fading at the tips -->
+  <g mask="url(#endsMask_i)">
+    <rect x="102.4" y="285.1991394341066" width="307.2" height="11.264" rx="5.632" fill="#e10600" filter="url(#redGlow_i)" opacity="0.7"/>
+    <!-- lacquer body -->
+    <rect x="102.4" y="285.1991394341066" width="307.2" height="11.264" rx="5.632" fill="url(#redLacquer)"/>
+    <!-- glassy top sheen -->
+    <rect x="102.4" y="285.1991394341066" width="307.2" height="5.63" rx="5.632" fill="url(#redSheen)"/>
+  </g></svg>
