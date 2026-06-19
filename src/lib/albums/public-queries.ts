@@ -1,5 +1,10 @@
 import { resolveAlbumCover } from "@/lib/albums/queries";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getArtistPlayStats,
+  getSinglesWithArtist,
+  type FeedWork,
+} from "@/lib/works/queries";
 
 // Public, anon-safe reads for BROWSE-AS-LABEL: the album shelf on Listen, the
 // album page, and the artist page. These differ from the ORGANIZE reads
@@ -166,6 +171,85 @@ export async function getBrowseAlbums(
     .in("id", Array.from(agg.keys()));
 
   return buildAlbumCards((albumData ?? []) as unknown as AlbumMetaRow[], agg);
+}
+
+// One artist's band on the Listen page: their identity (for the left spine link)
+// plus their items — albums or singles. Each shelf is one row per artist.
+export type ArtistAlbumRow = {
+  artistId: string;
+  artistHandle: string | null;
+  artistName: string;
+  albums: AlbumCardData[];
+};
+export type ArtistSingleRow = {
+  artistId: string;
+  artistHandle: string | null;
+  artistName: string;
+  singles: FeedWork[];
+};
+export type BrowseShelves = {
+  albumRows: ArtistAlbumRow[];
+  singleRows: ArtistSingleRow[];
+};
+
+// Browse, grouped as a label: ALBUMS and SINGLES each become one row per artist.
+// Albums arrive pre-ranked freshest-first (getBrowseAlbums) and singles
+// newest-first (getSinglesWithArtist), so grouping preserves "newest item first"
+// within each row. Rows are then ordered by the artist's total live play_count
+// desc (the most-aired artist leads), ties broken by their most recent work. One
+// stats read feeds both shelves; an artist with no albums simply never appears in
+// albumRows, and likewise for singleRows — empty shelves drop out at the caller.
+export async function getBrowseShelves(
+  supabase: SupabaseServerClient,
+): Promise<BrowseShelves> {
+  const [albums, singles, stats] = await Promise.all([
+    getBrowseAlbums(supabase),
+    getSinglesWithArtist(supabase),
+    getArtistPlayStats(supabase),
+  ]);
+
+  const albumRows = new Map<string, ArtistAlbumRow>();
+  for (const a of albums) {
+    const row = albumRows.get(a.artistId);
+    if (row) {
+      row.albums.push(a);
+    } else {
+      albumRows.set(a.artistId, {
+        artistId: a.artistId,
+        artistHandle: a.artistHandle,
+        artistName: a.artistName,
+        albums: [a],
+      });
+    }
+  }
+
+  const singleRows = new Map<string, ArtistSingleRow>();
+  for (const s of singles) {
+    const row = singleRows.get(s.creatorId);
+    if (row) {
+      row.singles.push(s.work);
+    } else {
+      singleRows.set(s.creatorId, {
+        artistId: s.creatorId,
+        artistHandle: s.creatorHandle,
+        artistName: artistName(s.creatorName),
+        singles: [s.work],
+      });
+    }
+  }
+
+  // Most-aired artist first; tie → most recent work first. Missing stats sort last.
+  const byPlays = <T extends { artistId: string }>(rows: T[]): T[] =>
+    rows.sort((x, y) => {
+      const sx = stats.get(x.artistId) ?? { total: 0, latest: 0 };
+      const sy = stats.get(y.artistId) ?? { total: 0, latest: 0 };
+      return sy.total - sx.total || sy.latest - sx.latest;
+    });
+
+  return {
+    albumRows: byPlays([...albumRows.values()]),
+    singleRows: byPlays([...singleRows.values()]),
+  };
 }
 
 // One artist's album shelf for their page: their albums that hold ≥1 live song.

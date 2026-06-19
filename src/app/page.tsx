@@ -1,34 +1,36 @@
 import Link from "next/link";
 
 import { AlbumCard } from "@/components/album-card";
+import { ArtistShelfRow } from "@/components/artist-shelf-row";
 import { trackFromFeedWork } from "@/components/player/track";
 import { SearchBar } from "@/components/search-bar";
 import { WorkCard } from "@/components/work-card";
 import {
-  getBrowseAlbums,
-  type AlbumCardData,
+  getBrowseShelves,
+  type BrowseShelves,
 } from "@/lib/albums/public-queries";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   getFeed,
-  getMostPlayed,
+  getMostAired,
   searchWorks,
   type FeedWork,
 } from "@/lib/works/queries";
 
-// Only crown a "Most played" strip once a few works have real listens — a
+// Only crown a "Most Aired" strip once a few works have real listens — a
 // one-item shelf isn't a ranking. Below this it stays hidden (counts still show
 // on every card and song page).
-const MOST_PLAYED_MIN = 3;
+const MOST_AIRED_MIN = 3;
 
 export const metadata = { title: "AIRED — AI-ed and proud" };
 
-// The listener's door, as a label (BROWSE-AS-LABEL). Browse shows a Most-Played
-// strip, then a shelf of ALBUMS (covers that open to their songs), then SINGLES
-// (album-less works as song cards). Searching collapses back to one flat grid of
-// matching works. Public surfaces are live-only (RLS + explicit filters); nothing
-// draft/pending ever appears.
+// The listener's door, as a label (BROWSE-AS-LABEL). Browse leads with a MOST
+// AIRED strip (one cross-artist, mixed row), then ALBUMS and SINGLES — each
+// banded and grouped into one horizontal row PER ARTIST, fronted by the artist's
+// name as a left spine linking to their page. Searching collapses back to one
+// flat grid of matching works. Public surfaces are live-only (RLS + explicit
+// filters); nothing draft/pending/taken-down ever appears.
 export default async function Home({
   searchParams,
 }: {
@@ -40,32 +42,28 @@ export default async function Home({
   const isSearching = q.length > 0;
 
   const supabase = await createClient();
-  // Browse pulls the whole live catalog (the radio queue + the singles split) plus
-  // the album shelf and the most-played strip; Search pulls just the matches.
-  // album_id rides along on the feed, so singles fall out of one query.
-  const [works, albums, user, mostPlayed] = await Promise.all([
+  // Browse pulls the whole live catalog as the shared radio queue, the
+  // artist-grouped ALBUMS + SINGLES shelves, and the Most Aired strip; Search
+  // pulls just the matches and renders one flat grid.
+  const emptyShelves: BrowseShelves = { albumRows: [], singleRows: [] };
+  const [works, shelves, user, mostAired] = await Promise.all([
     isSearching ? searchWorks(supabase, q) : getFeed(supabase),
-    isSearching
-      ? Promise.resolve<AlbumCardData[]>([])
-      : getBrowseAlbums(supabase),
+    isSearching ? Promise.resolve(emptyShelves) : getBrowseShelves(supabase),
     getCurrentUser(),
-    isSearching ? Promise.resolve<FeedWork[]>([]) : getMostPlayed(supabase, 10),
+    isSearching ? Promise.resolve<FeedWork[]>([]) : getMostAired(supabase, 10),
   ]);
 
   // One shared queue: every streamable live work in catalog (radio) order, so
-  // pressing play on any song card — single or most-played — rolls the catalog
+  // pressing play on any song card — single or Most Aired — rolls the catalog
   // onward from there. Album pages build their own album-scoped queue.
   const queue = works
     .map(trackFromFeedWork)
     .filter((t) => t.hlsPlaylistKey)
     .sort((a, b) => a.id - b.id);
 
-  // Singles = album-less live works (a single is a one-track release). Album
-  // songs live behind their cover, not in this flat shelf.
-  const singles = isSearching ? [] : works.filter((w) => w.album_id === null);
-
-  const showMostPlayed = !isSearching && mostPlayed.length >= MOST_PLAYED_MIN;
-  const hasBrowseContent = albums.length > 0 || singles.length > 0;
+  const showMostAired = !isSearching && mostAired.length >= MOST_AIRED_MIN;
+  const hasBrowseContent =
+    shelves.albumRows.length > 0 || shelves.singleRows.length > 0;
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
@@ -83,13 +81,13 @@ export default async function Home({
         <SearchBar initial={q} autoFocus={isSearching} />
       </header>
 
-      {showMostPlayed ? (
+      {showMostAired ? (
         <section className="mb-8 flex flex-col gap-3">
           <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
-            Most played
+            Most Aired
           </h2>
           <ul className="flex gap-4 overflow-x-auto pb-1">
-            {mostPlayed.map((work) => (
+            {mostAired.map((work) => (
               <li key={work.id} className="w-40 shrink-0 sm:w-48">
                 <WorkCard work={work} queue={queue} />
               </li>
@@ -112,33 +110,51 @@ export default async function Home({
         )
       ) : hasBrowseContent ? (
         <div className="flex flex-col gap-10">
-          {albums.length > 0 ? (
-            <section className="flex flex-col gap-3">
+          {shelves.albumRows.length > 0 ? (
+            <section className="flex flex-col gap-4">
               <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
                 Albums
               </h2>
-              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                {albums.map((album) => (
-                  <li key={album.id}>
-                    <AlbumCard album={album} />
-                  </li>
+              <div className="flex flex-col gap-6">
+                {shelves.albumRows.map((row) => (
+                  <ArtistShelfRow
+                    key={row.artistId}
+                    artistId={row.artistId}
+                    artistHandle={row.artistHandle}
+                    artistName={row.artistName}
+                  >
+                    {row.albums.map((album) => (
+                      <li key={album.id} className="w-40 shrink-0 sm:w-48">
+                        <AlbumCard album={album} />
+                      </li>
+                    ))}
+                  </ArtistShelfRow>
                 ))}
-              </ul>
+              </div>
             </section>
           ) : null}
 
-          {singles.length > 0 ? (
-            <section className="flex flex-col gap-3">
+          {shelves.singleRows.length > 0 ? (
+            <section className="flex flex-col gap-4">
               <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
                 Singles
               </h2>
-              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                {singles.map((work) => (
-                  <li key={work.id}>
-                    <WorkCard work={work} queue={queue} />
-                  </li>
+              <div className="flex flex-col gap-6">
+                {shelves.singleRows.map((row) => (
+                  <ArtistShelfRow
+                    key={row.artistId}
+                    artistId={row.artistId}
+                    artistHandle={row.artistHandle}
+                    artistName={row.artistName}
+                  >
+                    {row.singles.map((work) => (
+                      <li key={work.id} className="w-40 shrink-0 sm:w-48">
+                        <WorkCard work={work} queue={queue} />
+                      </li>
+                    ))}
+                  </ArtistShelfRow>
                 ))}
-              </ul>
+              </div>
             </section>
           ) : null}
         </div>
