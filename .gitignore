@@ -41,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# brand: the Geist font is fetched on demand by generate_social.py
+/brand/fonts/
