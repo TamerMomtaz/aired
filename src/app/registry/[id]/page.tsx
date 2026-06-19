@@ -6,7 +6,7 @@ import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
-import { ShareButton } from "@/components/share-button";
+import { ShareSheet } from "@/components/share-sheet";
 import { SongQr } from "@/components/song-qr";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
 import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail";
@@ -15,6 +15,7 @@ import { DiscardButton } from "@/components/works/discard-button";
 import { WorkEditor } from "@/components/works/work-editor";
 import { type ContributorSummary } from "@/lib/agents/actions";
 import { getMyAlbumOptions, type AlbumOption } from "@/lib/albums/queries";
+import { songShareProps } from "@/lib/share/props";
 import { formatCatalogId } from "@/lib/catalog";
 import { formatDuration, formatPlays } from "@/lib/format";
 import { normalizeDescriptors } from "@/lib/ledger/descriptors";
@@ -346,10 +347,8 @@ export default async function WorkPage({
               ) : isOwner ? (
                 <IssueCertButton workId={work.id} />
               ) : null}
-              <ShareButton
-                workId={work.id}
-                title={work.title}
-                contributorNames={contributorNames}
+              <ShareSheet
+                {...songShareProps(work.id, work.title, contributorNames)}
               />
               <SongQr workId={work.id} title={work.title} />
             </div>

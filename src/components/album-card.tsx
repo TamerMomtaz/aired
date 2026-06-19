@@ -7,7 +7,7 @@ import type { AlbumCardData } from "@/lib/albums/public-queries";
 // its songs, the title, the artist (a separate link to /artist/[handle], falling
 // back to the profile id), and the live-song count. The artist link is a sibling
 // of the cover/title links — never nested — so there are no nested anchors
-// (mirrors WorkCard's share-button rule).
+// (mirrors WorkCard's share-trigger rule).
 export function AlbumCard({ album }: { album: AlbumCardData }) {
   const count = album.liveSongCount;
   return (
