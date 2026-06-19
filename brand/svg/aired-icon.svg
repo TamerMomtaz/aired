@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="asset-icon" width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED monogram">
+  <title>AIRED — app icon</title>
+  <defs>
+    <linearGradient id="redFadeI" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="392" y2="0">
+      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
+      <stop offset="0.14" stop-color="#e10600" stop-opacity="1"/>
+      <stop offset="0.86" stop-color="#e10600" stop-opacity="1"/>
+      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#0a0a0a"/>
+
+  <!-- faint sacred-geometry ring(s) -->
+  <circle cx="256" cy="256" r="200" fill="#0d0d0d" stroke="#ededed" stroke-opacity="0.07" stroke-width="2"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#ededed" stroke-opacity="0.04" stroke-width="1.4"/>
+
+  <!-- the A: two legs in red, crossbar = the luminous red line bisecting the circle -->
+  <g fill="none" stroke="#e10600" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256,150 L186,366" stroke-width="19" stroke-opacity="0.92"/>
+    <path d="M256,150 L326,366" stroke-width="19" stroke-opacity="0.92"/>
+  </g>
+  <g stroke="url(#redFadeI)" stroke-linecap="round" fill="none">
+    <line x1="120" y1="256" x2="392" y2="256" stroke-width="34" opacity="0.13"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke-width="24" opacity="0.26"/>
+    <line x1="120" y1="256" x2="392" y2="256" stroke-width="19"/>
+  </g>
+</svg>

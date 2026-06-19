@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="asset-profile" width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AIRED">
+  <title>AIRED — profile mark</title>
+  <defs>
+    <linearGradient id="redFadeP" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="780" y2="0">
+      <stop offset="0" stop-color="#e10600" stop-opacity="0"/>
+      <stop offset="0.16" stop-color="#e10600" stop-opacity="1"/>
+      <stop offset="0.84" stop-color="#e10600" stop-opacity="1"/>
+      <stop offset="1" stop-color="#e10600" stop-opacity="0"/>
+    </linearGradient>
+    <!-- AIRED wordmark, geometric monoline, local box ~404 x 100 -->
+    <g id="airedP" fill="none" stroke="#ededed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8,100 L39,0 L70,100"/>
+      <path d="M20,62 L58,62"/>
+      <path d="M114,0 L114,100"/>
+      <path d="M156,100 L156,0 L190,0 C207,0 207,52 190,52 L156,52"/>
+      <path d="M180,52 L214,100"/>
+      <path d="M302,0 L252,0 L252,100 L302,100"/>
+      <path d="M252,50 L294,50"/>
+      <path d="M340,0 L340,100"/>
+      <path d="M340,0 C384,0 398,22 398,50 C398,78 384,100 340,100"/>
+    </g>
+  </defs>
+
+  <rect width="1080" height="1080" fill="#0a0a0a"/>
+
+  <!-- faint sacred geometry behind -->
+  <g fill="none" stroke="#ededed">
+    <g stroke-opacity="0.05" stroke-width="1.5">
+      <circle cx="540" cy="540" r="160"/>
+      <circle cx="540" cy="540" r="250"/>
+      <circle cx="540" cy="540" r="340"/>
+      <circle cx="540" cy="540" r="430"/>
+    </g>
+    <g stroke-opacity="0.045" stroke-width="1.2">
+      <polygon points="840,540 690,280 390,280 240,540 390,800 690,800"/>
+      <polygon points="800,390 540,240 280,390 280,690 540,840 800,690"/>
+    </g>
+    <line x1="540" y1="70" x2="540" y2="1010" stroke-opacity="0.028" stroke-width="1"/>
+  </g>
+  <!-- faint dial ticks on the outer ring -->
+  <g stroke="#ededed" stroke-opacity="0.07" stroke-width="1.6" stroke-linecap="round">
+    <line x1="540" y1="100" x2="540" y2="124"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(30,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(60,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(90,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(120,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(150,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(180,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(210,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(240,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(270,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(300,540,540)"/>
+    <line x1="540" y1="100" x2="540" y2="124" transform="rotate(330,540,540)"/>
+  </g>
+
+  <!-- wordmark -->
+  <use href="#airedP" transform="translate(210,458.3) scale(1.634)"/>
+
+  <!-- the red line, beneath the wordmark (layered strokes = glow) -->
+  <g stroke="url(#redFadeP)" stroke-linecap="round" fill="none">
+    <line x1="300" y1="662" x2="780" y2="662" stroke-width="22" opacity="0.13"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke-width="13" opacity="0.28"/>
+    <line x1="300" y1="662" x2="780" y2="662" stroke-width="7"/>
+  </g>
+</svg>
