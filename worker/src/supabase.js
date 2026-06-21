@@ -35,6 +35,24 @@ export async function getWork(workId) {
   return data;
 }
 
+// Read a work for the SHARE VIDEO clip (clip.js): the live-status guards
+// (status / taken_down) so a draft / pending / pulled work never gets a public
+// clip, plus the master key (the clip's audio source) and the duration (to clamp
+// the window). Service-role, so it reads any row; the guard is enforced in code.
+export async function getWorkForClip(workId) {
+  const { data, error } = await supabase
+    .from("work")
+    .select(
+      "id, title, status, taken_down, duration_seconds, audio_master_key, hls_playlist_key",
+    )
+    .eq("id", workId)
+    .single();
+  if (error) {
+    throw new Error(`Could not read work ${workId}: ${error.message}`);
+  }
+  return data;
+}
+
 // Sign a temporary URL for the private master so it can be streamed straight to
 // disk (avoids buffering a long master in memory).
 export async function createMasterSignedUrl(path, expiresInSeconds = 600) {

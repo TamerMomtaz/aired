@@ -1,7 +1,12 @@
 // Cloudflare R2 upload via the S3-compatible API.
 
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -26,13 +31,54 @@ export const r2 = new S3Client({
 
 // Upload a Buffer or a Node stream. lib-storage handles multipart for large
 // streamed bodies (e.g. a 12-minute master), so this works for big files too.
-export async function uploadToR2({ bucket, key, body, contentType }) {
+// `contentDisposition` lets the share clip carry a friendly download filename
+// when fetched straight off the CDN.
+export async function uploadToR2({
+  bucket,
+  key,
+  body,
+  contentType,
+  contentDisposition,
+}) {
   const upload = new Upload({
     client: r2,
-    params: { Bucket: bucket, Key: key, Body: body, ContentType: contentType },
+    params: {
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ...(contentDisposition
+        ? { ContentDisposition: contentDisposition }
+        : {}),
+    },
   });
   await upload.done();
   return { bucket, key };
+}
+
+// Stream one R2 object down to a local file (used to pull a song's master so
+// ffmpeg can grab the clip's audio window from a plain local file — the proven
+// transcode path, robust across audio containers). Returns the byte count.
+export async function downloadFromR2({ bucket, key, destPath }) {
+  const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (!res.Body) {
+    throw new Error(`R2 object ${bucket}/${key} returned no body`);
+  }
+  // On Node, the SDK's Body is a Readable stream — pipe it straight to disk.
+  await pipeline(res.Body, createWriteStream(destPath));
+  return { bytes: Number(res.ContentLength ?? 0) };
+}
+
+// Does an object exist? (HeadObject — used to skip re-rendering a cached clip.)
+export async function objectExists({ bucket, key }) {
+  try {
+    await r2.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (err) {
+    const status = err?.$metadata?.httpStatusCode;
+    if (status === 404 || err?.name === "NotFound") return false;
+    throw err;
+  }
 }
 
 // Delete every object under `prefix` in `bucket` (EDIT & TIDY — Discard). Lists
