@@ -55,15 +55,17 @@ export type ShareCardData = {
   url: string;
 };
 
-const BG = "#0a0a0a";
-const FG = "#ededed";
-const MUTED = "#8a8a8a";
-const RED = "#ff2d2d";
-const FONT = "sans-serif";
+// Palette + font are shared with the SHARE VIDEO clip frame (src/lib/share/clip.tsx)
+// so a downloaded MP4 carries the exact same publicity DNA as the image cards.
+export const BG = "#0a0a0a";
+export const FG = "#ededed";
+export const MUTED = "#8a8a8a";
+export const RED = "#ff2d2d";
+export const FONT = "sans-serif";
 
 // names → "Tee Momtaz  ·  Claude  ·  Suno" (soft cap, "+N" tail) so a long
 // lineage still renders on one or two lines. The brief's exact example line.
-function formatNamesLine(names: string[], max = 6): string {
+export function formatNamesLine(names: string[], max = 6): string {
   const visible = names.slice(0, max);
   const extra = names.length - visible.length;
   const head = visible.join("  ·  ");
@@ -71,7 +73,7 @@ function formatNamesLine(names: string[], max = 6): string {
 }
 
 // "https://ai-red.io/registry/1" → "ai-red.io/registry/1".
-function addressOf(url: string): string {
+export function addressOf(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }
 
@@ -93,7 +95,7 @@ function RedBar({ height }: { height: number }) {
   );
 }
 
-function Wordmark({ fontSize }: { fontSize: number }) {
+export function Wordmark({ fontSize }: { fontSize: number }) {
   return (
     <div
       style={{
@@ -112,7 +114,7 @@ function Wordmark({ fontSize }: { fontSize: number }) {
 // Either the Red Line cert pill (certified) or the bare wordmark address (not),
 // so the header's right edge always carries the brand. The full per-subject
 // address is printed in the footer.
-function HeaderMark({
+export function HeaderMark({
   certified,
   fontSize,
 }: {
@@ -152,7 +154,7 @@ function HeaderMark({
   );
 }
 
-function Cover({
+export function Cover({
   data,
   size,
 }: {
@@ -299,7 +301,7 @@ function Tagline({
 // A white quiet-zone QR tile inside a Red Line frame — highest-contrast modules
 // (near-black on white) so a phone reads it off a posted screenshot, the brand
 // living in the frame, not the code (same technique as the /qr poster).
-function QrTile({ dataUri, size }: { dataUri: string; size: number }) {
+export function QrTile({ dataUri, size }: { dataUri: string; size: number }) {
   return (
     <div
       style={{

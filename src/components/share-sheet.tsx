@@ -55,6 +55,8 @@ export function ShareSheet({
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [busy, setBusy] = useState<null | "square" | "story">(null);
   const [downloadError, setDownloadError] = useState(false);
+  const [videoBusy, setVideoBusy] = useState<null | "vertical" | "square">(null);
+  const [videoError, setVideoError] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // While the sheet is open: lock body scroll, close on Escape, focus the close
@@ -127,6 +129,62 @@ export function ShareSheet({
       setDownloadError(true);
     } finally {
       setBusy(null);
+    }
+  }
+
+  // SHARE VIDEO — the only thing that makes a song PLAY in-feed on Reels / TikTok
+  // / IG (links and images can't). The MP4 is rendered + cached on the worker, so
+  // the first save shows "preparing…" while we poll, then it's instant. We prefer
+  // the native share sheet WITH the file (hands it straight to TikTok / saves to
+  // the gallery); otherwise we fall back to a plain download.
+  async function fetchClip(orientation: "vertical" | "square"): Promise<File> {
+    const endpoint = `/share/song/${enc(downloadId)}/video/${orientation}`;
+    const filename = `${filenameBase}-${orientation}.mp4`;
+    const deadline = Date.now() + 100_000; // generous budget for a first render
+    while (Date.now() < deadline) {
+      // The first request kicks the render; while "preparing" we poll.
+      const res = await fetch(endpoint, { cache: "no-store" });
+      if (res.status === 202) {
+        await new Promise((r) => setTimeout(r, 2500));
+        continue;
+      }
+      if (!res.ok) throw new Error("render failed");
+      const blob = await res.blob();
+      return new File([blob], filename, { type: "video/mp4" });
+    }
+    throw new Error("timed out");
+  }
+
+  async function saveVideo(orientation: "vertical" | "square") {
+    if (videoBusy) return;
+    setVideoBusy(orientation);
+    setVideoError(false);
+    try {
+      const file = await fetchClip(orientation);
+      const canShareFiles =
+        typeof navigator !== "undefined" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] });
+      if (canShareFiles) {
+        try {
+          await navigator.share({ files: [file], title: shareTitle, text: shareText });
+        } catch {
+          // User dismissed the share sheet — nothing to do.
+        }
+      } else {
+        const href = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(href);
+      }
+    } catch {
+      setVideoError(true);
+    } finally {
+      setVideoBusy(null);
     }
   }
 
@@ -317,6 +375,50 @@ export function ShareSheet({
                     </p>
                   )}
                 </div>
+
+                {/* Save video — the only way a song PLAYS in-feed on Reels /
+                    TikTok / IG (links + images can't carry sound). Songs only. */}
+                {downloadKind === "song" ? (
+                  <div className="flex flex-col gap-2 border-t border-white/8 pt-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted/70">
+                      Save video — plays with sound
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveVideo("vertical")}
+                        disabled={videoBusy !== null}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/30 bg-cert-red/[0.06] px-3 py-3 text-sm text-foreground transition hover:border-cert-red/50 hover:bg-cert-red/10 disabled:opacity-50"
+                      >
+                        {videoBusy === "vertical" ? <Spinner /> : <VideoIcon />}
+                        {videoBusy === "vertical" ? "Preparing…" : "Reels / TikTok"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveVideo("square")}
+                        disabled={videoBusy !== null}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-foreground transition hover:border-white/25 hover:bg-white/[0.05] disabled:opacity-50"
+                      >
+                        {videoBusy === "square" ? <Spinner /> : <VideoIcon />}
+                        {videoBusy === "square" ? "Preparing…" : "Square (feed)"}
+                      </button>
+                    </div>
+                    {videoError ? (
+                      <p className="text-xs text-cert-red">
+                        Couldn&apos;t make the video. Try again.
+                      </p>
+                    ) : videoBusy ? (
+                      <p className="text-xs text-muted/70">
+                        Preparing your video… the first one takes a few seconds.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted/70">
+                        Save the video, then post to Reels / TikTok — it plays
+                        in‑feed with sound. Link in bio.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>,
             document.body,
@@ -405,6 +507,25 @@ function DownloadIcon() {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function VideoIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="2" y="5" width="14" height="14" rx="3" />
+      <path d="m16 9 6-3.5v13L16 15" />
     </svg>
   );
 }

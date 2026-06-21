@@ -45,4 +45,14 @@ export const config = {
   // The rendition (env-overridable, with the locked defaults from the brief).
   audioBitrate: getOptional("AUDIO_BITRATE", "192k"),
   hlsSegmentSeconds: Number(getOptional("HLS_SEGMENT_SECONDS", "6")),
+
+  // SHARE VIDEO (clip.js) — the downloadable Reels / TikTok MP4 per song.
+  // The app renders the burned-in still frame (cover + named credits + brand);
+  // we fetch it from here, paint the waveform, mux the audio, cache in R2.
+  appOrigin: getOptional("APP_ORIGIN", "https://ai-red.io").replace(/\/+$/, ""),
+  // Default audio window (seconds) and the hard cap — short clips are fast to
+  // render and the right length for Reels / TikTok anyway (brief: ≤30s).
+  clipDefaultSeconds: Number(getOptional("CLIP_DEFAULT_SECONDS", "20")),
+  clipMaxSeconds: Number(getOptional("CLIP_MAX_SECONDS", "30")),
+  clipFps: Number(getOptional("CLIP_FPS", "30")),
 };

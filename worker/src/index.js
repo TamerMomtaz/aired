@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { log, logErr } from "./logger.js";
 import { transcodeWork } from "./transcode.js";
 import { purgeWork } from "./purge.js";
+import { CLIP_ORIENTATIONS, renderShareVideo } from "./clip.js";
 
 // Refuse to expose the endpoint without a secret to guard it.
 if (!config.sharedSecret) {
@@ -18,6 +19,10 @@ if (!config.sharedSecret) {
 
 // One transcode per work_id at a time (guards against a double-trigger).
 const inFlight = new Set();
+
+// One SHARE VIDEO render per (work_id, orientation) at a time — the app may poll
+// and re-dispatch while a render is in flight; this collapses that to one job.
+const clipInFlight = new Set();
 
 function secretOk(provided) {
   if (!provided) return false;
@@ -152,6 +157,79 @@ const server = createServer(async (req, res) => {
           workId,
           error: err?.message ?? "purge failed",
         });
+      }
+    }
+
+    // SHARE VIDEO — render (and cache in R2) a song's Reels / TikTok / IG clip.
+    // Same Bearer-secret guard as /transcode. Body: { work_id, orientation,
+    // start_seconds?, duration_seconds?, force? }. Synchronous like /transcode —
+    // a short clip renders in a few seconds; the app dispatches and polls.
+    if (req.method === "POST" && url.pathname === "/share-video") {
+      if (!secretOk(extractSecret(req))) {
+        return sendJson(res, 401, { ok: false, error: "unauthorized" });
+      }
+
+      let workId = Number(url.searchParams.get("work_id"));
+      let orientation = url.searchParams.get("orientation") ?? "vertical";
+      let startSeconds;
+      let durationSeconds;
+      let force = false;
+      const raw = await readBody(req);
+      if (raw.trim()) {
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return sendJson(res, 400, { ok: false, error: "invalid JSON body" });
+        }
+        if (!workId) workId = Number(parsed.work_id);
+        if (parsed.orientation) orientation = String(parsed.orientation);
+        if (parsed.start_seconds != null) startSeconds = Number(parsed.start_seconds);
+        if (parsed.duration_seconds != null)
+          durationSeconds = Number(parsed.duration_seconds);
+        force = parsed.force === true;
+      }
+
+      if (!Number.isInteger(workId) || workId <= 0) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: "work_id must be a positive integer",
+        });
+      }
+      if (!CLIP_ORIENTATIONS.has(orientation)) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: `orientation must be one of: ${[...CLIP_ORIENTATIONS].join(", ")}`,
+        });
+      }
+
+      const flightKey = `${workId}:${orientation}`;
+      if (clipInFlight.has(flightKey)) {
+        return sendJson(res, 409, {
+          ok: false,
+          error: `clip ${flightKey} is already rendering`,
+        });
+      }
+
+      clipInFlight.add(flightKey);
+      try {
+        const result = await renderShareVideo(workId, {
+          orientation,
+          startSeconds,
+          durationSeconds,
+          force,
+        });
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (err) {
+        logErr(`work=${workId} clip ${orientation} failed`, err);
+        return sendJson(res, 500, {
+          ok: false,
+          workId,
+          orientation,
+          error: err?.message ?? "clip render failed",
+        });
+      } finally {
+        clipInFlight.delete(flightKey);
       }
     }
 

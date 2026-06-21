@@ -64,6 +64,10 @@ never committed (CLAUDE.md §1.7).
 | `TRANSCODE_SHARED_SECRET` | **yes (secret)** | — | guards the HTTP endpoint; `openssl rand -hex 32` |
 | `AUDIO_BITRATE` | no | `192k` | rendition bitrate |
 | `HLS_SEGMENT_SECONDS` | no | `6` | target segment length |
+| `APP_ORIGIN` | no | `https://ai-red.io` | where SHARE VIDEO fetches the burned-in still frame |
+| `CLIP_DEFAULT_SECONDS` | no | `20` | SHARE VIDEO audio window |
+| `CLIP_MAX_SECONDS` | no | `30` | SHARE VIDEO window cap |
+| `CLIP_FPS` | no | `30` | SHARE VIDEO frame rate |
 | `PORT` | no | `8080` | Railway injects this |
 
 > The two R2 buckets (`aired-masters`, `aired-hls`) must already exist in the R2
@@ -121,6 +125,44 @@ song's image. The keys are derived from `work_id`, so the purge needs no DB row
 ```json
 { "ok": true, "workId": 23, "mastersDeleted": 1, "hlsDeleted": 57, "sourceDeleted": 1 }
 ```
+
+## Render a share video (Reels / TikTok / IG)
+
+Instagram & TikTok take no links and only **video** carries audio, so to share a
+song *with sound* we render a real MP4. The web app's share sheet ("Save video")
+dispatches this endpoint (`src/lib/share/video.ts`); the clip is rendered **once**
+and cached in R2, then served off the CDN. Same `Authorization: Bearer` guard.
+
+```bash
+curl -X POST "$WORKER_URL/share-video" \
+  -H "Authorization: Bearer $TRANSCODE_SHARED_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"work_id": 1, "orientation": "vertical"}'
+```
+
+`orientation` is `vertical` (1080×1920, Reels / TikTok / Stories) or `square`
+(1080×1080, IG feed). Optional: `start_seconds`, `duration_seconds` (≤30),
+`force` (re-render past the cache). One run:
+
+1. Read the `work` row and **guard it is live & not taken down** — a draft /
+   pending / pulled song never gets a public clip.
+2. If the clip is already cached in R2, return immediately.
+3. Fetch the burned-in still frame from the app
+   (`{APP_ORIGIN}/share/song/<id>/clip-frame/<orientation>` — the SAME credits as
+   the image cards) and read the waveform band from its `X-Clip-Band` header.
+4. Pull the song's master from `aired-masters` (the clip's audio source).
+5. `ffmpeg` → looped frame + glowing cert-red `showwaves` waveform painted into
+   the band + the audio window → **H.264/AAC MP4** (yuv420p + faststart).
+6. Cache it in `aired-hls` at `work/<id>/share/clip-<orientation>.mp4`.
+
+```json
+{ "ok": true, "workId": 1, "orientation": "vertical",
+  "key": "work/1/share/clip-vertical.mp4", "bytes": 2317644, "durationSeconds": 20,
+  "elapsedMs": 6120, "cached": false }
+```
+
+A second request for a clip already rendering gets `409` (the app polls and the
+worker dedups by `work_id` + `orientation`).
 
 ### CLI (no HTTP, no shared secret)
 
