@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { InstallCoach } from "@/components/install/install-coach";
 import { SwRegister } from "@/components/install/sw-register";
+import { OfflineInit } from "@/components/offline/offline-init";
 import { Onboarding } from "@/components/onboarding/onboarding";
 import { NowPlayingBar } from "@/components/player/now-playing-bar";
 import { PlayerProvider } from "@/components/player/player-provider";
@@ -90,6 +91,7 @@ export default function RootLayout({
             onboarding takes over the whole screen for a brand-new visitor. */}
         <Onboarding />
         <SwRegister />
+        <OfflineInit />
         <InstallCoach />
         {/* Vercel Web Analytics — privacy-friendly page views + custom events.
             Renders nothing; injects the collector script. Data only flows once
