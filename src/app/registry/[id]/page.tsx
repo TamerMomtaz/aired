@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
+import { DownloadButton } from "@/components/offline/download-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
 import { ShareSheet } from "@/components/share-sheet";
@@ -351,6 +352,19 @@ export default async function WorkPage({
                 {...songShareProps(work.id, work.title, contributorNames)}
               />
               <SongQr workId={work.id} title={work.title} />
+              {work.hls_playlist_key ? (
+                <DownloadButton
+                  input={{
+                    id: work.id,
+                    title: work.title,
+                    hlsPlaylistKey: work.hls_playlist_key,
+                    artworkUrl: work.artwork_url,
+                    durationSeconds: work.duration_seconds,
+                    lyrics: work.lyrics,
+                    contributors,
+                  }}
+                />
+              ) : null}
             </div>
           ) : null}
 

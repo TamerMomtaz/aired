@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { DownloadButton } from "@/components/offline/download-button";
 import { usePlayer, usePlayerClock } from "@/components/player/player-provider";
 import { formatCatalogId } from "@/lib/catalog";
 
@@ -170,6 +171,20 @@ export function NowPlayingBar() {
           </Link>
 
           <div className="flex shrink-0 items-center gap-1">
+            {current.hlsPlaylistKey ? (
+              <DownloadButton
+                variant="compact"
+                input={{
+                  id: current.id,
+                  title: current.title,
+                  hlsPlaylistKey: current.hlsPlaylistKey,
+                  artworkUrl: current.artworkUrl,
+                  durationSeconds: current.durationSeconds,
+                  lyrics: null,
+                  contributors: current.contributors,
+                }}
+              />
+            ) : null}
             <button
               type="button"
               onClick={player.prev}

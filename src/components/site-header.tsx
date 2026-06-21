@@ -41,6 +41,7 @@ export async function SiteHeader() {
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
           <NavLink href="/">Listen</NavLink>
+          <NavLink href="/downloads">Downloads</NavLink>
 
           {profile?.is_admin ? (
             <NavLink href="/review">
