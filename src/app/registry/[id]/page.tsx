@@ -7,6 +7,8 @@ import { IssueCertButton } from "@/components/issue-cert-button";
 import { DownloadButton } from "@/components/offline/download-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
+import { MoreOnAired } from "@/components/registry/more-on-aired";
+import { PlayHero } from "@/components/registry/play-hero";
 import { ShareSheet } from "@/components/share-sheet";
 import { SongQr } from "@/components/song-qr";
 import { VolleyEditor } from "@/components/ledger/volley-editor";
@@ -250,8 +252,107 @@ export default async function WorkPage({
     albumOptions = await getMyAlbumOptions(supabase, work.creator_id);
   }
 
+  // A live, streamable track viewed by anyone (most arrivals are share-card taps,
+  // 94% mobile) gets the CONVERSION layout: PLAY is the hero, above the fold. A
+  // draft / pending / taken-down / not-yet-streaming work keeps the management
+  // header below (owner-only by RLS for non-live), so those flows are untouched.
+  const isLiveStreamable =
+    work.status === "live" && !takenDown && !!work.hls_playlist_key;
+
+  // Where pressing play drops into the catalog queue (mirrors PlayerStage): play
+  // "from here" onward, or a queue of just this track when it isn't in the feed.
+  const heroFound = queue.findIndex((t) => t.id === work.id);
+  const heroQueue = heroFound >= 0 ? queue : [track];
+  const heroStartIndex = heroFound >= 0 ? heroFound : 0;
+
+  // ONE CLEAR NEXT STEP: a few OTHER live songs (never this one) for the "More on
+  // AIRED" strip, and one quiet path deeper — the album this song sits in, else
+  // its artist. The feed is live + not-taken-down, so nothing unpublished surfaces.
+  const moreWorks = isLiveStreamable
+    ? feed.filter((w) => w.id !== work.id && !!w.hls_playlist_key).slice(0, 8)
+    : [];
+
+  let deeper: { href: string; label: string } | null = null;
+  if (isLiveStreamable) {
+    if (work.album_id) {
+      const { data: album } = await supabase
+        .from("album")
+        .select("title")
+        .eq("id", work.album_id)
+        .maybeSingle();
+      if (album?.title) {
+        deeper = {
+          href: `/album/${work.album_id}`,
+          label: `Hear the album · ${album.title}`,
+        };
+      }
+    }
+    if (!deeper && work.creator_id) {
+      // profile is public-read by RLS, so an anon arrival gets the maker's name.
+      const { data: artist } = await supabase
+        .from("profile")
+        .select("display_name, handle")
+        .eq("id", work.creator_id)
+        .maybeSingle();
+      const name = (artist?.display_name ?? "").trim() || "this artist";
+      const ref = artist?.handle ?? work.creator_id;
+      deeper = { href: `/artist/${ref}`, label: `More from ${name}` };
+    }
+  }
+
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10">
+    <main
+      className={`mx-auto w-full max-w-3xl flex-1 px-5 ${
+        isLiveStreamable ? "pb-12 pt-6" : "py-10"
+      }`}
+    >
+      {isLiveStreamable ? (
+        /* ARRIVAL HERO — whisper → title → named credits → a big, unmissable
+           PLAY over the artwork. The first ~5 seconds point at one action: hear
+           the song. */
+        <section className="mb-8 flex flex-col items-center gap-4 text-center">
+          <p className="text-xs text-muted/70">
+            Music credited to carbon + silicon, by name.
+          </p>
+          <WorkTitle
+            id={work.id}
+            title={work.title}
+            size="lg"
+            className="items-center"
+          />
+          {contributors.length > 0 ? (
+            <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-muted">
+              {contributors.map((c, i) => (
+                <span
+                  key={c.profile_slug ?? c.name}
+                  className="inline-flex items-center gap-2"
+                >
+                  {i > 0 ? (
+                    <span aria-hidden className="text-muted/40">
+                      ·
+                    </span>
+                  ) : null}
+                  {c.profile_slug ? (
+                    <Link
+                      href={`/agent/${c.profile_slug}`}
+                      className="transition hover:text-foreground"
+                    >
+                      {c.name}
+                    </Link>
+                  ) : (
+                    <span>{c.name}</span>
+                  )}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          <PlayHero
+            track={track}
+            queue={heroQueue}
+            startIndex={heroStartIndex}
+          />
+        </section>
+      ) : (
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start">
         {work.artwork_url ? (
           <Image
@@ -393,6 +494,7 @@ export default async function WorkPage({
           ) : null}
         </div>
       </header>
+      )}
 
       {/* Hear it → read it → see who made it: the player, then the synced
           lyrics (and the owner's tap-sync editor), then the ledger. */}
@@ -402,6 +504,85 @@ export default async function WorkPage({
         lyrics={work.lyrics}
         isOwner={isOwner}
       />
+
+      {/* On the conversion layout the chrome (cert · share · save · owner tools)
+          rides BELOW the player — secondary to pressing play. The draft/pending
+          layout keeps all of this in its header above (untouched). */}
+      {isLiveStreamable ? (
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-muted">
+            <span className="text-muted/70">
+              {formatDuration(work.duration_seconds)}
+            </span>
+            <span aria-hidden className="text-muted/40">
+              ·
+            </span>
+            <span className="text-muted/70">{formatPlays(playCount)}</span>
+            {isCertified ? (
+              <Link
+                href={`/cert/${work.id}`}
+                className="rounded-full border border-cert-red/40 px-2.5 py-0.5 uppercase tracking-[0.14em] text-cert-red transition hover:bg-cert-red/10"
+              >
+                Red Line
+              </Link>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {!isCertified && isOwner ? (
+              <IssueCertButton workId={work.id} />
+            ) : null}
+            <ShareSheet
+              {...songShareProps(work.id, work.title, contributorNames)}
+            />
+            <SongQr workId={work.id} title={work.title} />
+            <DownloadButton
+              input={{
+                id: work.id,
+                title: work.title,
+                hlsPlaylistKey: work.hls_playlist_key,
+                artworkUrl: work.artwork_url,
+                durationSeconds: work.duration_seconds,
+                lyrics: work.lyrics,
+                contributors,
+              }}
+            />
+          </div>
+
+          {isOwner ? (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <WorkEditor
+                workId={work.id}
+                initialTitle={work.title}
+                initialDescriptors={descriptors}
+                initialLyrics={work.lyrics}
+                initialArtworkUrl={work.artwork_url}
+                initialAlbumId={work.album_id}
+                albums={albumOptions}
+              />
+              <DiscardButton
+                workId={work.id}
+                status={work.status}
+                playCount={playCount}
+                certified={isCertified}
+                redirectTo="/manage"
+              />
+            </div>
+          ) : null}
+
+          {isAdmin ? (
+            <AdminTakedownControls
+              workId={work.id}
+              takenDown={takenDown}
+              reason={work.takedown_reason ?? null}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {isLiveStreamable ? (
+        <MoreOnAired works={moreWorks} queue={queue} deeper={deeper} />
+      ) : null}
 
       <section className="mb-8 flex flex-col gap-3">
         <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
