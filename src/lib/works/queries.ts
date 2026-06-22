@@ -24,6 +24,12 @@ export type FeedWork = {
   // feed so Browse can split the catalog into an album shelf + a singles shelf
   // (BROWSE-AS-LABEL) without a second query. Cards ignore it.
   album_id: string | null;
+  // The owner-set teaser window for the share video (the per-song Reels / TikTok
+  // clip). Carried here so the /share/song/[id]/video route can build the
+  // versioned clip key without a second read; cards ignore it. Null → the
+  // worker's default window (start 0, length 40).
+  clip_start_seconds: number | null;
+  clip_length_seconds: number | null;
   contributors: { name: string; profile_slug: string | null }[];
   // Real listens, recorded server-side (src/lib/plays). Denormalized onto `work`
   // and kept exact by a trigger, so it rides free with every work select — no
@@ -47,13 +53,15 @@ type WorkRow = {
   hls_playlist_key: string | null;
   album_id: string | null;
   play_count: number | null;
+  clip_start_seconds: number | null;
+  clip_length_seconds: number | null;
   public_volley: Array<{
     agent: { name: string; profile_slug: string | null } | null;
   }>;
 };
 
 const WORK_SELECT =
-  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, album_id, play_count, public_volley(agent(name, profile_slug))";
+  "id, title, artwork_url, duration_seconds, red_line_certified, created_at, hls_playlist_key, album_id, play_count, clip_start_seconds, clip_length_seconds, public_volley(agent(name, profile_slug))";
 
 // A single agent may appear on several volleys per work; collapse by slug-or-name
 // so the contributor line / chips don't repeat. Generic over the agent shape so
@@ -86,6 +94,8 @@ function shape(row: WorkRow): FeedWork {
     created_at: row.created_at,
     hls_playlist_key: row.hls_playlist_key,
     album_id: row.album_id,
+    clip_start_seconds: row.clip_start_seconds,
+    clip_length_seconds: row.clip_length_seconds,
     playCount: row.play_count ?? 0,
     contributors: dedupeContributors(row.public_volley),
   };

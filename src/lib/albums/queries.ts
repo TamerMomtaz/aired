@@ -72,6 +72,12 @@ export type ManageWork = {
   descriptors: string[];
   lyrics: string | null;
   artworkUrl: string | null;
+  // The share-video teaser window (PART A): which slice becomes this song's
+  // Reels / TikTok clip. durationSeconds is the ceiling shown next to the control
+  // so the owner knows where the song ends; null until the work is transcoded.
+  durationSeconds: number | null;
+  clipStartSeconds: number | null;
+  clipLengthSeconds: number | null;
   // Discard confirm-level gating: a live work, or one with plays / a minted Red
   // Line, needs the stronger confirm.
   playCount: number;
@@ -99,6 +105,9 @@ type WorkRow = {
   created_at: string;
   descriptors: string[] | null;
   lyrics: string | null;
+  duration_seconds: number | null;
+  clip_start_seconds: number | null;
+  clip_length_seconds: number | null;
   play_count: number | null;
   red_line_certified: boolean | null;
   taken_down: boolean | null;
@@ -123,7 +132,7 @@ export async function getManageData(
     supabase
       .from("work")
       .select(
-        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, play_count, red_line_certified, taken_down, takedown_reason",
+        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, duration_seconds, clip_start_seconds, clip_length_seconds, play_count, red_line_certified, taken_down, takedown_reason",
       )
       .eq("creator_id", userId)
       .order("id", { ascending: false }),
@@ -176,6 +185,9 @@ export async function getManageData(
     descriptors: normalizeDescriptors(w.descriptors),
     lyrics: w.lyrics,
     artworkUrl: w.artwork_url,
+    durationSeconds: w.duration_seconds,
+    clipStartSeconds: w.clip_start_seconds,
+    clipLengthSeconds: w.clip_length_seconds,
     playCount: w.play_count ?? 0,
     certified: !!w.red_line_certified,
     takenDown: !!w.taken_down,

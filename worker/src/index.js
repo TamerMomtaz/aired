@@ -162,8 +162,10 @@ const server = createServer(async (req, res) => {
 
     // SHARE VIDEO — render (and cache in R2) a song's Reels / TikTok / IG clip.
     // Same Bearer-secret guard as /transcode. Body: { work_id, orientation,
-    // start_seconds?, duration_seconds?, force? }. Synchronous like /transcode —
-    // a short clip renders in a few seconds; the app dispatches and polls.
+    // force? }. The teaser WINDOW is read authoritatively from the work row
+    // (clip_start_seconds / clip_length_seconds) and clamped in renderShareVideo —
+    // the client never supplies it. Synchronous like /transcode — a short clip
+    // renders in a few seconds; the app dispatches and polls.
     if (req.method === "POST" && url.pathname === "/share-video") {
       if (!secretOk(extractSecret(req))) {
         return sendJson(res, 401, { ok: false, error: "unauthorized" });
@@ -171,8 +173,6 @@ const server = createServer(async (req, res) => {
 
       let workId = Number(url.searchParams.get("work_id"));
       let orientation = url.searchParams.get("orientation") ?? "vertical";
-      let startSeconds;
-      let durationSeconds;
       let force = false;
       const raw = await readBody(req);
       if (raw.trim()) {
@@ -184,9 +184,6 @@ const server = createServer(async (req, res) => {
         }
         if (!workId) workId = Number(parsed.work_id);
         if (parsed.orientation) orientation = String(parsed.orientation);
-        if (parsed.start_seconds != null) startSeconds = Number(parsed.start_seconds);
-        if (parsed.duration_seconds != null)
-          durationSeconds = Number(parsed.duration_seconds);
         force = parsed.force === true;
       }
 
@@ -213,12 +210,7 @@ const server = createServer(async (req, res) => {
 
       clipInFlight.add(flightKey);
       try {
-        const result = await renderShareVideo(workId, {
-          orientation,
-          startSeconds,
-          durationSeconds,
-          force,
-        });
+        const result = await renderShareVideo(workId, { orientation, force });
         return sendJson(res, 200, { ok: true, ...result });
       } catch (err) {
         logErr(`work=${workId} clip ${orientation} failed`, err);

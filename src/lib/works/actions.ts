@@ -515,3 +515,47 @@ export async function discardWork(
   }
   return { ok: true };
 }
+
+export type SetTeaserClipResult = { ok: true } | { ok: false; error: string };
+
+// Art-direct a song's share-video teaser window (PART A). Writes the two per-song
+// columns through work_owner_upd (creator_id = auth.uid()), so this is owner-only
+// exactly like the other work edits — a non-owner's UPDATE matches no rows. We
+// light-sanitize here for clean storage, a clean cache key, and instant UI
+// feedback, but the WORKER re-clamps against the real duration and is the
+// authority; it never trusts these values. No cache bust is needed: the clip's R2
+// key is versioned by start+length, so the next share recomputes a new key and
+// re-renders the new window automatically (a stale clip is never served).
+export async function setTeaserClip(
+  workId: number,
+  input: { startSeconds: number; lengthSeconds: number },
+): Promise<SetTeaserClipResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to set the teaser clip." };
+  }
+
+  const start = Number.isFinite(input.startSeconds)
+    ? Math.max(0, Math.round(input.startSeconds))
+    : 0;
+  const lengthRaw = Number.isFinite(input.lengthSeconds)
+    ? Math.round(input.lengthSeconds)
+    : 40;
+  // Bound length to [20, 50] (brief). Start's end-relative clamp is the worker's
+  // job — it has the authoritative duration.
+  const length = Math.min(50, Math.max(20, lengthRaw));
+
+  const { error } = await supabase
+    .from("work")
+    .update({ clip_start_seconds: start, clip_length_seconds: length })
+    .eq("id", workId);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/manage");
+  return { ok: true };
+}

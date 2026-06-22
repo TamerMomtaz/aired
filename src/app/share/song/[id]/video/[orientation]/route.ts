@@ -1,4 +1,6 @@
 import {
+  CLIP_LENGTH_DEFAULT,
+  CLIP_START_DEFAULT,
   dispatchShareVideo,
   isClipOrientation,
   shareClipFilename,
@@ -54,7 +56,13 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
 
-  const url = shareClipUrl(workId, orientation);
+  // The CDN key is versioned by the owner's teaser window, so a changed window
+  // resolves to a different (not-yet-cached) URL → re-render — never the stale
+  // clip. The worker reads + clamps the same columns when it renders, so its key
+  // matches this one. Null columns coalesce to the shared default window.
+  const clipStart = work.clip_start_seconds ?? CLIP_START_DEFAULT;
+  const clipLength = work.clip_length_seconds ?? CLIP_LENGTH_DEFAULT;
+  const url = shareClipUrl(workId, orientation, clipStart, clipLength);
   if (!url) {
     return new Response(
       JSON.stringify({ error: "streaming not configured" }),

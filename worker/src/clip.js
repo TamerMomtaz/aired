@@ -26,17 +26,75 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { config } from "./config.js";
-import { log } from "./logger.js";
+import { log, logErr } from "./logger.js";
 import { renderShareClip } from "./ffmpeg.js";
-import { downloadFromR2, objectExists, uploadToR2 } from "./r2.js";
+import {
+  deleteByPrefixExcept,
+  downloadFromR2,
+  objectExists,
+  uploadToR2,
+} from "./r2.js";
 import { getWorkForClip } from "./supabase.js";
 
 export const CLIP_ORIENTATIONS = new Set(["vertical", "square"]);
 
-// R2 key for a cached clip (public CDN bucket). Keyed by song id + format, so it
-// is generated once and reused (brief).
-export function clipKey(workId, orientation) {
-  return `work/${workId}/share/clip-${orientation}.mp4`;
+// Teaser-clip window contract (per-song, art-directed in /manage). These MUST
+// stay in lockstep with the app — src/lib/share/video.ts (key + defaults) — so
+// both sides compute the SAME cache key and the same fallback window:
+//   • a song that never set a window renders start 0, length 40
+//   • length is bounded to [20, 50]; start leaves ≥5s of song after it; the
+//     window is end-trimmed so it can never run past the real duration.
+const DEFAULT_CLIP_START = 0;
+const DEFAULT_CLIP_LENGTH = 40;
+const MIN_CLIP_LENGTH = 20;
+const MAX_CLIP_LENGTH = 50;
+const MIN_CLIP_TAIL = 5;
+
+// R2 key for a cached clip (public CDN bucket), VERSIONED by the chosen window.
+// Keying by start+length is the invalidation mechanism: change the teaser and the
+// key changes, so the previous clip is structurally never served (no delete call
+// to fail). MUST match the app (src/lib/share/video.ts shareClipKey). The window
+// values here are the RAW stored columns coalesced to the defaults (NOT the
+// clamped ones), so the app can reproduce the key without sharing the clamp.
+export function clipKey(workId, orientation, startSeconds, lengthSeconds) {
+  return `work/${workId}/share/clip-${orientation}-s${startSeconds}-l${lengthSeconds}.mp4`;
+}
+
+// The key-space prefix covering ALL of a song's clips of one orientation — the
+// new versioned ones AND the pre-versioning clip-{orientation}.mp4 — used to
+// sweep stale windows once the current one is cached. "vertical" / "square" are
+// not prefixes of each other, so this stays orientation-scoped.
+function clipOrientationPrefix(workId, orientation) {
+  return `work/${workId}/share/clip-${orientation}`;
+}
+
+// Clamp the owner's requested window to a safe slice that never runs past the
+// song (brief, Part A). The worker is authoritative — it re-clamps against the
+// REAL duration_seconds on the row and never trusts a client value:
+//   start  = clamp(clip_start_seconds, 0, max(0, duration - 5))
+//   length = clamp(clip_length_seconds, 20, 50)
+//   if (start + length > duration) length = duration - start   // end-trim wins
+// duration unknown (a row mid-transcode) → skip the end-relative parts and let
+// ffmpeg's -shortest backstop trim a window longer than the audio.
+function clampClipWindow(rawStart, rawLength, durationSeconds) {
+  let length = Math.round(rawLength ?? DEFAULT_CLIP_LENGTH);
+  if (!Number.isFinite(length)) length = DEFAULT_CLIP_LENGTH;
+  length = Math.min(MAX_CLIP_LENGTH, Math.max(MIN_CLIP_LENGTH, length));
+
+  let start = Math.round(rawStart ?? DEFAULT_CLIP_START);
+  if (!Number.isFinite(start)) start = DEFAULT_CLIP_START;
+  start = Math.max(0, start);
+
+  const dur =
+    Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? Math.round(durationSeconds)
+      : null;
+  if (dur != null) {
+    start = Math.min(start, Math.max(0, dur - MIN_CLIP_TAIL));
+    if (start + length > dur) length = dur - start; // end-trim wins
+  }
+
+  return { start, length: Math.max(1, length) };
 }
 
 // AIRED-#### download filename (zero-pad to 4, grows past 9999 — CLAUDE.md §2).
@@ -56,16 +114,9 @@ function parseRect(value, keys) {
   return Object.fromEntries(keys.map((k, i) => [k, parts[i]]));
 }
 
-// Clamp the requested window to a sane, short clip (brief: ≤30s). A song shorter
-// than the window is handled by ffmpeg's -shortest, so no need to know duration.
-function clampDuration(requested) {
-  const d = Number.isFinite(requested) ? requested : config.clipDefaultSeconds;
-  return Math.min(config.clipMaxSeconds, Math.max(3, Math.round(d)));
-}
-
 export async function renderShareVideo(
   workId,
-  { orientation = "vertical", startSeconds, durationSeconds, force = false } = {},
+  { orientation = "vertical", force = false } = {},
 ) {
   const startedAt = Date.now();
   if (!CLIP_ORIENTATIONS.has(orientation)) {
@@ -83,19 +134,30 @@ export async function renderShareVideo(
     throw new Error(`work ${workId} has no audio master — nothing to clip`);
   }
 
-  const key = clipKey(workId, orientation);
+  // The teaser window is read from the WORK ROW (Part A) — never from the caller.
+  // The key uses the raw stored columns (coalesced to the defaults) so the app
+  // reproduces it; the actual render uses the clamped window below.
+  const keyStart = work.clip_start_seconds ?? DEFAULT_CLIP_START;
+  const keyLength = work.clip_length_seconds ?? DEFAULT_CLIP_LENGTH;
+  const key = clipKey(workId, orientation, keyStart, keyLength);
 
-  // Cache hit → reuse (rendered once, reused on repeat downloads).
+  // Cache hit → reuse (rendered once, reused on repeat downloads of this window).
   if (!force && (await objectExists({ bucket: config.r2HlsBucket, key }))) {
     log(`work=${workId} clip ${orientation} cache hit → ${key}`);
     return { workId, orientation, key, cached: true };
   }
 
-  const start = Math.max(0, Number.isFinite(startSeconds) ? startSeconds : 0);
-  const dur = clampDuration(durationSeconds);
+  // Clamp authoritatively against the real duration so the window never runs past
+  // the end (brief, Part A — songs range 94s..652s here).
+  const { start, length: dur } = clampClipWindow(
+    work.clip_start_seconds,
+    work.clip_length_seconds,
+    work.duration_seconds,
+  );
 
   log(
-    `work=${workId} render clip ${orientation} window=${start}..${start + dur}s`,
+    `work=${workId} render clip ${orientation} window=${start}..${start + dur}s ` +
+      `(requested s${keyStart} l${keyLength}, duration=${work.duration_seconds ?? "?"}s)`,
   );
 
   const tmp = await mkdtemp(join(tmpdir(), `aired-clip-${workId}-${orientation}-`));
@@ -163,6 +225,23 @@ export async function renderShareVideo(
       contentType: "video/mp4",
       contentDisposition: `attachment; filename="${catalogId(workId)}-${orientation}.mp4"`,
     });
+
+    // 7. Now the current window is safely cached, sweep this song's STALE clips of
+    // the same orientation (older windows + any pre-versioning clip-*.mp4) so they
+    // don't accumulate. Best-effort: the app only ever asks for the current key, so
+    // a failure here just leaves a harmless orphan — never a stale clip served.
+    try {
+      const swept = await deleteByPrefixExcept({
+        bucket: config.r2HlsBucket,
+        prefix: clipOrientationPrefix(workId, orientation),
+        exceptKey: key,
+      });
+      if (swept > 0) {
+        log(`work=${workId} swept ${swept} stale ${orientation} clip(s)`);
+      }
+    } catch (err) {
+      logErr(`work=${workId} stale ${orientation} clip sweep failed (ignored)`, err);
+    }
 
     const elapsedMs = Date.now() - startedAt;
     log(
