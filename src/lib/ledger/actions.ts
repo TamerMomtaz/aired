@@ -131,3 +131,68 @@ export async function declareVolley(
     },
   };
 }
+
+export type EditVolleyInput = {
+  volleyId: string;
+  workId: number;
+  role: VolleyRole;
+  origin: VolleyOrigin;
+  deltaType: DeltaType;
+};
+
+export type EditVolleyResult = { ok: true } | { ok: false; error: string };
+
+// Correct the PUBLIC SHAPE of an existing volley — role / origin / delta_type.
+// These are skeleton fields only: they are NOT part of the sealed craft and
+// never feed provenanceHash(), so editing them leaves private_volley and its
+// private_hash untouched — no re-seal, the Red Line stays intact (a mislabel is
+// a five-second fix, never "start over"). RLS (public_volley_owner_upd) scopes
+// the write to the work's owner; the enforce_volley_origin trigger is the
+// structural backstop against an origin that contradicts the contributor type.
+export async function editVolley(
+  input: EditVolleyInput,
+): Promise<EditVolleyResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to edit a volley." };
+  }
+
+  // Validate the shape vocabulary (reachable via direct POST).
+  if (!(VOLLEY_ROLES as readonly string[]).includes(input.role)) {
+    return { ok: false, error: "Unknown role." };
+  }
+  if (!(VOLLEY_ORIGINS as readonly string[]).includes(input.origin)) {
+    return { ok: false, error: "Unknown origin." };
+  }
+  if (!(DELTA_TYPES as readonly string[]).includes(input.deltaType)) {
+    return { ok: false, error: "Unknown delta type." };
+  }
+
+  // Skeleton-only update. agent_id, work_id, seq, private_hash and the sealed
+  // twin are never touched here.
+  const { data, error } = await supabase
+    .from("public_volley")
+    .update({
+      role: input.role,
+      origin: input.origin,
+      delta_type: input.deltaType,
+    })
+    .eq("id", input.volleyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  if (!data) {
+    // RLS returned no row: not the work's owner, or the volley is gone.
+    return { ok: false, error: "You can only edit volleys on your own work." };
+  }
+
+  revalidatePath(`/registry/${input.workId}`);
+  revalidatePath("/registry");
+  return { ok: true };
+}

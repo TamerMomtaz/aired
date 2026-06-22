@@ -588,7 +588,12 @@ export default async function WorkPage({
         <h2 className="text-xs uppercase tracking-[0.18em] text-muted/70">
           The Volley Ledger
         </h2>
-        <VolleyTrail volleys={volleys} descriptors={descriptors} />
+        <VolleyTrail
+          volleys={volleys}
+          descriptors={descriptors}
+          canEdit={isOwner}
+          workId={work.id}
+        />
       </section>
 
       {isOwner ? (
