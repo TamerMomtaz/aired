@@ -81,7 +81,7 @@ export function WorkCard({
       <div className="flex flex-col gap-2">
         <Link
           href={`/registry/${work.id}`}
-          className="block h-10 overflow-hidden transition hover:opacity-90"
+          className="block h-[3.75rem] overflow-hidden transition hover:opacity-90"
         >
           <WorkTitle id={work.id} title={work.title} size="sm" />
         </Link>
