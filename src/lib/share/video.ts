@@ -13,9 +13,24 @@ export function isClipOrientation(v: string): v is ClipOrientation {
   return (CLIP_ORIENTATIONS as string[]).includes(v);
 }
 
-// R2 key for a cached clip — MUST match the worker (worker/src/clip.js clipKey).
-export function shareClipKey(workId: number, orientation: ClipOrientation): string {
-  return `work/${workId}/share/clip-${orientation}.mp4`;
+// Default teaser window for a song that never set one (start 0, length 40). MUST
+// match the worker (worker/src/clip.js DEFAULT_CLIP_START / DEFAULT_CLIP_LENGTH)
+// so both sides coalesce the (nullable) columns into the SAME cache key.
+export const CLIP_START_DEFAULT = 0;
+export const CLIP_LENGTH_DEFAULT = 40;
+
+// R2 key for a cached clip, VERSIONED by the teaser window — MUST match the
+// worker (worker/src/clip.js clipKey). Keying by start+length is how a changed
+// teaser self-invalidates: a new window is a new key, so the previous clip is
+// structurally never served (no delete to fail). The values are the RAW stored
+// columns coalesced to the defaults — exactly what the worker uses for the key.
+export function shareClipKey(
+  workId: number,
+  orientation: ClipOrientation,
+  startSeconds: number,
+  lengthSeconds: number,
+): string {
+  return `work/${workId}/share/clip-${orientation}-s${startSeconds}-l${lengthSeconds}.mp4`;
 }
 
 // The clip's public CDN URL (served from R2, zero-egress — Rule 6), or null when
@@ -23,8 +38,12 @@ export function shareClipKey(workId: number, orientation: ClipOrientation): stri
 export function shareClipUrl(
   workId: number,
   orientation: ClipOrientation,
+  startSeconds: number,
+  lengthSeconds: number,
 ): string | null {
-  return buildStreamUrl(shareClipKey(workId, orientation));
+  return buildStreamUrl(
+    shareClipKey(workId, orientation, startSeconds, lengthSeconds),
+  );
 }
 
 // "AIRED-0001-vertical.mp4" — the friendly saved filename.
@@ -33,27 +52,6 @@ export function shareClipFilename(
   orientation: ClipOrientation,
 ): string {
   return `${formatCatalogId(workId)}-${orientation}.mp4`;
-}
-
-// Is the clip already cached on the CDN? A 1-byte ranged GET probes existence
-// without pulling the whole file (HEAD isn't guaranteed on the r2.dev domain).
-export async function shareClipExists(
-  workId: number,
-  orientation: ClipOrientation,
-): Promise<boolean> {
-  const url = shareClipUrl(workId, orientation);
-  if (!url) return false;
-  try {
-    const res = await fetch(url, {
-      headers: { Range: "bytes=0-0" },
-      cache: "no-store",
-    });
-    // Drain the tiny body so the socket can be reused.
-    await res.arrayBuffer().catch(() => {});
-    return res.ok; // 200 or 206
-  } catch {
-    return false;
-  }
 }
 
 // Fire-and-forget dispatch to the worker to render + cache the clip. Mirrors

@@ -37,13 +37,15 @@ export async function getWork(workId) {
 
 // Read a work for the SHARE VIDEO clip (clip.js): the live-status guards
 // (status / taken_down) so a draft / pending / pulled work never gets a public
-// clip, plus the master key (the clip's audio source) and the duration (to clamp
-// the window). Service-role, so it reads any row; the guard is enforced in code.
+// clip, plus the master key (the clip's audio source), the duration (to clamp the
+// window against the real end), and the owner-set teaser window
+// (clip_start_seconds / clip_length_seconds) the worker renders. Service-role, so
+// it reads any row; the guard is enforced in code.
 export async function getWorkForClip(workId) {
   const { data, error } = await supabase
     .from("work")
     .select(
-      "id, title, status, taken_down, duration_seconds, audio_master_key, hls_playlist_key",
+      "id, title, status, taken_down, duration_seconds, audio_master_key, hls_playlist_key, clip_start_seconds, clip_length_seconds",
     )
     .eq("id", workId)
     .single();

@@ -50,9 +50,8 @@ export const config = {
   // The app renders the burned-in still frame (cover + named credits + brand);
   // we fetch it from here, paint the waveform, mux the audio, cache in R2.
   appOrigin: getOptional("APP_ORIGIN", "https://ai-red.io").replace(/\/+$/, ""),
-  // Default audio window (seconds) and the hard cap — short clips are fast to
-  // render and the right length for Reels / TikTok anyway (brief: ≤30s).
-  clipDefaultSeconds: Number(getOptional("CLIP_DEFAULT_SECONDS", "20")),
-  clipMaxSeconds: Number(getOptional("CLIP_MAX_SECONDS", "30")),
+  // Clip frame rate. The audio WINDOW (start + length) is now per-song, read from
+  // the work row and clamped in clip.js (brief: start ∈ [0, duration-5], length ∈
+  // [20, 50]), so there are no global window env knobs anymore.
   clipFps: Number(getOptional("CLIP_FPS", "30")),
 };

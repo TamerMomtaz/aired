@@ -39,6 +39,50 @@ type Props = {
 
 const enc = encodeURIComponent;
 
+// PART B — desktop download hardening. On a laptop the video buttons must JUST
+// DOWNLOAD the MP4: the OS share sheet is unreliable there (it no-ops to
+// Instagram and nothing lands in Downloads). The catch is that some desktop
+// browsers (Windows Chrome / Edge) report navigator.canShare({ files }) === true,
+// so a plain canShare check would still take the bad share-sheet path. We gate the
+// native path on a REAL mobile device; everywhere else falls through to a direct
+// file download. Phones keep today's behavior (share sheet → save to gallery).
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  // Chromium exposes a definitive signal; trust it when present.
+  const uaData = (
+    navigator as Navigator & { userAgentData?: { mobile?: boolean } }
+  ).userAgentData;
+  if (uaData && typeof uaData.mobile === "boolean") return uaData.mobile;
+  const ua = navigator.userAgent || "";
+  if (/Android|iPhone|iPod/i.test(ua)) return true;
+  // iPadOS Safari masquerades as a Mac — a touch-capable "Mac" is really an iPad.
+  if ((navigator.maxTouchPoints ?? 0) > 1 && /Mac/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  return false;
+}
+
+// Can we hand this file to a real native share sheet (mobile)? Requires the file
+// Web Share API AND a mobile device — desktop always returns false → download.
+function canShareFileNatively(file: File): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (typeof navigator.share !== "function") return false;
+  if (typeof navigator.canShare !== "function") return false;
+  if (!navigator.canShare({ files: [file] })) return false;
+  return isMobileDevice();
+}
+
+// Save a file straight to Downloads via an anchor click (the laptop path).
+function downloadFile(file: File) {
+  const href = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
 export function ShareSheet({
   url,
   shareText,
@@ -161,25 +205,16 @@ export function ShareSheet({
     setVideoError(false);
     try {
       const file = await fetchClip(orientation);
-      const canShareFiles =
-        typeof navigator !== "undefined" &&
-        typeof navigator.canShare === "function" &&
-        navigator.canShare({ files: [file] });
-      if (canShareFiles) {
+      if (canShareFileNatively(file)) {
+        // Mobile: hand the MP4 to the native sheet (save to gallery / to TikTok).
         try {
           await navigator.share({ files: [file], title: shareTitle, text: shareText });
         } catch {
           // User dismissed the share sheet — nothing to do.
         }
       } else {
-        const href = URL.createObjectURL(file);
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(href);
+        // Desktop / no file-share: download straight to Downloads, no share sheet.
+        downloadFile(file);
       }
     } catch {
       setVideoError(true);

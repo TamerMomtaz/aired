@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { WorkTitle } from "@/components/work-title";
 import { DiscardButton } from "@/components/works/discard-button";
+import { TeaserClipEditor } from "@/components/works/teaser-clip-editor";
 import { WorkEditor } from "@/components/works/work-editor";
 import { setWorkAlbum } from "@/lib/albums/actions";
 import type { ManageWork, WorkStatus } from "@/lib/albums/queries";
@@ -73,6 +74,17 @@ export function WorksSection({
                   certified={work.certified}
                 />
               </div>
+              {/* Per-song teaser window for the share video — shown once the work
+                  has a known duration (i.e. transcoded), so we can display the
+                  ceiling and keep the slice inside the song. */}
+              {work.durationSeconds && work.durationSeconds > 0 ? (
+                <TeaserClipEditor
+                  workId={work.id}
+                  durationSeconds={work.durationSeconds}
+                  initialStartSeconds={work.clipStartSeconds}
+                  initialLengthSeconds={work.clipLengthSeconds}
+                />
+              ) : null}
             </li>
           ))}
         </ul>

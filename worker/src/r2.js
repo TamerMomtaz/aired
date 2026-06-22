@@ -119,3 +119,44 @@ export async function deleteByPrefix({ bucket, prefix }) {
 
   return deleted;
 }
+
+// Delete every object under `prefix` EXCEPT `exceptKey` — share-clip housekeeping
+// (clip.js). When a song's teaser window changes, its clip is cached under a NEW
+// versioned key; this sweeps the song's older windows (and any pre-versioning
+// clip-{orientation}.mp4) once the new one is safely uploaded, so stale clips
+// don't pile up. Best-effort and purely cosmetic: the app only ever requests the
+// CURRENT window's key, so a leftover orphan is never served — failing this
+// leaves a harmless extra file, never a wrong clip. Returns the count removed.
+export async function deleteByPrefixExcept({ bucket, prefix, exceptKey }) {
+  let continuationToken;
+  let deleted = 0;
+
+  do {
+    const listed = await r2.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const objects = (listed.Contents ?? [])
+      .map((o) => ({ Key: o.Key }))
+      .filter((o) => o.Key && o.Key !== exceptKey);
+
+    if (objects.length > 0) {
+      await r2.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objects, Quiet: true },
+        }),
+      );
+      deleted += objects.length;
+    }
+
+    continuationToken = listed.IsTruncated
+      ? listed.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  return deleted;
+}
