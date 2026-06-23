@@ -1,0 +1,700 @@
+{
+  "dataset": "AIRED instruction->implementation pairs",
+  "repo": "TamerMomtaz/aired",
+  "branch": "claude/dazzling-bell-odtyzn",
+  "commit_range": "9a784cb2c3d7..f8d9e78c4b5c",
+  "generated": "2026-06-23",
+  "format": "JSONL; each line {\"messages\":[{user},{assistant}]}; user=instruction, assistant=unified diff",
+  "rules": {
+    "net_diff_ceiling_lines": 150,
+    "strip_generated": [
+      "package-lock.json",
+      "npm-shrinkwrap.json",
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "bun.lockb",
+      "next-env.d.ts",
+      "*.min.js",
+      "*.min.css",
+      "*.map",
+      "database.types.ts"
+    ],
+    "decompose": "PR>ceiling emitted as member commits only if every member<=ceiling (strict); else dropped",
+    "secret_scan": "high-entropy/JWT/sb_secret/sk-/AKIA/*_SECRET|ENC_KEY|*_KEY assignments/Bearer -> redacted in place",
+    "skipped_classes": [
+      "brand/logo assets",
+      "scaffold",
+      "copy-only",
+      "empty",
+      "merge commits"
+    ]
+  },
+  "counts": {
+    "pairs": 12,
+    "pr_pairs": 6,
+    "commit_pairs": 6,
+    "dropped": 24,
+    "skipped": 4,
+    "decomposed_prs": 0,
+    "pairs_with_redactions": 0
+  },
+  "stripped_files_observed": [
+    "package-lock.json"
+  ],
+  "provenance": [
+    {
+      "line": 1,
+      "source": "PR #4",
+      "title": "Normalize descriptor tokens for clean chip rendering",
+      "base": "d68fcb8",
+      "head": "c17277f",
+      "net_lines": 28,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 2,
+      "source": "commit f101818",
+      "title": "Add Go Live action to publish a draft work (Phase 4)",
+      "sha": "f101818",
+      "net_lines": 92,
+      "files": 3,
+      "redactions": []
+    },
+    {
+      "line": 3,
+      "source": "commit 0ce1605",
+      "title": "Phase 4 polish: anchor synced lyrics in their own scroll box",
+      "sha": "0ce1605",
+      "net_lines": 119,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 4,
+      "source": "commit 7f76331",
+      "title": "Post-door fixes: default to / after login + render the Google G",
+      "sha": "7f76331",
+      "net_lines": 4,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 5,
+      "source": "commit d3c84d5",
+      "title": "Phase 3 auto-trigger: kick the transcode worker on createWork",
+      "sha": "d3c84d5",
+      "net_lines": 109,
+      "files": 4,
+      "redactions": []
+    },
+    {
+      "line": 6,
+      "source": "commit 751523b",
+      "title": "Uniform work cards: cap chips, fix row heights, +N overflow",
+      "sha": "751523b",
+      "net_lines": 81,
+      "files": 1,
+      "redactions": []
+    },
+    {
+      "line": 7,
+      "source": "commit 597984e",
+      "title": "Reuse existing contributors on upload, don't fork the discography",
+      "sha": "597984e",
+      "net_lines": 97,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 8,
+      "source": "PR #9",
+      "title": "Add repeat mode (off/all/one) to the player",
+      "base": "c068e66",
+      "head": "0a6d875",
+      "net_lines": 132,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 9,
+      "source": "PR #8",
+      "title": "Top nav: highlight the current page, not just the red CTA",
+      "base": "102440b",
+      "head": "efd0727",
+      "net_lines": 75,
+      "files": 2,
+      "redactions": []
+    },
+    {
+      "line": 10,
+      "source": "PR #11",
+      "title": "Add contact email link to site footer",
+      "base": "f5e6f58",
+      "head": "3dd73f9",
+      "net_lines": 6,
+      "files": 1,
+      "redactions": []
+    },
+    {
+      "line": 11,
+      "source": "PR #12",
+      "title": "Add Vercel Web Analytics with app install tracking",
+      "base": "2a639e6",
+      "head": "c6ca935",
+      "net_lines": 13,
+      "files": 3,
+      "redactions": []
+    },
+    {
+      "line": 12,
+      "source": "PR #26",
+      "title": "Fix WorkTitle sm layout: stack ID and title, increase card height",
+      "base": "a031b92",
+      "head": "65ec26b",
+      "net_lines": 31,
+      "files": 2,
+      "redactions": []
+    }
+  ],
+  "decomposed_prs": [],
+  "dropped_monsters": [
+    {
+      "source": "PR #19",
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
+      "reason": "PR net 2214L > 150; irreducible (members over ceiling: ['8c0f2e2'])",
+      "net": 2214,
+      "files": [
+        "src/app/album/[id]/page.tsx",
+        "src/app/artist/{[id] => [handle]}/page.tsx",
+        "src/app/auth/callback/route.ts",
+        "src/app/auth/confirm/route.ts",
+        "src/app/manage/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/review/page.tsx",
+        "src/app/review/taken-down/page.tsx",
+        "src/app/settings/page.tsx",
+        "src/app/upload/page.tsx",
+        "src/app/welcome/page.tsx",
+        "src/components/album-card.tsx",
+        "src/components/identity/handle-field.tsx",
+        "src/components/identity/identity-editor.tsx",
+        "src/components/identity/image-field.tsx",
+        "src/components/manage/works-section.tsx",
+        "src/components/onboarding/journey-wizard.tsx",
+        "src/components/site-header.tsx",
+        "src/components/works/admin-takedown.tsx",
+        "src/lib/albums/public-queries.ts",
+        "src/lib/albums/queries.ts",
+        "src/lib/auth/actions.ts",
+        "src/lib/identity/actions.ts",
+        "src/lib/identity/handle.ts",
+        "src/lib/identity/onboarding.ts",
+        "src/lib/review/actions.ts",
+        "src/lib/review/queries.ts",
+        "src/lib/supabase/auth.ts",
+        "src/lib/works/queries.ts",
+        "supabase/migrations/20260618134225_journey_onboarding_and_takedown.sql"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #21",
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
+      "reason": "PR net 2191L > 150; irreducible (members over ceiling: ['b6cf4c8'])",
+      "net": 2191,
+      "files": [
+        "src/app/album/[id]/opengraph-image.tsx",
+        "src/app/album/[id]/page.tsx",
+        "src/app/artist/[handle]/opengraph-image.tsx",
+        "src/app/artist/[handle]/page.tsx",
+        "src/app/registry/[id]/opengraph-image.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/share/[kind]/[id]/[size]/route.ts",
+        "src/components/album-card.tsx",
+        "src/components/share-button.tsx",
+        "src/components/share-sheet.tsx",
+        "src/components/work-card.tsx",
+        "src/lib/share/card.tsx",
+        "src/lib/share/data.ts",
+        "src/lib/share/props.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #2",
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
+      "reason": "PR net 2110L > 150; irreducible (members over ceiling: ['9c16ddc'])",
+      "net": 2110,
+      "files": [
+        ".env.example",
+        "CLAUDE.md",
+        "README.md",
+        "next.config.ts",
+        "src/app/agent/[slug]/page.tsx",
+        "src/app/claim/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/registry/page.tsx",
+        "src/app/upload/page.tsx",
+        "src/components/agent/claim-form.tsx",
+        "src/components/ledger/volley-editor.tsx",
+        "src/components/ledger/volley-trail.tsx",
+        "src/components/site-header.tsx",
+        "src/components/upload/upload-form.tsx",
+        "src/lib/agents/actions.ts",
+        "src/lib/format.ts",
+        "src/lib/ledger/actions.ts",
+        "src/lib/ledger/descriptorDictionary.ts",
+        "src/lib/ledger/sanitizeReference.ts",
+        "src/lib/ledger/seal.ts",
+        "src/lib/ledger/types.ts",
+        "src/lib/works/actions.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #23",
+      "title": "Offline listening: download songs and play with no connection",
+      "reason": "PR net 1435L > 150; irreducible (members over ceiling: ['6ebe39c'])",
+      "net": 1435,
+      "files": [
+        "public/sw.js",
+        "src/app/downloads/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/offline/download-button.tsx",
+        "src/components/offline/downloads-screen.tsx",
+        "src/components/offline/offline-init.tsx",
+        "src/components/player/now-playing-bar.tsx",
+        "src/components/site-header.tsx",
+        "src/lib/offline/cache.ts",
+        "src/lib/offline/capability.ts",
+        "src/lib/offline/db.ts",
+        "src/lib/offline/download.ts",
+        "src/lib/offline/manifest.ts",
+        "src/lib/offline/store.ts",
+        "src/lib/offline/types.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #17",
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
+      "reason": "PR net 1376L > 150; irreducible (members over ceiling: ['037e384'])",
+      "net": 1376,
+      "files": [
+        ".env.example",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/upload/page.tsx",
+        "src/components/manage/albums-section.tsx",
+        "src/components/manage/works-section.tsx",
+        "src/components/works/discard-button.tsx",
+        "src/components/works/work-editor.tsx",
+        "src/lib/albums/actions.ts",
+        "src/lib/albums/queries.ts",
+        "src/lib/artwork/upload-client.ts",
+        "src/lib/ledger/sanitizeReference.ts",
+        "src/lib/works/actions.ts",
+        "src/lib/works/purge.ts",
+        "src/lib/works/queries.ts",
+        "worker/README.md",
+        "worker/src/index.js",
+        "worker/src/purge.js",
+        "worker/src/r2.js",
+        "worker/src/supabase.js"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #25",
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
+      "reason": "PR net 1299L > 150; irreducible (members over ceiling: ['a21cc0b'])",
+      "net": 1299,
+      "files": [
+        ".env.example",
+        "src/app/share/song/[id]/clip-frame/[orientation]/route.ts",
+        "src/app/share/song/[id]/video/[orientation]/route.ts",
+        "src/components/share-sheet.tsx",
+        "src/lib/share/card.tsx",
+        "src/lib/share/clip.tsx",
+        "src/lib/share/video.ts",
+        "worker/.env.example",
+        "worker/README.md",
+        "worker/src/clip.js",
+        "worker/src/config.js",
+        "worker/src/ffmpeg.js",
+        "worker/src/index.js",
+        "worker/src/r2.js",
+        "worker/src/supabase.js"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #6",
+      "title": "Implement global audio engine and persistent now-playing bar",
+      "reason": "PR net 1194L > 150; irreducible (members over ceiling: ['3af635d', '0973a1f'])",
+      "net": 1194,
+      "files": [
+        "src/app/layout.tsx",
+        "src/app/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/RedLinePlayer.tsx",
+        "src/components/player-stage.tsx",
+        "src/components/player/card-play-button.tsx",
+        "src/components/player/now-playing-bar.tsx",
+        "src/components/player/player-provider.tsx",
+        "src/components/player/track.ts",
+        "src/components/work-card.tsx",
+        "src/lib/stream-url.ts",
+        "src/lib/works/queries.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #3",
+      "title": "Phase 3: Audio transcoding worker & HLS player (Rule 6)",
+      "reason": "PR net 1163L > 150; irreducible (members over ceiling: ['ba57c1e', 'a212253'])",
+      "net": 1163,
+      "files": [
+        ".env.example",
+        "package.json",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/RedLinePlayer.tsx",
+        "worker/.dockerignore",
+        "worker/.env.example",
+        "worker/.gitignore",
+        "worker/Dockerfile",
+        "worker/README.md",
+        "worker/package.json",
+        "worker/src/cli.js",
+        "worker/src/config.js",
+        "worker/src/ffmpeg.js",
+        "worker/src/index.js",
+        "worker/src/logger.js",
+        "worker/src/r2.js",
+        "worker/src/supabase.js",
+        "worker/src/transcode.js"
+      ],
+      "salvageable": [
+        [
+          "8aec335",
+          21
+        ]
+      ]
+    },
+    {
+      "source": "commit f54ae9f",
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
+      "reason": "standalone commit net 1114L > 150; irreducible",
+      "net": 1114,
+      "files": [
+        "package.json",
+        "src/app/cert/[id]/card/route.ts",
+        "src/app/cert/[id]/cert-card-image.tsx",
+        "src/app/cert/[id]/opengraph-image.tsx",
+        "src/app/cert/[id]/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/terms/page.tsx",
+        "src/components/go-live-button.tsx",
+        "src/components/issue-cert-button.tsx",
+        "src/lib/works/actions.ts"
+      ]
+    },
+    {
+      "source": "PR #16",
+      "title": "Organize: file works into albums at upload + a /manage surface",
+      "reason": "PR net 1066L > 150; irreducible (members over ceiling: ['6d71355'])",
+      "net": 1066,
+      "files": [
+        "src/app/manage/page.tsx",
+        "src/app/upload/page.tsx",
+        "src/components/manage/albums-section.tsx",
+        "src/components/manage/works-section.tsx",
+        "src/components/site-header.tsx",
+        "src/components/upload/upload-form.tsx",
+        "src/lib/albums/actions.ts",
+        "src/lib/albums/queries.ts",
+        "src/lib/works/actions.ts",
+        "supabase/migrations/20260618115510_enforce_album_ownership.sql"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #15",
+      "title": "Review Gate: hold newcomers' publishes for admin review",
+      "reason": "PR net 989L > 150; irreducible (members over ceiling: ['e728336'])",
+      "net": 989,
+      "files": [
+        "src/app/agent/[slug]/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/registry/page.tsx",
+        "src/app/review/page.tsx",
+        "src/components/go-live-button.tsx",
+        "src/components/review/review-actions.tsx",
+        "src/components/site-header.tsx",
+        "src/lib/review/actions.ts",
+        "src/lib/review/queries.ts",
+        "src/lib/supabase/auth.ts",
+        "src/lib/works/actions.ts",
+        "supabase/migrations/20260618110701_work_admin_read_policy.sql",
+        "supabase/migrations/20260618110720_review_gate_rpcs.sql"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #7",
+      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
+      "reason": "PR net 845L > 150; irreducible (members over ceiling: ['1a3fe2d'])",
+      "net": 845,
+      "files": [
+        "src/app/globals.css",
+        "src/app/layout.tsx",
+        "src/components/onboarding/intro-replay-link.tsx",
+        "src/components/onboarding/onboarding-state.ts",
+        "src/components/onboarding/onboarding.tsx",
+        "src/components/site-footer.tsx"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "commit 1a2de33",
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
+      "reason": "standalone commit net 818L > 150; irreducible",
+      "net": 818,
+      "files": [
+        "public/sw.js",
+        "src/app/apple-icon.tsx",
+        "src/app/icon.tsx",
+        "src/app/icons/[name]/route.ts",
+        "src/app/layout.tsx",
+        "src/app/manifest.ts",
+        "src/app/opengraph-image.tsx",
+        "src/components/install/install-coach.tsx",
+        "src/components/install/install-trigger.tsx",
+        "src/components/install/sw-register.tsx",
+        "src/components/install/use-install-state.ts",
+        "src/components/site-header.tsx",
+        "src/lib/branding/aired-mark.tsx"
+      ]
+    },
+    {
+      "source": "commit a45cdd2",
+      "title": "Phase 4: synced lyrics (the \"heard\" half)",
+      "reason": "standalone commit net 791L > 150; irreducible",
+      "net": 791,
+      "files": [
+        "src/app/registry/[id]/page.tsx",
+        "src/components/RedLinePlayer.tsx",
+        "src/components/lyrics-sync-editor.tsx",
+        "src/components/player-stage.tsx",
+        "src/components/synced-lyrics.tsx",
+        "src/lib/lyrics/lrc.ts",
+        "src/lib/works/actions.ts"
+      ]
+    },
+    {
+      "source": "PR #18",
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
+      "reason": "PR net 778L > 150; irreducible (members over ceiling: ['3758c33'])",
+      "net": 778,
+      "files": [
+        "src/app/album/[id]/page.tsx",
+        "src/app/artist/[id]/page.tsx",
+        "src/app/page.tsx",
+        "src/components/album-card.tsx",
+        "src/lib/albums/public-queries.ts",
+        "src/lib/works/queries.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #1",
+      "title": "Phase 1: Auth system and app shell",
+      "reason": "PR net 766L > 150; irreducible (members over ceiling: ['e237e8d'])",
+      "net": 766,
+      "files": [
+        "README.md",
+        "src/app/auth/auth-code-error/page.tsx",
+        "src/app/auth/callback/route.ts",
+        "src/app/auth/confirm/route.ts",
+        "src/app/layout.tsx",
+        "src/app/login/page.tsx",
+        "src/app/page.tsx",
+        "src/app/registry/page.tsx",
+        "src/app/signup/page.tsx",
+        "src/components/auth/auth-form.tsx",
+        "src/components/site-header.tsx",
+        "src/components/work-title.tsx",
+        "src/lib/auth/actions.ts",
+        "src/lib/auth/safe-redirect.ts",
+        "src/lib/supabase/auth.ts",
+        "src/lib/supabase/proxy.ts",
+        "src/proxy.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #5",
+      "title": "Add per-song share UI and Open Graph preview cards",
+      "reason": "PR net 679L > 150; irreducible (members over ceiling: ['f199cee'])",
+      "net": 679,
+      "files": [
+        "src/app/registry/[id]/opengraph-image.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/share-button.tsx",
+        "src/components/work-card.tsx",
+        "src/lib/works/queries.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #27",
+      "title": "Share video: per-song teaser clip window + desktop just-download",
+      "reason": "PR net 614L > 150; irreducible (members over ceiling: ['d4f99f8'])",
+      "net": 614,
+      "files": [
+        "src/app/share/song/[id]/video/[orientation]/route.ts",
+        "src/components/manage/works-section.tsx",
+        "src/components/share-sheet.tsx",
+        "src/components/works/teaser-clip-editor.tsx",
+        "src/lib/albums/queries.ts",
+        "src/lib/share/video.ts",
+        "src/lib/works/actions.ts",
+        "src/lib/works/queries.ts",
+        "supabase/migrations/20260622015032_work_teaser_clip_window.sql",
+        "worker/.env.example",
+        "worker/src/clip.js",
+        "worker/src/config.js",
+        "worker/src/index.js",
+        "worker/src/r2.js",
+        "worker/src/supabase.js"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "commit 9465345",
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
+      "reason": "standalone commit net 582L > 150; irreducible",
+      "net": 582,
+      "files": [
+        "src/app/login/page.tsx",
+        "src/app/page.tsx",
+        "src/app/signup/page.tsx",
+        "src/app/upload/page.tsx",
+        "src/components/auth/auth-form.tsx",
+        "src/components/ledger-status.tsx",
+        "src/components/search-bar.tsx",
+        "src/components/site-header.tsx",
+        "src/components/work-card.tsx",
+        "src/lib/auth/actions.ts",
+        "src/lib/works/queries.ts"
+      ]
+    },
+    {
+      "source": "PR #10",
+      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
+      "reason": "PR net 441L > 150; irreducible (members over ceiling: ['2fefb9b'])",
+      "net": 441,
+      "files": [
+        "src/app/qr/card/route.ts",
+        "src/app/qr/page.tsx",
+        "src/app/qr/qr-poster-image.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/song-qr.tsx"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #24",
+      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
+      "reason": "PR net 410L > 150; irreducible (members over ceiling: ['1359f5d'])",
+      "net": 410,
+      "files": [
+        "src/app/globals.css",
+        "src/app/registry/[id]/page.tsx",
+        "src/components/registry/more-on-aired.tsx",
+        "src/components/registry/play-hero.tsx"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #20",
+      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename",
+      "reason": "PR net 319L > 150; irreducible (members over ceiling: ['9f8d131'])",
+      "net": 319,
+      "files": [
+        "src/app/page.tsx",
+        "src/components/artist-shelf-row.tsx",
+        "src/lib/albums/public-queries.ts",
+        "src/lib/works/queries.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #13",
+      "title": "Record real listens server-side and display play counts",
+      "reason": "PR net 296L > 150; irreducible (members over ceiling: ['f9fae65'])",
+      "net": 296,
+      "files": [
+        "src/app/page.tsx",
+        "src/app/registry/[id]/page.tsx",
+        "src/app/registry/page.tsx",
+        "src/components/play-count.tsx",
+        "src/components/player/player-provider.tsx",
+        "src/components/work-card.tsx",
+        "src/lib/format.ts",
+        "src/lib/plays/actions.ts",
+        "src/lib/works/queries.ts"
+      ],
+      "salvageable": []
+    },
+    {
+      "source": "PR #14",
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
+      "reason": "PR net 218L > 150; irreducible (members over ceiling: ['c0c8896'])",
+      "net": 218,
+      "files": [
+        "supabase/migrations/20260618102025_profile_artist_fields_and_privilege_guard.sql",
+        "supabase/migrations/20260618102040_album_table.sql",
+        "supabase/migrations/20260618102050_work_album_id_and_moderation_note.sql",
+        "supabase/migrations/20260618102059_work_status_add_pending.sql",
+        "supabase/migrations/20260618103455_backfill_founder_artist_and_album.sql",
+        "supabase/migrations/README.md"
+      ],
+      "salvageable": []
+    }
+  ],
+  "salvageable_small_members": [
+    {
+      "pr": "PR #3",
+      "commits": [
+        [
+          "8aec335",
+          21
+        ]
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "source": "PR #22",
+      "title": "Add AIRED Facebook profile + cover logo assets",
+      "reason": "brand/logo assets (Facebook profile + cover)"
+    },
+    {
+      "source": "commit 32dda95",
+      "title": "Update README.md",
+      "reason": "copy-only (README)"
+    },
+    {
+      "source": "commit 760c401",
+      "title": "Covenant copy: the real text",
+      "reason": "copy-only (Covenant prose)"
+    },
+    {
+      "source": "commit 9a784cb",
+      "title": "Phase 0: scaffold AIRED app, connect Supabase, brand landing",
+      "reason": "scaffold (Phase 0, generated app skeleton)"
+    }
+  ]
+}
