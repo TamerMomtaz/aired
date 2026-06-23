@@ -1,0 +1,222 @@
+{
+  "title": "AIRED training-set build — decision log",
+  "what": "The engineering and data-curation decisions made while turning this repo's history into instruction→implementation training pairs (aired_pairs.jsonl).",
+  "repo": "TamerMomtaz/aired",
+  "branch": "claude/dazzling-bell-odtyzn",
+  "commit_range": "9a784cb2c3d7..d4f99f89178d",
+  "generated": "2026-06-23",
+  "dataset": {
+    "pairs_file": "aired_pairs.jsonl",
+    "provenance_file": "aired_pairs.meta.json",
+    "format": "JSONL, one {\"messages\":[{user},{assistant}]} per line; user=instruction, assistant=unified diff",
+    "pairs": 197,
+    "whole_unit_pairs": 13,
+    "file_scoped_pairs": 184
+  },
+  "parameters": {
+    "net_diff_ceiling_lines": 150,
+    "coherent_single_change_max_lines": 400,
+    "stripped_generated_files": [
+      "package-lock.json",
+      "npm-shrinkwrap.json",
+      "yarn.lock",
+      "pnpm-lock.yaml",
+      "bun.lockb",
+      "next-env.d.ts",
+      "*.min.js",
+      "*.min.css",
+      "*.map",
+      "database.types.ts",
+      "(its own output files)"
+    ],
+    "skipped_classes": [
+      "brand/logo & image-asset PRs/commits",
+      "Phase-0 scaffold",
+      "copy-only commits (README, Covenant prose)",
+      "merge commits",
+      "empty/redeploy commits",
+      "pure binary/asset file diffs"
+    ],
+    "secret_scan_patterns": [
+      "Supabase service JWT (eyJ…)",
+      "sb_secret_…",
+      "sb_publishable_… (public anon key)",
+      "sk-/sk-ant- keys",
+      "AWS AKIA…",
+      "R2 account-id literal",
+      "*_SECRET=/SERVICE_ROLE/ENC_KEY/API_KEY/AUTH_TOKEN assignments",
+      "Bearer <token>"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "SRC-1",
+      "area": "sources",
+      "decision": "Build pairs from merged PRs (title+body→diff) and substantive commits (message→diff); closed issues were in scope but the repo had none (0).",
+      "rationale": "PRs/commits carry an explicit human-written intent paired with a real implementation — the cleanest instruction→code signal available."
+    },
+    {
+      "id": "SRC-2",
+      "area": "sources",
+      "decision": "Compute diffs from local git (full content) and pull PR text from the GitHub API; use two-dot base..head for a PR's own commits.",
+      "rationale": "Local git gives complete, authoritative diffs without API truncation.",
+      "alternative_rejected": "Three-dot A...B for the commit list — it leaked base-side commits into PR membership (fixed; see BUG-1)."
+    },
+    {
+      "id": "FLT-1",
+      "area": "filtering",
+      "decision": "Skip brand/logo/image-asset PRs and commits entirely (e.g. PR #22, the Facebook/logo assets).",
+      "rationale": "The goal is engineering work (type guards, Volley logic, HLS, player, layout), not design assets."
+    },
+    {
+      "id": "FLT-2",
+      "area": "filtering",
+      "decision": "Skip the Phase-0 scaffold and copy-only commits (README, Covenant prose).",
+      "rationale": "Generated scaffolding and prose edits aren't engineering instruction→code signal."
+    },
+    {
+      "id": "STR-1",
+      "area": "stripping",
+      "decision": "Strip lockfiles and generated files from every diff before pairing.",
+      "rationale": "Generated churn (e.g. a 1,700-line package-lock.json) drowns the real change and teaches noise.",
+      "result": "Lockfile content never appears in the corpus."
+    },
+    {
+      "id": "STR-2",
+      "area": "stripping",
+      "decision": "Keep filename references to generated files (e.g. a Dockerfile `COPY package.json package-lock.json* ./`).",
+      "rationale": "That's a real, meaningful engineering line — a reference, not generated content."
+    },
+    {
+      "id": "SIZE-1",
+      "area": "granularity",
+      "decision": "Adopt a ~150-line net-diff ceiling; changes under it become one whole-unit pair.",
+      "rationale": "Small, self-contained diffs are higher-quality supervised targets than sprawling multi-file features."
+    },
+    {
+      "id": "SIZE-2",
+      "area": "granularity",
+      "decision": "For PRs over the ceiling, decompose into member commits only when every member also fits; otherwise treat as irreducible and drop+list.",
+      "rationale": "Honors a strict reading of the ceiling and avoids emitting monster diffs."
+    },
+    {
+      "id": "SIZE-3",
+      "area": "granularity",
+      "decision": "Lenient-salvage small member commits trapped inside dropped PRs (e.g. 8aec335, a 21-line worker fix).",
+      "rationale": "Recovers genuinely self-contained small changes that the strict rule would discard."
+    },
+    {
+      "id": "SIZE-4",
+      "area": "granularity",
+      "decision": "Split remaining large changes per file; keep a single coherent file/hunk whole up to 400 lines (the coherent-change exception); drop single files/hunks over ~400 lines and list them.",
+      "rationale": "A coherent change shouldn't be chopped mid-logic, but a 400+ line single file can't be a clean target."
+    },
+    {
+      "id": "SIZE-5",
+      "area": "granularity",
+      "decision": "When hunk-splitting, pack adjacent hunks of a file up to the 150-line ceiling.",
+      "rationale": "Avoids over-fragmenting into tiny, context-poor pairs."
+    },
+    {
+      "id": "LBL-1",
+      "area": "labeling-quality",
+      "decision": "Each per-file pair gets an instruction SCOPED to that file's actual change, grounded in its real symbols/behavior — never the shared full PR body.",
+      "rationale": "Pairing 20 files with one identical feature-spec teaches the model that a broad multi-part request maps to one arbitrary file. The instruction must match the diff in front of it.",
+      "result": "184 file-scoped instructions, each authored from its own diff."
+    },
+    {
+      "id": "LBL-2",
+      "area": "labeling-quality",
+      "decision": "Drop a fragment that only makes sense as part of the whole feature rather than pair it with a coherent-sounding but mislabeled instruction.",
+      "rationale": "A wrong label is worse than a missing example."
+    },
+    {
+      "id": "LBL-3",
+      "area": "labeling-quality",
+      "decision": "Pre-drop modified-file wiring (no self-contained symbol); author the rest by reviewing each file's diff individually.",
+      "rationale": "Integration/mounting edits can't be described standalone; substantive file changes can."
+    },
+    {
+      "id": "LBL-4",
+      "area": "labeling-quality",
+      "decision": "Integrity gate: every kept instruction must name its own file.",
+      "rationale": "Cheap, strong check that each instruction is aligned to its diff.",
+      "result": "184/184 passed."
+    },
+    {
+      "id": "SEC-1",
+      "area": "secrets",
+      "decision": "Run a mandatory, line-oriented secret scan on every emitted diff; redact hits in place.",
+      "rationale": "Training data must never carry credentials; line-oriented scanning can't span diff lines or corrupt a patch (see BUG-2)."
+    },
+    {
+      "id": "SEC-2",
+      "area": "secrets",
+      "decision": "Harvest the repo's real R2 account-id literal and redact it everywhere it appears.",
+      "rationale": "It was hardcoded as a config.js default and documented in the worker README, not just the env example — pattern-anchored matching alone would miss those.",
+      "result": "Redacted in env, README, and source default."
+    },
+    {
+      "id": "SEC-3",
+      "area": "secrets",
+      "decision": "Redact the public publishable anon key for cleanliness; keep the public project-ref hostname.",
+      "rationale": "The anon key is key-shaped; the hostname is just the public API endpoint and is harmless."
+    },
+    {
+      "id": "HYG-1",
+      "area": "hygiene",
+      "decision": "Decode HTML entities and strip commit/PR footers and bare claude.ai/code session URLs from instructions.",
+      "rationale": "Those are trailers, not part of the task spec."
+    },
+    {
+      "id": "HYG-2",
+      "area": "hygiene",
+      "decision": "Never ingest the dataset's own output files, and end the commit range at the last engineering commit.",
+      "rationale": "Prevents the build from feeding on its own prior output (see BUG-3)."
+    },
+    {
+      "id": "OUT-1",
+      "area": "output",
+      "decision": "Deliver pure {\"messages\":[…]} JSONL (upload-ready) and keep all provenance in a separate meta.json.",
+      "rationale": "A leading # header breaks strict JSONL parsers; provenance belongs beside the data, not inside it."
+    }
+  ],
+  "bugs_caught_and_fixed": [
+    {
+      "id": "BUG-1",
+      "issue": "PR member-commit lists were computed with three-dot `git log A...B` (symmetric), polluting them with base-side commits.",
+      "impact": "Wrong decomposition membership and risk of mis-attributing standalone commits.",
+      "fix": "Switched to two-dot `A..B` (a PR's own commits)."
+    },
+    {
+      "id": "BUG-2",
+      "issue": "A secret regex used `\\s*`, which spanned a newline on an empty `R2_ACCESS_KEY_ID=` and swallowed the next diff line as the 'value'.",
+      "impact": "False positive AND a corrupted patch (a +line replaced by a bare marker).",
+      "fix": "Rewrote the scanner to be line-oriented — it strips the diff prefix, scans content only, and can never cross diff lines."
+    },
+    {
+      "id": "BUG-3",
+      "issue": "After committing the deliverables, the build saw its own output files as a source commit.",
+      "impact": "Self-contamination (e.g. trying to split aired_pairs.meta.json).",
+      "fix": "Excluded the deliverable files and ended the commit range at the last engineering commit."
+    },
+    {
+      "id": "BUG-4",
+      "issue": "Per-file pairs initially shared the entire PR/commit body as their instruction.",
+      "impact": "Systematic mislabeling — many files mapped to one broad spec.",
+      "fix": "Rescoped every split pair to a per-file instruction grounded in that file's diff; dropped fragments that couldn't stand alone."
+    }
+  ],
+  "drop_accounting": {
+    "not_standalone_by_review": 7,
+    "modified_file_wiring": 84,
+    "import_or_glue": 14,
+    "single_file_over_400_lines": 8,
+    "skipped_units": [
+      "PR #22 (logo assets)",
+      "9a784cb (Phase-0 scaffold)",
+      "32dda95 (README)",
+      "760c401 (Covenant prose)"
+    ]
+  }
+}
