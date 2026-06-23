@@ -1,3926 +1,2543 @@
 {
-  "dataset": "AIRED instruction->implementation pairs (v2: per-file/hunk split of large changes)",
+  "dataset": "AIRED instruction->implementation pairs (v3: per-file pairs with file-scoped instructions)",
   "repo": "TamerMomtaz/aired",
-  "branch": "claude/dazzling-bell-odtyzn",
   "commit_range": "9a784cb2c3d7..d4f99f89178d",
   "generated": "2026-06-23",
-  "format": "JSONL {\"messages\":[{user},{assistant}]}; user=shared context (+ 'implement change to <path>' for split pairs), assistant=that file/hunk diff",
+  "format": "JSONL {messages:[{user},{assistant}]}; user=file-scoped instruction, assistant=that file's unified diff",
+  "method": "Large PR/commit diffs split per file/hunk; each fragment given an instruction scoped to that file's change by review; fragments only meaningful as part of the whole were dropped. Whole units <=150L kept with full description.",
   "rules": {
     "net_ceiling": 150,
     "coherent_exception_max": 400,
-    "split": "units >150L split per file; file >150L kept whole iff single coherent change/new-file (<=400L) else split by hunk (hunks packed up to 150L); single file/hunk >400L dropped",
-    "strip_generated": [
-      "package-lock.json",
-      "npm-shrinkwrap.json",
-      "yarn.lock",
-      "pnpm-lock.yaml",
-      "bun.lockb",
-      "next-env.d.ts",
-      "*.min.js",
-      "*.min.css",
-      "*.map",
-      "database.types.ts"
-    ],
-    "secret_scan": "redact JWT/sb_secret/sk-/AKIA/*_SECRET=/Bearer in place",
-    "skipped_classes": [
-      "brand/logo",
-      "scaffold",
-      "copy-only",
-      "empty",
-      "binary/asset files (per-file)"
-    ]
+    "secret_scan": "line-oriented redaction (JWT/sb_secret/anon/sk-/AKIA/R2-id/secret-assign/Bearer)",
+    "strip_generated": true
   },
   "counts": {
-    "pairs": 302,
-    "whole_pairs": 13,
-    "split_pairs": 289,
-    "sources": 36,
-    "still_dropped_files": 8,
-    "skipped_units": 4,
-    "pairs_with_redactions": 5
+    "pairs": 197,
+    "whole": 13,
+    "scoped": 184,
+    "dropped_not_standalone": 7,
+    "predropped_modified_wiring": 84,
+    "predropped_glue": 14,
+    "dropped_over400": 8
   },
-  "per_source_breakdown": {
-    "PR #1": {
-      "pairs": 17,
-      "whole": 0,
-      "split": 17
-    },
-    "PR #10": {
-      "pairs": 5,
-      "whole": 0,
-      "split": 5
-    },
-    "PR #11": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "PR #12": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "PR #13": {
-      "pairs": 9,
-      "whole": 0,
-      "split": 9
-    },
-    "PR #14": {
-      "pairs": 6,
-      "whole": 0,
-      "split": 6
-    },
-    "PR #15": {
-      "pairs": 14,
-      "whole": 0,
-      "split": 14
-    },
-    "PR #16": {
-      "pairs": 10,
-      "whole": 0,
-      "split": 10
-    },
-    "PR #17": {
-      "pairs": 19,
-      "whole": 0,
-      "split": 19
-    },
-    "PR #18": {
-      "pairs": 6,
-      "whole": 0,
-      "split": 6
-    },
-    "PR #19": {
-      "pairs": 29,
-      "whole": 0,
-      "split": 29
-    },
-    "PR #2": {
-      "pairs": 21,
-      "whole": 0,
-      "split": 21
-    },
-    "PR #20": {
-      "pairs": 4,
-      "whole": 0,
-      "split": 4
-    },
-    "PR #21": {
-      "pairs": 12,
-      "whole": 0,
-      "split": 12
-    },
-    "PR #23": {
-      "pairs": 17,
-      "whole": 0,
-      "split": 17
-    },
-    "PR #24": {
-      "pairs": 5,
-      "whole": 0,
-      "split": 5
-    },
-    "PR #25": {
-      "pairs": 14,
-      "whole": 0,
-      "split": 14
-    },
-    "PR #26": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "PR #27": {
-      "pairs": 15,
-      "whole": 0,
-      "split": 15
-    },
-    "PR #3": {
-      "pairs": 19,
-      "whole": 1,
-      "split": 18
-    },
-    "PR #4": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "PR #5": {
-      "pairs": 5,
-      "whole": 0,
-      "split": 5
-    },
-    "PR #6": {
-      "pairs": 17,
-      "whole": 0,
-      "split": 17
-    },
-    "PR #7": {
-      "pairs": 5,
-      "whole": 0,
-      "split": 5
-    },
-    "PR #8": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "PR #9": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit 0ce1605": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit 1a2de33": {
-      "pairs": 13,
-      "whole": 0,
-      "split": 13
-    },
-    "commit 597984e": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit 751523b": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit 7f76331": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit 9465345": {
-      "pairs": 11,
-      "whole": 0,
-      "split": 11
-    },
-    "commit a45cdd2": {
-      "pairs": 6,
-      "whole": 0,
-      "split": 6
-    },
-    "commit d3c84d5": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit f101818": {
-      "pairs": 1,
-      "whole": 1,
-      "split": 0
-    },
-    "commit f54ae9f": {
-      "pairs": 11,
-      "whole": 0,
-      "split": 11
-    }
+  "per_source_kept": {
+    "PR #1": 14,
+    "PR #10": 4,
+    "PR #11": 1,
+    "PR #12": 1,
+    "PR #13": 5,
+    "PR #14": 6,
+    "PR #15": 8,
+    "PR #16": 8,
+    "PR #17": 10,
+    "PR #18": 5,
+    "PR #19": 14,
+    "PR #2": 16,
+    "PR #20": 3,
+    "PR #21": 6,
+    "PR #23": 12,
+    "PR #24": 3,
+    "PR #25": 7,
+    "PR #26": 1,
+    "PR #27": 7,
+    "PR #3": 12,
+    "PR #4": 1,
+    "PR #5": 4,
+    "PR #6": 9,
+    "PR #7": 3,
+    "PR #8": 1,
+    "PR #9": 1,
+    "commit 0ce1605": 1,
+    "commit 1a2de33": 10,
+    "commit 597984e": 1,
+    "commit 751523b": 1,
+    "commit 7f76331": 1,
+    "commit 9465345": 5,
+    "commit a45cdd2": 5,
+    "commit d3c84d5": 1,
+    "commit f101818": 1,
+    "commit f54ae9f": 9
   },
   "provenance": [
     {
       "line": 1,
       "source": "PR #1",
-      "mode": "split",
-      "path": "README.md",
+      "mode": "scoped",
+      "path": "src/app/auth/auth-code-error/page.tsx",
       "part": null,
-      "net_lines": 29,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 39,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 2,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/auth/auth-code-error/page.tsx",
+      "mode": "scoped",
+      "path": "src/app/auth/callback/route.ts",
       "part": null,
-      "net_lines": 39,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 30,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 3,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/auth/callback/route.ts",
+      "mode": "scoped",
+      "path": "src/app/auth/confirm/route.ts",
       "part": null,
-      "net_lines": 30,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 36,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 4,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/auth/confirm/route.ts",
+      "mode": "scoped",
+      "path": "src/app/login/page.tsx",
       "part": null,
-      "net_lines": 36,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 30,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 5,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
+      "mode": "scoped",
+      "path": "src/app/registry/page.tsx",
       "part": null,
-      "net_lines": 9,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 77,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 6,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/login/page.tsx",
+      "mode": "scoped",
+      "path": "src/app/signup/page.tsx",
       "part": null,
-      "net_lines": 30,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 37,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 7,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/page.tsx",
+      "mode": "scoped",
+      "path": "src/components/auth/auth-form.tsx",
       "part": null,
-      "net_lines": 23,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 145,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 8,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/registry/page.tsx",
+      "mode": "scoped",
+      "path": "src/components/site-header.tsx",
       "part": null,
-      "net_lines": 77,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 67,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 9,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/app/signup/page.tsx",
+      "mode": "scoped",
+      "path": "src/components/work-title.tsx",
       "part": null,
-      "net_lines": 37,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 45,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 10,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/components/auth/auth-form.tsx",
+      "mode": "scoped",
+      "path": "src/lib/auth/actions.ts",
       "part": null,
-      "net_lines": 145,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 108,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 11,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
+      "mode": "scoped",
+      "path": "src/lib/auth/safe-redirect.ts",
       "part": null,
-      "net_lines": 67,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 12,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 12,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/components/work-title.tsx",
+      "mode": "scoped",
+      "path": "src/lib/supabase/auth.ts",
       "part": null,
-      "net_lines": 45,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 15,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 13,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/lib/auth/actions.ts",
+      "mode": "scoped",
+      "path": "src/lib/supabase/proxy.ts",
       "part": null,
-      "net_lines": 108,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "net_lines": 44,
+      "title": "Phase 1: Auth system and app shell"
     },
     {
       "line": 14,
       "source": "PR #1",
-      "mode": "split",
-      "path": "src/lib/auth/safe-redirect.ts",
-      "part": null,
-      "net_lines": 12,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
-    },
-    {
-      "line": 15,
-      "source": "PR #1",
-      "mode": "split",
-      "path": "src/lib/supabase/auth.ts",
-      "part": null,
-      "net_lines": 15,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
-    },
-    {
-      "line": 16,
-      "source": "PR #1",
-      "mode": "split",
-      "path": "src/lib/supabase/proxy.ts",
-      "part": null,
-      "net_lines": 44,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
-    },
-    {
-      "line": 17,
-      "source": "PR #1",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/proxy.ts",
       "part": null,
       "net_lines": 20,
-      "title": "Phase 1: Auth system and app shell",
-      "base": "9a784cb",
-      "head": "e237e8d",
-      "redactions": []
+      "title": "Phase 1: Auth system and app shell"
+    },
+    {
+      "line": 15,
+      "source": "PR #2",
+      "mode": "scoped",
+      "path": "src/app/agent/[slug]/page.tsx",
+      "part": null,
+      "net_lines": 131,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
+    },
+    {
+      "line": 16,
+      "source": "PR #2",
+      "mode": "scoped",
+      "path": "src/app/claim/page.tsx",
+      "part": null,
+      "net_lines": 38,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
+    },
+    {
+      "line": 17,
+      "source": "PR #2",
+      "mode": "scoped",
+      "path": "src/app/registry/[id]/page.tsx",
+      "part": null,
+      "net_lines": 181,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 18,
       "source": "PR #2",
-      "mode": "split",
-      "path": ".env.example",
+      "mode": "scoped",
+      "path": "src/app/registry/page.tsx",
       "part": null,
-      "net_lines": 11,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": [
-        "supabase_anon"
-      ]
+      "net_lines": 91,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 19,
       "source": "PR #2",
-      "mode": "split",
-      "path": "CLAUDE.md",
+      "mode": "scoped",
+      "path": "src/app/upload/page.tsx",
       "part": null,
-      "net_lines": 2,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 41,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 20,
       "source": "PR #2",
-      "mode": "split",
-      "path": "README.md",
+      "mode": "scoped",
+      "path": "src/components/agent/claim-form.tsx",
       "part": null,
-      "net_lines": 65,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 81,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 21,
       "source": "PR #2",
-      "mode": "split",
-      "path": "next.config.ts",
+      "mode": "scoped",
+      "path": "src/components/ledger/volley-trail.tsx",
       "part": null,
-      "net_lines": 13,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 151,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 22,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/app/agent/[slug]/page.tsx",
+      "mode": "scoped",
+      "path": "src/components/upload/upload-form.tsx",
       "part": null,
-      "net_lines": 131,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 203,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 23,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/app/claim/page.tsx",
+      "mode": "scoped",
+      "path": "src/lib/agents/actions.ts",
       "part": null,
-      "net_lines": 38,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 149,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 24,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
+      "mode": "scoped",
+      "path": "src/lib/format.ts",
       "part": null,
-      "net_lines": 181,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 20,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 25,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/app/registry/page.tsx",
+      "mode": "scoped",
+      "path": "src/lib/ledger/actions.ts",
       "part": null,
-      "net_lines": 91,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 133,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 26,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/app/upload/page.tsx",
+      "mode": "scoped",
+      "path": "src/lib/ledger/descriptorDictionary.ts",
       "part": null,
-      "net_lines": 41,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 26,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 27,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/components/agent/claim-form.tsx",
+      "mode": "scoped",
+      "path": "src/lib/ledger/sanitizeReference.ts",
       "part": null,
-      "net_lines": 81,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 126,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 28,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/components/ledger/volley-trail.tsx",
+      "mode": "scoped",
+      "path": "src/lib/ledger/seal.ts",
       "part": null,
-      "net_lines": 151,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 95,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 29,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
+      "mode": "scoped",
+      "path": "src/lib/ledger/types.ts",
       "part": null,
-      "net_lines": 6,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "net_lines": 65,
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
       "line": 30,
       "source": "PR #2",
-      "mode": "split",
-      "path": "src/components/upload/upload-form.tsx",
-      "part": null,
-      "net_lines": 203,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 31,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/agents/actions.ts",
-      "part": null,
-      "net_lines": 149,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 32,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/format.ts",
-      "part": null,
-      "net_lines": 20,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 33,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/ledger/actions.ts",
-      "part": null,
-      "net_lines": 133,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 34,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/ledger/descriptorDictionary.ts",
-      "part": null,
-      "net_lines": 26,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 35,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/ledger/sanitizeReference.ts",
-      "part": null,
-      "net_lines": 126,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 36,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/ledger/seal.ts",
-      "part": null,
-      "net_lines": 95,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 37,
-      "source": "PR #2",
-      "mode": "split",
-      "path": "src/lib/ledger/types.ts",
-      "part": null,
-      "net_lines": 65,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
-    },
-    {
-      "line": 38,
-      "source": "PR #2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 73,
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer",
-      "base": "3c1561b",
-      "head": "5d2d850",
-      "redactions": []
+      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
     },
     {
-      "line": 39,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/.dockerignore",
-      "part": null,
-      "net_lines": 9,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 40,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/.env.example",
-      "part": null,
-      "net_lines": 42,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": [
-        "r2_account_id",
-        "r2_account_id"
-      ]
-    },
-    {
-      "line": 41,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/.gitignore",
-      "part": null,
-      "net_lines": 6,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 42,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/Dockerfile",
-      "part": null,
-      "net_lines": 36,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 43,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/README.md",
-      "part": null,
-      "net_lines": 115,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": [
-        "r2_account_id"
-      ]
-    },
-    {
-      "line": 44,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/package.json",
-      "part": null,
-      "net_lines": 19,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 45,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/cli.js",
-      "part": null,
-      "net_lines": 25,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 46,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/config.js",
-      "part": null,
-      "net_lines": 48,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": [
-        "r2_account_id"
-      ]
-    },
-    {
-      "line": 47,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/ffmpeg.js",
-      "part": null,
-      "net_lines": 76,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 48,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/index.js",
-      "part": null,
-      "net_lines": 126,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 49,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/logger.js",
-      "part": null,
-      "net_lines": 18,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 50,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/r2.js",
-      "part": null,
-      "net_lines": 32,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 51,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/supabase.js",
-      "part": null,
-      "net_lines": 52,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 52,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "worker/src/transcode.js",
-      "part": null,
-      "net_lines": 150,
-      "title": "Phase 3: transcoding worker (master → HLS → R2)",
-      "sha": "a212253",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 53,
+      "line": 31,
       "source": "PR #3",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 21,
-      "title": "Phase 3 worker: boot on Node 20+ (fix realtime WebSocket crash)",
-      "sha": "8aec335",
-      "parent_pr": 3,
-      "redactions": []
+      "title": "Phase 3 worker: boot on Node 20+ (fix realtime WebSocket crash)"
     },
     {
-      "line": 54,
+      "line": 32,
       "source": "PR #3",
-      "mode": "split",
-      "path": ".env.example",
-      "part": null,
-      "net_lines": 6,
-      "title": "Phase 3: Red Line HLS player on the work page",
-      "sha": "ba57c1e",
-      "parent_pr": 3,
-      "redactions": [
-        "supabase_anon"
-      ]
-    },
-    {
-      "line": 55,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "package.json",
-      "part": null,
-      "net_lines": 1,
-      "title": "Phase 3: Red Line HLS player on the work page",
-      "sha": "ba57c1e",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 56,
-      "source": "PR #3",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 14,
-      "title": "Phase 3: Red Line HLS player on the work page",
-      "sha": "ba57c1e",
-      "parent_pr": 3,
-      "redactions": []
-    },
-    {
-      "line": 57,
-      "source": "PR #3",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/RedLinePlayer.tsx",
       "part": null,
       "net_lines": 377,
-      "title": "Phase 3: Red Line HLS player on the work page",
-      "sha": "ba57c1e",
-      "parent_pr": 3,
-      "redactions": []
+      "title": "Phase 3: Red Line HLS player on the work page"
     },
     {
-      "line": 58,
+      "line": 33,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/Dockerfile",
+      "part": null,
+      "net_lines": 36,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 34,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/README.md",
+      "part": null,
+      "net_lines": 115,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 35,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/cli.js",
+      "part": null,
+      "net_lines": 25,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 36,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/config.js",
+      "part": null,
+      "net_lines": 48,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 37,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/ffmpeg.js",
+      "part": null,
+      "net_lines": 76,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 38,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/index.js",
+      "part": null,
+      "net_lines": 126,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 39,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/logger.js",
+      "part": null,
+      "net_lines": 18,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 40,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/r2.js",
+      "part": null,
+      "net_lines": 32,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 41,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/supabase.js",
+      "part": null,
+      "net_lines": 52,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 42,
+      "source": "PR #3",
+      "mode": "scoped",
+      "path": "worker/src/transcode.js",
+      "part": null,
+      "net_lines": 150,
+      "title": "Phase 3: transcoding worker (master → HLS → R2)"
+    },
+    {
+      "line": 43,
       "source": "PR #4",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 28,
-      "title": "Normalize descriptor tokens for clean chip rendering",
-      "base": "d68fcb8",
-      "head": "c17277f",
-      "redactions": []
+      "title": "Normalize descriptor tokens for clean chip rendering"
     },
     {
-      "line": 59,
+      "line": 44,
       "source": "commit f101818",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 92,
-      "title": "Add Go Live action to publish a draft work (Phase 4)",
-      "sha": "f101818",
-      "redactions": []
+      "title": "Add Go Live action to publish a draft work (Phase 4)"
     },
     {
-      "line": 60,
+      "line": 45,
       "source": "commit a45cdd2",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 20,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
-    },
-    {
-      "line": 61,
-      "source": "commit a45cdd2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/RedLinePlayer.tsx",
       "part": null,
       "net_lines": 26,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
+      "title": "Phase 4: synced lyrics (the \"heard\" half)"
     },
     {
-      "line": 62,
+      "line": 46,
       "source": "commit a45cdd2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/player-stage.tsx",
       "part": null,
       "net_lines": 74,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
+      "title": "Phase 4: synced lyrics (the \"heard\" half)"
     },
     {
-      "line": 63,
+      "line": 47,
       "source": "commit a45cdd2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/synced-lyrics.tsx",
       "part": null,
       "net_lines": 94,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
+      "title": "Phase 4: synced lyrics (the \"heard\" half)"
     },
     {
-      "line": 64,
+      "line": 48,
       "source": "commit a45cdd2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/lyrics/lrc.ts",
       "part": null,
       "net_lines": 60,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
+      "title": "Phase 4: synced lyrics (the \"heard\" half)"
     },
     {
-      "line": 65,
+      "line": 49,
       "source": "commit a45cdd2",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 35,
-      "title": "Phase 4: synced lyrics (the \"heard\" half)",
-      "sha": "a45cdd2",
-      "redactions": []
+      "title": "Phase 4: synced lyrics (the \"heard\" half)"
     },
     {
-      "line": 66,
+      "line": 50,
       "source": "commit 0ce1605",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 119,
-      "title": "Phase 4 polish: anchor synced lyrics in their own scroll box",
-      "sha": "0ce1605",
-      "redactions": []
+      "title": "Phase 4 polish: anchor synced lyrics in their own scroll box"
     },
     {
-      "line": 67,
+      "line": 51,
       "source": "commit f54ae9f",
-      "mode": "split",
-      "path": "package.json",
-      "part": null,
-      "net_lines": 2,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
-    },
-    {
-      "line": 68,
-      "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/cert/[id]/card/route.ts",
       "part": null,
       "net_lines": 17,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 69,
+      "line": 52,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/cert/[id]/cert-card-image.tsx",
       "part": null,
       "net_lines": 329,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 70,
+      "line": 53,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/cert/[id]/opengraph-image.tsx",
       "part": null,
       "net_lines": 19,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 71,
+      "line": 54,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/cert/[id]/page.tsx",
       "part": null,
       "net_lines": 238,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 72,
+      "line": 55,
       "source": "commit f54ae9f",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 25,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
-    },
-    {
-      "line": 73,
-      "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/terms/page.tsx",
       "part": null,
       "net_lines": 128,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 74,
+      "line": 56,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/go-live-button.tsx",
       "part": [
         1,
         2
       ],
       "net_lines": 38,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 75,
+      "line": 57,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/go-live-button.tsx",
       "part": [
         2,
         2
       ],
       "net_lines": 132,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 76,
+      "line": 58,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/issue-cert-button.tsx",
       "part": null,
       "net_lines": 48,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 77,
+      "line": 59,
       "source": "commit f54ae9f",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 138,
-      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant",
-      "sha": "f54ae9f",
-      "redactions": []
+      "title": "Phase 4 #2: the Red Line Certificate + Community Covenant"
     },
     {
-      "line": 78,
+      "line": 60,
       "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/app/login/page.tsx",
-      "part": null,
-      "net_lines": 15,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 79,
-      "source": "commit 9465345",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/page.tsx",
       "part": null,
       "net_lines": 131,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav"
     },
     {
-      "line": 80,
+      "line": 61,
       "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/app/signup/page.tsx",
-      "part": null,
-      "net_lines": 15,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 81,
-      "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/app/upload/page.tsx",
-      "part": null,
-      "net_lines": 5,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 82,
-      "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/components/auth/auth-form.tsx",
-      "part": null,
-      "net_lines": 11,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 83,
-      "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/components/ledger-status.tsx",
-      "part": null,
-      "net_lines": 60,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 84,
-      "source": "commit 9465345",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/search-bar.tsx",
       "part": null,
       "net_lines": 86,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav"
     },
     {
-      "line": 85,
+      "line": 62,
       "source": "commit 9465345",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 17,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
-    },
-    {
-      "line": 86,
-      "source": "commit 9465345",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/work-card.tsx",
       "part": null,
       "net_lines": 79,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav"
     },
     {
-      "line": 87,
+      "line": 63,
       "source": "commit 9465345",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/auth/actions.ts",
       "part": null,
       "net_lines": 22,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav"
     },
     {
-      "line": 88,
+      "line": 64,
       "source": "commit 9465345",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 141,
-      "title": "The listener's door: public Browse feed + search + Listen/Create nav",
-      "sha": "9465345",
-      "redactions": []
+      "title": "The listener's door: public Browse feed + search + Listen/Create nav"
     },
     {
-      "line": 89,
+      "line": 65,
       "source": "commit 7f76331",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 4,
-      "title": "Post-door fixes: default to / after login + render the Google G",
-      "sha": "7f76331",
-      "redactions": []
+      "title": "Post-door fixes: default to / after login + render the Google G"
     },
     {
-      "line": 90,
+      "line": 66,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "public/sw.js",
       "part": null,
       "net_lines": 97,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 91,
+      "line": 67,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/apple-icon.tsx",
       "part": null,
       "net_lines": 14,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 92,
+      "line": 68,
       "source": "commit 1a2de33",
-      "mode": "split",
-      "path": "src/app/icon.tsx",
-      "part": null,
-      "net_lines": 12,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
-    },
-    {
-      "line": 93,
-      "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/icons/[name]/route.ts",
       "part": null,
       "net_lines": 33,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 94,
+      "line": 69,
       "source": "commit 1a2de33",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
-      "part": null,
-      "net_lines": 33,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
-    },
-    {
-      "line": 95,
-      "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/manifest.ts",
       "part": null,
       "net_lines": 44,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 96,
+      "line": 70,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/opengraph-image.tsx",
       "part": null,
       "net_lines": 134,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 97,
+      "line": 71,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/install/install-coach.tsx",
       "part": null,
       "net_lines": 177,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 98,
+      "line": 72,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/install/install-trigger.tsx",
       "part": null,
       "net_lines": 26,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 99,
+      "line": 73,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/install/sw-register.tsx",
       "part": null,
       "net_lines": 39,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 100,
+      "line": 74,
       "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/install/use-install-state.ts",
       "part": null,
       "net_lines": 122,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 101,
+      "line": 75,
       "source": "commit 1a2de33",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 3,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
-    },
-    {
-      "line": 102,
-      "source": "commit 1a2de33",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/branding/aired-mark.tsx",
       "part": null,
       "net_lines": 84,
-      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview",
-      "sha": "1a2de33",
-      "redactions": []
+      "title": "Installable AIRED: PWA manifest, safe SW, install-coach, share preview"
     },
     {
-      "line": 103,
+      "line": 76,
       "source": "commit d3c84d5",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 109,
-      "title": "Phase 3 auto-trigger: kick the transcode worker on createWork",
-      "sha": "d3c84d5",
-      "redactions": []
+      "title": "Phase 3 auto-trigger: kick the transcode worker on createWork"
     },
     {
-      "line": 104,
+      "line": 77,
       "source": "commit 751523b",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 81,
-      "title": "Uniform work cards: cap chips, fix row heights, +N overflow",
-      "sha": "751523b",
-      "redactions": []
+      "title": "Uniform work cards: cap chips, fix row heights, +N overflow"
     },
     {
-      "line": 105,
+      "line": 78,
       "source": "commit 597984e",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 97,
-      "title": "Reuse existing contributors on upload, don't fork the discography",
-      "sha": "597984e",
-      "redactions": []
+      "title": "Reuse existing contributors on upload, don't fork the discography"
     },
     {
-      "line": 106,
+      "line": 79,
       "source": "PR #5",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/registry/[id]/opengraph-image.tsx",
       "part": null,
       "net_lines": 322,
-      "title": "Add per-song share UI and Open Graph preview cards",
-      "base": "597984e",
-      "head": "f199cee",
-      "redactions": []
+      "title": "Add per-song share UI and Open Graph preview cards"
     },
     {
-      "line": 107,
+      "line": 80,
       "source": "PR #5",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/registry/[id]/page.tsx",
       "part": null,
       "net_lines": 92,
-      "title": "Add per-song share UI and Open Graph preview cards",
-      "base": "597984e",
-      "head": "f199cee",
-      "redactions": []
+      "title": "Add per-song share UI and Open Graph preview cards"
     },
     {
-      "line": 108,
+      "line": 81,
       "source": "PR #5",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/share-button.tsx",
       "part": null,
       "net_lines": 159,
-      "title": "Add per-song share UI and Open Graph preview cards",
-      "base": "597984e",
-      "head": "f199cee",
-      "redactions": []
+      "title": "Add per-song share UI and Open Graph preview cards"
     },
     {
-      "line": 109,
+      "line": 82,
       "source": "PR #5",
-      "mode": "split",
-      "path": "src/components/work-card.tsx",
-      "part": null,
-      "net_lines": 62,
-      "title": "Add per-song share UI and Open Graph preview cards",
-      "base": "597984e",
-      "head": "f199cee",
-      "redactions": []
-    },
-    {
-      "line": 110,
-      "source": "PR #5",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 44,
-      "title": "Add per-song share UI and Open Graph preview cards",
-      "base": "597984e",
-      "head": "f199cee",
-      "redactions": []
+      "title": "Add per-song share UI and Open Graph preview cards"
     },
     {
-      "line": 111,
+      "line": 83,
       "source": "PR #6",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
-      "part": null,
-      "net_lines": 14,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 112,
-      "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/registry/[id]/page.tsx",
       "part": null,
       "net_lines": 29,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change"
     },
     {
-      "line": 113,
+      "line": 84,
       "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/RedLinePlayer.tsx",
       "part": [
         1,
         2
       ],
       "net_lines": 216,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change"
     },
     {
-      "line": 114,
+      "line": 85,
       "source": "PR #6",
-      "mode": "split",
-      "path": "src/components/RedLinePlayer.tsx",
-      "part": [
-        2,
-        2
-      ],
-      "net_lines": 47,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 115,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/components/player-stage.tsx",
-      "part": null,
-      "net_lines": 62,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 116,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/components/player/player-provider.tsx",
-      "part": null,
-      "net_lines": 383,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 117,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/components/player/track.ts",
-      "part": null,
-      "net_lines": 15,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 118,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/lib/stream-url.ts",
-      "part": null,
-      "net_lines": 16,
-      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change",
-      "sha": "0973a1f",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 119,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
-      "part": null,
-      "net_lines": 2,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 120,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/app/page.tsx",
-      "part": null,
-      "net_lines": 11,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 121,
-      "source": "PR #6",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 14,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
-    },
-    {
-      "line": 122,
-      "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/player/card-play-button.tsx",
       "part": null,
       "net_lines": 62,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue"
     },
     {
-      "line": 123,
+      "line": 86,
       "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/player/now-playing-bar.tsx",
       "part": null,
       "net_lines": 234,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue"
     },
     {
-      "line": 124,
+      "line": 87,
       "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/player/player-provider.tsx",
       "part": null,
       "net_lines": 61,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue"
     },
     {
-      "line": 125,
+      "line": 88,
       "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
+      "path": "src/components/player/player-provider.tsx",
+      "part": null,
+      "net_lines": 383,
+      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change"
+    },
+    {
+      "line": 89,
+      "source": "PR #6",
+      "mode": "scoped",
       "path": "src/components/player/track.ts",
       "part": null,
       "net_lines": 15,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change"
     },
     {
-      "line": 126,
+      "line": 90,
       "source": "PR #6",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/work-card.tsx",
       "part": null,
       "net_lines": 65,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue"
     },
     {
-      "line": 127,
+      "line": 91,
       "source": "PR #6",
-      "mode": "split",
-      "path": "src/lib/works/queries.ts",
+      "mode": "scoped",
+      "path": "src/lib/stream-url.ts",
       "part": null,
-      "net_lines": 7,
-      "title": "Phase 5 (Stage B): continuous play — the now-playing bar + queue",
-      "sha": "3af635d",
-      "parent_pr": 6,
-      "redactions": []
+      "net_lines": 16,
+      "title": "Phase 5 foundation (Stage A): one global audio engine, zero UX change"
     },
     {
-      "line": 128,
+      "line": 92,
       "source": "PR #9",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 132,
-      "title": "Add repeat mode (off/all/one) to the player",
-      "base": "c068e66",
-      "head": "0a6d875",
-      "redactions": []
+      "title": "Add repeat mode (off/all/one) to the player"
     },
     {
-      "line": 129,
+      "line": 93,
       "source": "PR #10",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/qr/card/route.ts",
       "part": null,
       "net_lines": 16,
-      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
-      "base": "ae529b1",
-      "head": "2fefb9b",
-      "redactions": []
+      "title": "Add scannable AIRED QR: /qr poster + per-song share QR"
     },
     {
-      "line": 130,
+      "line": 94,
       "source": "PR #10",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/qr/page.tsx",
       "part": null,
       "net_lines": 98,
-      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
-      "base": "ae529b1",
-      "head": "2fefb9b",
-      "redactions": []
+      "title": "Add scannable AIRED QR: /qr poster + per-song share QR"
     },
     {
-      "line": 131,
+      "line": 95,
       "source": "PR #10",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/qr/qr-poster-image.tsx",
       "part": null,
       "net_lines": 203,
-      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
-      "base": "ae529b1",
-      "head": "2fefb9b",
-      "redactions": []
+      "title": "Add scannable AIRED QR: /qr poster + per-song share QR"
     },
     {
-      "line": 132,
+      "line": 96,
       "source": "PR #10",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 4,
-      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
-      "base": "ae529b1",
-      "head": "2fefb9b",
-      "redactions": []
-    },
-    {
-      "line": 133,
-      "source": "PR #10",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/song-qr.tsx",
       "part": null,
       "net_lines": 120,
-      "title": "Add scannable AIRED QR: /qr poster + per-song share QR",
-      "base": "ae529b1",
-      "head": "2fefb9b",
-      "redactions": []
+      "title": "Add scannable AIRED QR: /qr poster + per-song share QR"
     },
     {
-      "line": 134,
+      "line": 97,
       "source": "PR #8",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 75,
-      "title": "Top nav: highlight the current page, not just the red CTA",
-      "base": "102440b",
-      "head": "efd0727",
-      "redactions": []
+      "title": "Top nav: highlight the current page, not just the red CTA"
     },
     {
-      "line": 135,
+      "line": 98,
       "source": "PR #7",
-      "mode": "split",
-      "path": "src/app/globals.css",
-      "part": null,
-      "net_lines": 92,
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
-      "base": "1a62596",
-      "head": "1a3fe2d",
-      "redactions": []
-    },
-    {
-      "line": 136,
-      "source": "PR #7",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
-      "part": null,
-      "net_lines": 6,
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
-      "base": "1a62596",
-      "head": "1a3fe2d",
-      "redactions": []
-    },
-    {
-      "line": 137,
-      "source": "PR #7",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/onboarding/intro-replay-link.tsx",
       "part": null,
       "net_lines": 25,
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
-      "base": "1a62596",
-      "head": "1a3fe2d",
-      "redactions": []
+      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry"
     },
     {
-      "line": 138,
+      "line": 99,
       "source": "PR #7",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/onboarding/onboarding-state.ts",
       "part": null,
       "net_lines": 101,
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
-      "base": "1a62596",
-      "head": "1a3fe2d",
-      "redactions": []
+      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry"
     },
     {
-      "line": 139,
+      "line": 100,
       "source": "PR #7",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/site-footer.tsx",
       "part": null,
       "net_lines": 43,
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry",
-      "base": "1a62596",
-      "head": "1a3fe2d",
-      "redactions": []
+      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry"
     },
     {
-      "line": 140,
+      "line": 101,
       "source": "PR #11",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 6,
-      "title": "Add contact email link to site footer",
-      "base": "f5e6f58",
-      "head": "3dd73f9",
-      "redactions": []
+      "title": "Add contact email link to site footer"
     },
     {
-      "line": 141,
+      "line": 102,
       "source": "PR #12",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 13,
-      "title": "Add Vercel Web Analytics with app install tracking",
-      "base": "2a639e6",
-      "head": "c6ca935",
-      "redactions": []
+      "title": "Add Vercel Web Analytics with app install tracking"
     },
     {
-      "line": 142,
+      "line": 103,
       "source": "PR #13",
-      "mode": "split",
-      "path": "src/app/page.tsx",
-      "part": null,
-      "net_lines": 38,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
-    },
-    {
-      "line": 143,
-      "source": "PR #13",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 16,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
-    },
-    {
-      "line": 144,
-      "source": "PR #13",
-      "mode": "split",
-      "path": "src/app/registry/page.tsx",
-      "part": null,
-      "net_lines": 9,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
-    },
-    {
-      "line": 145,
-      "source": "PR #13",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/play-count.tsx",
       "part": null,
       "net_lines": 33,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
+      "title": "Record real listens server-side and display play counts"
     },
     {
-      "line": 146,
+      "line": 104,
       "source": "PR #13",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/player/player-provider.tsx",
       "part": null,
       "net_lines": 94,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
+      "title": "Record real listens server-side and display play counts"
     },
     {
-      "line": 147,
+      "line": 105,
       "source": "PR #13",
-      "mode": "split",
-      "path": "src/components/work-card.tsx",
-      "part": null,
-      "net_lines": 15,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
-    },
-    {
-      "line": 148,
-      "source": "PR #13",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/format.ts",
       "part": null,
       "net_lines": 28,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
+      "title": "Record real listens server-side and display play counts"
     },
     {
-      "line": 149,
+      "line": 106,
       "source": "PR #13",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/plays/actions.ts",
       "part": null,
       "net_lines": 37,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
+      "title": "Record real listens server-side and display play counts"
     },
     {
-      "line": 150,
+      "line": 107,
       "source": "PR #13",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 26,
-      "title": "Record real listens server-side and display play counts",
-      "base": "d48ae90",
-      "head": "f9fae65",
-      "redactions": []
+      "title": "Record real listens server-side and display play counts"
     },
     {
-      "line": 151,
+      "line": 108,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618102025_profile_artist_fields_and_privilege_guard.sql",
       "part": null,
       "net_lines": 71,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 152,
+      "line": 109,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618102040_album_table.sql",
       "part": null,
       "net_lines": 30,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 153,
+      "line": 110,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618102050_work_album_id_and_moderation_note.sql",
       "part": null,
       "net_lines": 20,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 154,
+      "line": 111,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618102059_work_status_add_pending.sql",
       "part": null,
       "net_lines": 7,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 155,
+      "line": 112,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618103455_backfill_founder_artist_and_album.sql",
       "part": null,
       "net_lines": 78,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 156,
+      "line": 113,
       "source": "PR #14",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/README.md",
       "part": null,
       "net_lines": 12,
-      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)",
-      "base": "32dda95",
-      "head": "c0c8896",
-      "redactions": []
+      "title": "Foundation: artist-via-profile, album seam, moderation flags (schema only)"
     },
     {
-      "line": 157,
+      "line": 114,
       "source": "PR #15",
-      "mode": "split",
-      "path": "src/app/agent/[slug]/page.tsx",
-      "part": null,
-      "net_lines": 28,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 158,
-      "source": "PR #15",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 35,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 159,
-      "source": "PR #15",
-      "mode": "split",
-      "path": "src/app/registry/page.tsx",
-      "part": null,
-      "net_lines": 20,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 160,
-      "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/review/page.tsx",
       "part": null,
       "net_lines": 143,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 161,
+      "line": 115,
       "source": "PR #15",
-      "mode": "split",
-      "path": "src/components/go-live-button.tsx",
-      "part": [
-        1,
-        2
-      ],
-      "net_lines": 36,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 162,
-      "source": "PR #15",
-      "mode": "split",
-      "path": "src/components/go-live-button.tsx",
-      "part": [
-        2,
-        2
-      ],
-      "net_lines": 164,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 163,
-      "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/review/review-actions.tsx",
       "part": null,
       "net_lines": 160,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 164,
+      "line": 116,
       "source": "PR #15",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 30,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
-    },
-    {
-      "line": 165,
-      "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/review/actions.ts",
       "part": null,
       "net_lines": 87,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 166,
+      "line": 117,
       "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/review/queries.ts",
       "part": null,
       "net_lines": 91,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 167,
+      "line": 118,
       "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/supabase/auth.ts",
       "part": null,
       "net_lines": 35,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 168,
+      "line": 119,
       "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 48,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 169,
+      "line": 120,
       "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618110701_work_admin_read_policy.sql",
       "part": null,
       "net_lines": 18,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 170,
+      "line": 121,
       "source": "PR #15",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618110720_review_gate_rpcs.sql",
       "part": null,
       "net_lines": 94,
-      "title": "Review Gate: hold newcomers' publishes for admin review",
-      "base": "3f572b5",
-      "head": "e728336",
-      "redactions": []
+      "title": "Review Gate: hold newcomers' publishes for admin review"
     },
     {
-      "line": 171,
+      "line": 122,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/manage/page.tsx",
       "part": null,
       "net_lines": 38,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 172,
+      "line": 123,
       "source": "PR #16",
-      "mode": "split",
-      "path": "src/app/upload/page.tsx",
-      "part": null,
-      "net_lines": 8,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
-    },
-    {
-      "line": 173,
-      "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/manage/albums-section.tsx",
       "part": null,
       "net_lines": 340,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 174,
+      "line": 124,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/manage/works-section.tsx",
       "part": null,
       "net_lines": 131,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 175,
+      "line": 125,
       "source": "PR #16",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 1,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
-    },
-    {
-      "line": 176,
-      "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/upload/upload-form.tsx",
       "part": null,
       "net_lines": 128,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 177,
+      "line": 126,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/actions.ts",
       "part": null,
       "net_lines": 170,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 178,
+      "line": 127,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/queries.ts",
       "part": null,
       "net_lines": 157,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 179,
+      "line": 128,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 43,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 180,
+      "line": 129,
       "source": "PR #16",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618115510_enforce_album_ownership.sql",
       "part": null,
       "net_lines": 50,
-      "title": "Organize: file works into albums at upload + a /manage surface",
-      "base": "747a590",
-      "head": "6d71355",
-      "redactions": []
+      "title": "Organize: file works into albums at upload + a /manage surface"
     },
     {
-      "line": 181,
+      "line": 130,
       "source": "PR #17",
-      "mode": "split",
-      "path": ".env.example",
-      "part": null,
-      "net_lines": 3,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 182,
-      "source": "PR #17",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 33,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 183,
-      "source": "PR #17",
-      "mode": "split",
-      "path": "src/app/upload/page.tsx",
-      "part": null,
-      "net_lines": 71,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 184,
-      "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/manage/albums-section.tsx",
       "part": null,
       "net_lines": 41,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 185,
+      "line": 131,
       "source": "PR #17",
-      "mode": "split",
-      "path": "src/components/manage/works-section.tsx",
-      "part": null,
-      "net_lines": 34,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 186,
-      "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/works/discard-button.tsx",
       "part": null,
       "net_lines": 174,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 187,
+      "line": 132,
       "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/actions.ts",
       "part": null,
       "net_lines": 36,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 188,
+      "line": 133,
       "source": "PR #17",
-      "mode": "split",
-      "path": "src/lib/albums/queries.ts",
-      "part": null,
-      "net_lines": 23,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 189,
-      "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/artwork/upload-client.ts",
       "part": null,
       "net_lines": 47,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 190,
+      "line": 134,
       "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/ledger/sanitizeReference.ts",
       "part": null,
       "net_lines": 48,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 191,
+      "line": 135,
       "source": "PR #17",
-      "mode": "split",
-      "path": "src/lib/works/actions.ts",
-      "part": [
-        1,
-        2
-      ],
-      "net_lines": 2,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 192,
-      "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": [
         2,
         2
       ],
       "net_lines": 163,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 193,
+      "line": 136,
       "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/purge.ts",
       "part": null,
       "net_lines": 69,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 194,
+      "line": 137,
       "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 36,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 195,
+      "line": 138,
       "source": "PR #17",
-      "mode": "split",
-      "path": "worker/README.md",
-      "part": null,
-      "net_lines": 24,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 196,
-      "source": "PR #17",
-      "mode": "split",
-      "path": "worker/src/index.js",
-      "part": null,
-      "net_lines": 44,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 197,
-      "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/purge.js",
       "part": null,
       "net_lines": 47,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 198,
+      "line": 139,
       "source": "PR #17",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/r2.js",
       "part": null,
       "net_lines": 45,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
+      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
     },
     {
-      "line": 199,
-      "source": "PR #17",
-      "mode": "split",
-      "path": "worker/src/supabase.js",
-      "part": null,
-      "net_lines": 15,
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume",
-      "base": "c08220d",
-      "head": "037e384",
-      "redactions": []
-    },
-    {
-      "line": 200,
+      "line": 140,
       "source": "PR #18",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/album/[id]/page.tsx",
       "part": null,
       "net_lines": 122,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages"
     },
     {
-      "line": 201,
+      "line": 141,
       "source": "PR #18",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/artist/[id]/page.tsx",
       "part": null,
       "net_lines": 141,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages"
     },
     {
-      "line": 202,
+      "line": 142,
       "source": "PR #18",
-      "mode": "split",
-      "path": "src/app/page.tsx",
-      "part": null,
-      "net_lines": 96,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
-    },
-    {
-      "line": 203,
-      "source": "PR #18",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/album-card.tsx",
       "part": null,
       "net_lines": 61,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages"
     },
     {
-      "line": 204,
+      "line": 143,
       "source": "PR #18",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/public-queries.ts",
       "part": null,
       "net_lines": 258,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages"
     },
     {
-      "line": 205,
+      "line": 144,
       "source": "PR #18",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 100,
-      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages",
-      "base": "d8ed4fa",
-      "head": "3758c33",
-      "redactions": []
+      "title": "Browse-as-label: album shelf on Listen, album pages, artist pages"
     },
     {
-      "line": 206,
+      "line": 145,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/album/[id]/page.tsx",
-      "part": null,
-      "net_lines": 2,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 207,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/artist/[handle]/page.tsx",
-      "part": null,
-      "net_lines": 41,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 208,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/auth/callback/route.ts",
-      "part": null,
-      "net_lines": 8,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 209,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/auth/confirm/route.ts",
-      "part": null,
-      "net_lines": 4,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 210,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/manage/page.tsx",
-      "part": null,
-      "net_lines": 7,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 211,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 40,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 212,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/review/page.tsx",
-      "part": null,
-      "net_lines": 23,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 213,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/review/taken-down/page.tsx",
       "part": null,
       "net_lines": 96,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 214,
+      "line": 146,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/settings/page.tsx",
       "part": null,
       "net_lines": 47,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 215,
+      "line": 147,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/app/upload/page.tsx",
-      "part": null,
-      "net_lines": 7,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 216,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/welcome/page.tsx",
       "part": null,
       "net_lines": 56,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 217,
+      "line": 148,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/components/album-card.tsx",
-      "part": null,
-      "net_lines": 9,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 218,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/identity/handle-field.tsx",
       "part": null,
       "net_lines": 80,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 219,
+      "line": 149,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/identity/identity-editor.tsx",
       "part": null,
       "net_lines": 202,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 220,
+      "line": 150,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/identity/image-field.tsx",
       "part": null,
       "net_lines": 122,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 221,
+      "line": 151,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/components/manage/works-section.tsx",
-      "part": null,
-      "net_lines": 19,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 222,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 9,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 223,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/works/admin-takedown.tsx",
       "part": null,
       "net_lines": 141,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 224,
+      "line": 152,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/public-queries.ts",
       "part": null,
       "net_lines": 100,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 225,
+      "line": 153,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/lib/albums/queries.ts",
-      "part": null,
-      "net_lines": 10,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 226,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/lib/auth/actions.ts",
-      "part": null,
-      "net_lines": 9,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 227,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/identity/actions.ts",
       "part": null,
       "net_lines": 261,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 228,
+      "line": 154,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/identity/handle.ts",
       "part": null,
       "net_lines": 73,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 229,
+      "line": 155,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/identity/onboarding.ts",
       "part": null,
       "net_lines": 29,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 230,
+      "line": 156,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/review/actions.ts",
       "part": null,
       "net_lines": 63,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 231,
+      "line": 157,
       "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/review/queries.ts",
       "part": null,
       "net_lines": 64,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 232,
+      "line": 158,
       "source": "PR #19",
-      "mode": "split",
-      "path": "src/lib/supabase/auth.ts",
-      "part": null,
-      "net_lines": 6,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 233,
-      "source": "PR #19",
-      "mode": "split",
-      "path": "src/lib/works/queries.ts",
-      "part": null,
-      "net_lines": 17,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
-    },
-    {
-      "line": 234,
-      "source": "PR #19",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260618134225_journey_onboarding_and_takedown.sql",
       "part": null,
       "net_lines": 149,
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance",
-      "base": "a28fb23",
-      "head": "8c0f2e2",
-      "redactions": []
+      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
     },
     {
-      "line": 235,
+      "line": 159,
       "source": "PR #20",
-      "mode": "split",
-      "path": "src/app/page.tsx",
-      "part": null,
-      "net_lines": 104,
-      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename",
-      "base": "3731474",
-      "head": "9f8d131",
-      "redactions": []
-    },
-    {
-      "line": 236,
-      "source": "PR #20",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/artist-shelf-row.tsx",
       "part": null,
       "net_lines": 43,
-      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename",
-      "base": "3731474",
-      "head": "9f8d131",
-      "redactions": []
+      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename"
     },
     {
-      "line": 237,
+      "line": 160,
       "source": "PR #20",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/albums/public-queries.ts",
       "part": null,
       "net_lines": 84,
-      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename",
-      "base": "3731474",
-      "head": "9f8d131",
-      "redactions": []
+      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename"
     },
     {
-      "line": 238,
+      "line": 161,
       "source": "PR #20",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/queries.ts",
       "part": null,
       "net_lines": 88,
-      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename",
-      "base": "3731474",
-      "head": "9f8d131",
-      "redactions": []
+      "title": "Listen: artist-grouped album & single rows + \"Most Aired\" rename"
     },
     {
-      "line": 239,
+      "line": 162,
       "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/album/[id]/opengraph-image.tsx",
       "part": null,
       "net_lines": 28,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 240,
+      "line": 163,
       "source": "PR #21",
-      "mode": "split",
-      "path": "src/app/album/[id]/page.tsx",
-      "part": null,
-      "net_lines": 33,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 241,
-      "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/artist/[handle]/opengraph-image.tsx",
       "part": null,
       "net_lines": 28,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 242,
+      "line": 164,
       "source": "PR #21",
-      "mode": "split",
-      "path": "src/app/artist/[handle]/page.tsx",
-      "part": null,
-      "net_lines": 44,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 243,
-      "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/registry/[id]/opengraph-image.tsx",
       "part": null,
       "net_lines": 324,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 244,
+      "line": 165,
       "source": "PR #21",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 9,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 245,
-      "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/share/[kind]/[id]/[size]/route.ts",
       "part": null,
       "net_lines": 70,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 246,
+      "line": 166,
       "source": "PR #21",
-      "mode": "split",
-      "path": "src/components/album-card.tsx",
-      "part": null,
-      "net_lines": 2,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 247,
-      "source": "PR #21",
-      "mode": "split",
-      "path": "src/components/share-button.tsx",
-      "part": null,
-      "net_lines": 159,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 248,
-      "source": "PR #21",
-      "mode": "split",
-      "path": "src/components/work-card.tsx",
-      "part": null,
-      "net_lines": 15,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
-    },
-    {
-      "line": 249,
-      "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/share/data.ts",
       "part": null,
       "net_lines": 140,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 250,
+      "line": 167,
       "source": "PR #21",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/share/props.ts",
       "part": null,
       "net_lines": 113,
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads",
-      "base": "968a17c",
-      "head": "b6cf4c8",
-      "redactions": []
+      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
     },
     {
-      "line": 251,
+      "line": 168,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "public/sw.js",
       "part": [
         1,
         2
       ],
       "net_lines": 140,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 252,
+      "line": 169,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "public/sw.js",
       "part": [
         2,
         2
       ],
       "net_lines": 30,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 253,
+      "line": 170,
       "source": "PR #23",
-      "mode": "split",
-      "path": "src/app/downloads/page.tsx",
-      "part": null,
-      "net_lines": 20,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
-    },
-    {
-      "line": 254,
-      "source": "PR #23",
-      "mode": "split",
-      "path": "src/app/layout.tsx",
-      "part": null,
-      "net_lines": 2,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
-    },
-    {
-      "line": 255,
-      "source": "PR #23",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": null,
-      "net_lines": 14,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
-    },
-    {
-      "line": 256,
-      "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/offline/download-button.tsx",
       "part": null,
       "net_lines": 256,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 257,
+      "line": 171,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/offline/downloads-screen.tsx",
       "part": null,
       "net_lines": 279,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 258,
+      "line": 172,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/offline/offline-init.tsx",
       "part": null,
       "net_lines": 16,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 259,
+      "line": 173,
       "source": "PR #23",
-      "mode": "split",
-      "path": "src/components/player/now-playing-bar.tsx",
-      "part": null,
-      "net_lines": 15,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
-    },
-    {
-      "line": 260,
-      "source": "PR #23",
-      "mode": "split",
-      "path": "src/components/site-header.tsx",
-      "part": null,
-      "net_lines": 1,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
-    },
-    {
-      "line": 261,
-      "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/cache.ts",
       "part": null,
       "net_lines": 75,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 262,
+      "line": 174,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/capability.ts",
       "part": null,
       "net_lines": 36,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 263,
+      "line": 175,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/db.ts",
       "part": null,
       "net_lines": 65,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 264,
+      "line": 176,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/download.ts",
       "part": null,
       "net_lines": 113,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 265,
+      "line": 177,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/manifest.ts",
       "part": null,
       "net_lines": 45,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 266,
+      "line": 178,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/store.ts",
       "part": null,
       "net_lines": 276,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 267,
+      "line": 179,
       "source": "PR #23",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/offline/types.ts",
       "part": null,
       "net_lines": 52,
-      "title": "Offline listening: download songs and play with no connection",
-      "base": "dd31b90",
-      "head": "6ebe39c",
-      "redactions": []
+      "title": "Offline listening: download songs and play with no connection"
     },
     {
-      "line": 268,
+      "line": 180,
       "source": "PR #24",
-      "mode": "split",
-      "path": "src/app/globals.css",
-      "part": null,
-      "net_lines": 35,
-      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
-      "base": "20b69da",
-      "head": "1359f5d",
-      "redactions": []
-    },
-    {
-      "line": 269,
-      "source": "PR #24",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/registry/[id]/page.tsx",
       "part": [
         1,
         2
       ],
       "net_lines": 104,
-      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
-      "base": "20b69da",
-      "head": "1359f5d",
-      "redactions": []
+      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors"
     },
     {
-      "line": 270,
+      "line": 181,
       "source": "PR #24",
-      "mode": "split",
-      "path": "src/app/registry/[id]/page.tsx",
-      "part": [
-        2,
-        2
-      ],
-      "net_lines": 79,
-      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
-      "base": "20b69da",
-      "head": "1359f5d",
-      "redactions": []
-    },
-    {
-      "line": 271,
-      "source": "PR #24",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/registry/more-on-aired.tsx",
       "part": null,
       "net_lines": 54,
-      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
-      "base": "20b69da",
-      "head": "1359f5d",
-      "redactions": []
+      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors"
     },
     {
-      "line": 272,
+      "line": 182,
       "source": "PR #24",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/registry/play-hero.tsx",
       "part": null,
       "net_lines": 138,
-      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors",
-      "base": "20b69da",
-      "head": "1359f5d",
-      "redactions": []
+      "title": "Shared-song arrival: lead with one-tap PLAY to convert share visitors"
     },
     {
-      "line": 273,
+      "line": 183,
       "source": "PR #25",
-      "mode": "split",
-      "path": ".env.example",
-      "part": null,
-      "net_lines": 8,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 274,
-      "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/share/song/[id]/clip-frame/[orientation]/route.ts",
       "part": null,
       "net_lines": 52,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 275,
+      "line": 184,
       "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/app/share/song/[id]/video/[orientation]/route.ts",
       "part": null,
       "net_lines": 82,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 276,
+      "line": 185,
       "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/share-sheet.tsx",
       "part": null,
       "net_lines": 121,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 277,
+      "line": 186,
       "source": "PR #25",
-      "mode": "split",
-      "path": "src/lib/share/card.tsx",
-      "part": null,
-      "net_lines": 24,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 278,
-      "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/share/video.ts",
       "part": null,
       "net_lines": 107,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 279,
+      "line": 187,
       "source": "PR #25",
-      "mode": "split",
-      "path": "worker/.env.example",
-      "part": null,
-      "net_lines": 11,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 280,
-      "source": "PR #25",
-      "mode": "split",
-      "path": "worker/README.md",
-      "part": null,
-      "net_lines": 42,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 281,
-      "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/clip.js",
       "part": null,
       "net_lines": 183,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 282,
+      "line": 188,
       "source": "PR #25",
-      "mode": "split",
-      "path": "worker/src/config.js",
-      "part": null,
-      "net_lines": 10,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 283,
-      "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/ffmpeg.js",
       "part": null,
       "net_lines": 108,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 284,
+      "line": 189,
       "source": "PR #25",
-      "mode": "split",
-      "path": "worker/src/index.js",
-      "part": null,
-      "net_lines": 78,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 285,
-      "source": "PR #25",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/r2.js",
       "part": null,
       "net_lines": 50,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
+      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
     },
     {
-      "line": 286,
-      "source": "PR #25",
-      "mode": "split",
-      "path": "worker/src/supabase.js",
-      "part": null,
-      "net_lines": 18,
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound",
-      "base": "f793f9d",
-      "head": "a21cc0b",
-      "redactions": []
-    },
-    {
-      "line": 287,
+      "line": 190,
       "source": "PR #26",
       "mode": "whole",
       "path": null,
       "part": null,
       "net_lines": 31,
-      "title": "Fix WorkTitle sm layout: stack ID and title, increase card height",
-      "base": "a031b92",
-      "head": "65ec26b",
-      "redactions": []
+      "title": "Fix WorkTitle sm layout: stack ID and title, increase card height"
     },
     {
-      "line": 288,
+      "line": 191,
       "source": "PR #27",
-      "mode": "split",
-      "path": "src/app/share/song/[id]/video/[orientation]/route.ts",
-      "part": null,
-      "net_lines": 10,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 289,
-      "source": "PR #27",
-      "mode": "split",
-      "path": "src/components/manage/works-section.tsx",
-      "part": null,
-      "net_lines": 12,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 290,
-      "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/share-sheet.tsx",
       "part": null,
       "net_lines": 61,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 291,
+      "line": 192,
       "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/components/works/teaser-clip-editor.tsx",
       "part": null,
       "net_lines": 191,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 292,
+      "line": 193,
       "source": "PR #27",
-      "mode": "split",
-      "path": "src/lib/albums/queries.ts",
-      "part": null,
-      "net_lines": 14,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 293,
-      "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/share/video.ts",
       "part": null,
       "net_lines": 48,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 294,
+      "line": 194,
       "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "src/lib/works/actions.ts",
       "part": null,
       "net_lines": 44,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 295,
+      "line": 195,
       "source": "PR #27",
-      "mode": "split",
-      "path": "src/lib/works/queries.ts",
-      "part": null,
-      "net_lines": 12,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 296,
-      "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "supabase/migrations/20260622015032_work_teaser_clip_window.sql",
       "part": null,
       "net_lines": 23,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 297,
+      "line": 196,
       "source": "PR #27",
-      "mode": "split",
-      "path": "worker/.env.example",
-      "part": null,
-      "net_lines": 8,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 298,
-      "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/clip.js",
       "part": null,
       "net_lines": 117,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     },
     {
-      "line": 299,
+      "line": 197,
       "source": "PR #27",
-      "mode": "split",
-      "path": "worker/src/config.js",
-      "part": null,
-      "net_lines": 7,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 300,
-      "source": "PR #27",
-      "mode": "split",
-      "path": "worker/src/index.js",
-      "part": null,
-      "net_lines": 18,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 301,
-      "source": "PR #27",
-      "mode": "split",
+      "mode": "scoped",
       "path": "worker/src/r2.js",
       "part": null,
       "net_lines": 41,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
-    },
-    {
-      "line": 302,
-      "source": "PR #27",
-      "mode": "split",
-      "path": "worker/src/supabase.js",
-      "part": null,
-      "net_lines": 8,
-      "title": "Share video: per-song teaser clip window + desktop just-download",
-      "base": "abebf6b",
-      "head": "d4f99f8",
-      "redactions": []
+      "title": "Share video: per-song teaser clip window + desktop just-download"
     }
   ],
-  "still_dropped": [
+  "dropped_not_standalone": [
+    {
+      "source": "PR #3",
+      "path": "worker/.dockerignore",
+      "net": 9,
+      "reason": "dockerignore config stub"
+    },
+    {
+      "source": "PR #3",
+      "path": "worker/.env.example",
+      "net": 42,
+      "reason": "env var example stub"
+    },
+    {
+      "source": "PR #3",
+      "path": "worker/.gitignore",
+      "net": 6,
+      "reason": "gitignore stub"
+    },
+    {
+      "source": "PR #3",
+      "path": "worker/package.json",
+      "net": 19,
+      "reason": "package manifest stub"
+    },
+    {
+      "source": "PR #23",
+      "path": "src/app/downloads/page.tsx",
+      "net": 20,
+      "reason": "thin page shell mounting DownloadsScreen defined elsewhere"
+    },
+    {
+      "source": "PR #25",
+      "path": "src/lib/share/card.tsx",
+      "net": 24,
+      "reason": "only adds export keywords to existing palette and helpers for reuse elsewhere"
+    },
+    {
+      "source": "commit 1a2de33",
+      "path": "src/app/icon.tsx",
+      "net": 12,
+      "reason": "thin icon route delegating render to helper defined elsewhere"
+    }
+  ],
+  "dropped_modified_wiring": [
+    {
+      "source": "PR #1",
+      "path": "README.md",
+      "net": 29,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #1",
+      "path": "src/app/layout.tsx",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #1",
+      "path": "src/app/page.tsx",
+      "net": 23,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #2",
+      "path": ".env.example",
+      "net": 11,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #2",
+      "path": "README.md",
+      "net": 65,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #2",
+      "path": "next.config.ts",
+      "net": 13,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #2",
+      "path": "src/components/site-header.tsx",
+      "net": 6,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #3",
+      "path": ".env.example",
+      "net": 6,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #3",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 14,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #5",
+      "path": "src/components/work-card.tsx",
+      "net": 62,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/app/page.tsx",
+      "net": 11,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 14,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/components/player/track.ts",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/lib/works/queries.ts",
+      "net": 7,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/app/layout.tsx",
+      "net": 14,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/components/RedLinePlayer.tsx",
+      "net": 47,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/components/player-stage.tsx",
+      "net": 62,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #7",
+      "path": "src/app/globals.css",
+      "net": 92,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #7",
+      "path": "src/app/layout.tsx",
+      "net": 6,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #13",
+      "path": "src/app/page.tsx",
+      "net": 38,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #13",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 16,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #13",
+      "path": "src/app/registry/page.tsx",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #13",
+      "path": "src/components/work-card.tsx",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/app/agent/[slug]/page.tsx",
+      "net": 28,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 35,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/app/registry/page.tsx",
+      "net": 20,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/components/go-live-button.tsx",
+      "net": 36,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/components/go-live-button.tsx",
+      "net": 164,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #15",
+      "path": "src/components/site-header.tsx",
+      "net": 30,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #16",
+      "path": "src/app/upload/page.tsx",
+      "net": 8,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 33,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "src/app/upload/page.tsx",
+      "net": 71,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "src/components/manage/works-section.tsx",
+      "net": 34,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "src/lib/albums/queries.ts",
+      "net": 23,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "worker/README.md",
+      "net": 24,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "worker/src/index.js",
+      "net": 44,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #17",
+      "path": "worker/src/supabase.js",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #18",
+      "path": "src/app/page.tsx",
+      "net": 96,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/artist/[handle]/page.tsx",
+      "net": 41,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/auth/callback/route.ts",
+      "net": 8,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/manage/page.tsx",
+      "net": 7,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 40,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/review/page.tsx",
+      "net": 23,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/upload/page.tsx",
+      "net": 7,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/components/album-card.tsx",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/components/manage/works-section.tsx",
+      "net": 19,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/components/site-header.tsx",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/lib/albums/queries.ts",
+      "net": 10,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/lib/auth/actions.ts",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/lib/supabase/auth.ts",
+      "net": 6,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/lib/works/queries.ts",
+      "net": 17,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #20",
+      "path": "src/app/page.tsx",
+      "net": 104,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
     {
       "source": "PR #21",
-      "path": "src/lib/share/card.tsx",
-      "net": 731,
-      "reason": ">400L single coherent file",
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
+      "path": "src/app/album/[id]/page.tsx",
+      "net": 33,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/app/artist/[handle]/page.tsx",
+      "net": 44,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 9,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/components/share-button.tsx",
+      "net": 159,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/components/work-card.tsx",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #23",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 14,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #23",
+      "path": "src/components/player/now-playing-bar.tsx",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #24",
+      "path": "src/app/globals.css",
+      "net": 35,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #24",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 79,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": ".env.example",
+      "net": 8,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": "worker/.env.example",
+      "net": 11,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": "worker/README.md",
+      "net": 42,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": "worker/src/config.js",
+      "net": 10,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": "worker/src/index.js",
+      "net": 78,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #25",
+      "path": "worker/src/supabase.js",
+      "net": 18,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "src/app/share/song/[id]/video/[orientation]/route.ts",
+      "net": 10,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "src/components/manage/works-section.tsx",
+      "net": 12,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "src/lib/albums/queries.ts",
+      "net": 14,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "src/lib/works/queries.ts",
+      "net": 12,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "worker/.env.example",
+      "net": 8,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "worker/src/config.js",
+      "net": 7,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "worker/src/index.js",
+      "net": 18,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "PR #27",
+      "path": "worker/src/supabase.js",
+      "net": 8,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 1a2de33",
+      "path": "src/app/layout.tsx",
+      "net": 33,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/app/login/page.tsx",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/app/signup/page.tsx",
+      "net": 15,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/app/upload/page.tsx",
+      "net": 5,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/components/auth/auth-form.tsx",
+      "net": 11,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/components/ledger-status.tsx",
+      "net": 60,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit 9465345",
+      "path": "src/components/site-header.tsx",
+      "net": 17,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit f54ae9f",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 25,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    },
+    {
+      "source": "commit a45cdd2",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 20,
+      "reason": "modified-file integration/wiring (no self-contained symbol)"
+    }
+  ],
+  "dropped_glue": [
+    {
+      "source": "PR #2",
+      "path": "CLAUDE.md",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #3",
+      "path": "package.json",
+      "net": 1,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #6",
+      "path": "src/app/layout.tsx",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #10",
+      "path": "src/app/registry/[id]/page.tsx",
+      "net": 4,
+      "reason": "trivial(<5 lines)"
+    },
+    {
+      "source": "PR #16",
+      "path": "src/components/site-header.tsx",
+      "net": 1,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #17",
+      "path": ".env.example",
+      "net": 3,
+      "reason": "trivial(<5 lines)"
+    },
+    {
+      "source": "PR #17",
+      "path": "src/lib/works/actions.ts",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/album/[id]/page.tsx",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #19",
+      "path": "src/app/auth/confirm/route.ts",
+      "net": 4,
+      "reason": "trivial(<5 lines)"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/components/album-card.tsx",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #23",
+      "path": "src/app/layout.tsx",
+      "net": 2,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "PR #23",
+      "path": "src/components/site-header.tsx",
+      "net": 1,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "commit 1a2de33",
+      "path": "src/components/site-header.tsx",
+      "net": 3,
+      "reason": "import/wiring-only"
+    },
+    {
+      "source": "commit f54ae9f",
+      "path": "package.json",
+      "net": 2,
+      "reason": "import/wiring-only"
+    }
+  ],
+  "dropped_over400": [
+    {
+      "source": "PR #2",
+      "path": "src/components/ledger/volley-editor.tsx",
+      "net": 409,
+      "reason": ">400 coherent"
     },
     {
       "source": "PR #7",
       "path": "src/components/onboarding/onboarding.tsx",
       "net": 578,
-      "reason": ">400L single coherent file",
-      "title": "First-visit onboarding: 3 intro screens + Matrix-pill entry"
-    },
-    {
-      "source": "PR #19",
-      "path": "src/components/onboarding/journey-wizard.tsx",
-      "net": 520,
-      "reason": ">400L single coherent file",
-      "title": "THE JOURNEY + admin take-down: guided first-run, identity editor, governance"
-    },
-    {
-      "source": "PR #21",
-      "path": "src/components/share-sheet.tsx",
-      "net": 495,
-      "reason": ">400L single coherent file",
-      "title": "Share & publicity: one-tap social sheet + publicity card + IG/Story downloads"
-    },
-    {
-      "source": "commit a45cdd2",
-      "path": "src/components/lyrics-sync-editor.tsx",
-      "net": 482,
-      "reason": ">400L single coherent file",
-      "title": "Phase 4: synced lyrics (the \"heard\" half)"
+      "reason": ">400 coherent"
     },
     {
       "source": "PR #17",
       "path": "src/components/works/work-editor.tsx",
       "net": 421,
-      "reason": ">400L single coherent file",
-      "title": "Edit & tidy: edit works in place, device album covers, wizard Back/Discard/Resume"
+      "reason": ">400 coherent"
     },
     {
-      "source": "PR #2",
-      "path": "src/components/ledger/volley-editor.tsx",
-      "net": 409,
-      "reason": ">400L single coherent file",
-      "title": "Phase 2: Volley Ledger, uploads, and reference sanitizer"
+      "source": "PR #19",
+      "path": "src/components/onboarding/journey-wizard.tsx",
+      "net": 520,
+      "reason": ">400 coherent"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/components/share-sheet.tsx",
+      "net": 495,
+      "reason": ">400 coherent"
+    },
+    {
+      "source": "PR #21",
+      "path": "src/lib/share/card.tsx",
+      "net": 731,
+      "reason": ">400 coherent"
     },
     {
       "source": "PR #25",
       "path": "src/lib/share/clip.tsx",
       "net": 405,
-      "reason": ">400L single coherent file",
-      "title": "Share video (MP4): per-song Reels/TikTok clip that plays in-feed with sound"
-    }
-  ],
-  "skipped": [
-    {
-      "source": "PR #22",
-      "reason": "brand/logo assets (Facebook profile + cover)"
+      "reason": ">400 coherent"
     },
     {
-      "source": "commit 32dda95",
-      "reason": "copy-only (README)"
-    },
-    {
-      "source": "commit 760c401",
-      "reason": "copy-only (Covenant prose)"
-    },
-    {
-      "source": "commit 9a784cb",
-      "reason": "scaffold (Phase 0 generated skeleton)"
+      "source": "commit a45cdd2",
+      "path": "src/components/lyrics-sync-editor.tsx",
+      "net": 482,
+      "reason": ">400 coherent"
     }
   ]
 }
