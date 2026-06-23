@@ -63,3 +63,41 @@ export function formatSeq(seq: number | string): string {
   if (!Number.isFinite(n)) return `V${seq}`;
   return `V${Number(n)}`;
 }
+
+// Origin must never contradict the contributor's type: a silicon contributor
+// (ai_model) could not have carried a HUMAN-origin move, and a human could not
+// have carried an AI-origin one. DIALOGUE — the "neither alone" move (CLAUDE.md
+// §7) — stays legal for ANY contributor; ai_voice / tool carry no restriction.
+// These three helpers mirror the enforce_volley_origin() DB trigger exactly, so
+// the editors guide the choice and block a bad pair before it ever reaches the
+// database exception.
+
+// The sensible default origin when a contributor is chosen: humans throw
+// (HUMAN), silicon renders (AI). The creator can still switch to DIALOGUE.
+export function defaultOriginForAgentType(type: AgentType): VolleyOrigin {
+  return type === "human" ? "HUMAN" : "AI";
+}
+
+// True when this contributor type could never have carried this origin.
+export function originContradictsAgentType(
+  type: AgentType,
+  origin: VolleyOrigin,
+): boolean {
+  if (type === "ai_model" && origin === "HUMAN") return true;
+  if (type === "human" && origin === "AI") return true;
+  return false;
+}
+
+// A clear reason for a contradictory pair, or null when the pair is legal.
+export function originConflictMessage(
+  type: AgentType,
+  origin: VolleyOrigin,
+): string | null {
+  if (type === "ai_model" && origin === "HUMAN") {
+    return "An AI contributor can't carry a Human-origin move — use AI or Dialogue.";
+  }
+  if (type === "human" && origin === "AI") {
+    return "A human contributor can't carry an AI-origin move — use Human or Dialogue.";
+  }
+  return null;
+}

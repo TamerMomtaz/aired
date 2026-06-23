@@ -18,7 +18,9 @@ import {
   VOLLEY_ROLES,
   ORIGIN_LABELS,
   DELTA_LABELS,
+  defaultOriginForAgentType,
   formatSeq,
+  originConflictMessage,
   type AgentType,
   type DeltaType,
   type VolleyOrigin,
@@ -45,7 +47,11 @@ export function VolleyEditor({
   const [agentId, setAgentId] = useState<string>(initialAgents[0]?.id ?? "");
   const [seq, setSeq] = useState<string>(String(suggestedSeq));
   const [role, setRole] = useState<VolleyRole>("lyric_thrown");
-  const [origin, setOrigin] = useState<VolleyOrigin>("HUMAN");
+  // Origin defaults from the chosen contributor's type (humans throw, silicon
+  // renders); the creator can still pick Dialogue.
+  const [origin, setOrigin] = useState<VolleyOrigin>(
+    defaultOriginForAgentType(initialAgents[0]?.type ?? "human"),
+  );
   const [deltaType, setDeltaType] = useState<DeltaType>("added");
 
   const [prompt, setPrompt] = useState("");
@@ -66,6 +72,25 @@ export function VolleyEditor({
 
   // Live sanitizer preview — the creator always sees what will become public.
   const refResult = useMemo(() => sanitizeReference(styleRef), [styleRef]);
+
+  // Origin ⇄ contributor-type integrity, mirroring the enforce_volley_origin DB
+  // guard: surface any contradiction live so the creator never hits the raw
+  // database exception.
+  const selectedAgent = useMemo(
+    () => agents.find((a) => a.id === agentId) ?? null,
+    [agents, agentId],
+  );
+  const originConflict = selectedAgent
+    ? originConflictMessage(selectedAgent.type, origin)
+    : null;
+
+  // Choosing a contributor defaults the origin from its type (humans throw,
+  // silicon renders); Dialogue stays one click away.
+  function selectAgent(id: string) {
+    setAgentId(id);
+    const a = agents.find((x) => x.id === id);
+    if (a) setOrigin(defaultOriginForAgentType(a.type));
+  }
 
   function onAddContributor() {
     setAddError(null);
@@ -91,6 +116,7 @@ export function VolleyEditor({
           : [...prev, result.agent],
       );
       setAgentId(result.agent.id);
+      setOrigin(defaultOriginForAgentType(result.agent.type));
       setNewName("");
       setAdding(false);
     });
@@ -108,6 +134,10 @@ export function VolleyEditor({
     const seqNum = Number(seq);
     if (!Number.isFinite(seqNum)) {
       setError("Enter a sequence number (e.g. 0, 1, 1.5).");
+      return;
+    }
+    if (originConflict) {
+      setError(originConflict);
       return;
     }
 
@@ -180,7 +210,7 @@ export function VolleyEditor({
           <select
             className={selectClass}
             value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
+            onChange={(e) => selectAgent(e.target.value)}
             disabled={pending}
           >
             <option value="" disabled>
@@ -284,6 +314,9 @@ export function VolleyEditor({
               </option>
             ))}
           </select>
+          {originConflict ? (
+            <span className="text-[11px] text-cert-red">{originConflict}</span>
+          ) : null}
         </label>
         <label className={labelClass}>
           <span className={labelText}>Delta</span>
@@ -367,7 +400,7 @@ export function VolleyEditor({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || !!originConflict}
         className="w-full rounded-lg bg-cert-red px-4 py-2.5 text-sm font-medium text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Sealing…" : "Seal this volley"}
