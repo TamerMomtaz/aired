@@ -1,6 +1,8 @@
 import { ImageResponse } from "next/og";
 import QRCode from "qrcode";
 
+import { getOgFonts, OG_FONT_FAMILY } from "./fonts";
+
 // The publicity-grade share card — ONE design, exported at several sizes. It
 // sells the single thing only AIRED does: carbon AND silicon credited by name
 // (CLAUDE.md §3a). The same renderer feeds three surfaces:
@@ -61,7 +63,10 @@ export const BG = "#0a0a0a";
 export const FG = "#ededed";
 export const MUTED = "#8a8a8a";
 export const RED = "#ff2d2d";
-export const FONT = "sans-serif";
+// The bundled brand face (src/lib/share/fonts.ts). Asking for it by name lets
+// Satori fall back, per glyph, to the Arabic face it also has loaded — so a
+// mixed Latin+Arabic title renders instead of throwing.
+export const FONT = OG_FONT_FAMILY;
 
 // names → "Tee Momtaz  ·  Claude  ·  Suno" (soft cap, "+N" tail) so a long
 // lineage still renders on one or two lines. The brief's exact example line.
@@ -703,9 +708,11 @@ export async function renderShareCard(
   options: { headers?: Record<string, string> } = {},
 ): Promise<ImageResponse> {
   const dims = SHARE_DIMENSIONS[variant];
+  const fonts = await getOgFonts();
   if (variant === "og") {
     return new ImageResponse(<LandscapeCard data={data} />, {
       ...dims,
+      fonts,
       headers: options.headers,
     });
   }
@@ -717,17 +724,18 @@ export async function renderShareCard(
   });
   return new ImageResponse(
     <PortraitCard data={data} variant={variant} qrDataUri={qrDataUri} />,
-    { ...dims, headers: options.headers },
+    { ...dims, fonts, headers: options.headers },
   );
 }
 
 // Render the neutral fallback at a given size (same options surface).
-export function renderShareFallback(
+export async function renderShareFallback(
   variant: ShareVariant,
   options: { headers?: Record<string, string> } = {},
-): ImageResponse {
+): Promise<ImageResponse> {
   return new ImageResponse(<FallbackCard variant={variant} />, {
     ...SHARE_DIMENSIONS[variant],
+    fonts: await getOgFonts(),
     headers: options.headers,
   });
 }

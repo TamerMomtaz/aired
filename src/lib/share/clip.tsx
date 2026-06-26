@@ -15,6 +15,7 @@ import {
   type ShareCardData,
   Wordmark,
 } from "./card";
+import { getOgFonts } from "./fonts";
 
 // The SHARE VIDEO still frame — the burned-in background of the downloadable
 // MP4 (the Reels / TikTok clip). Instagram & TikTok accept no links and only
@@ -383,15 +384,14 @@ function ClipFrame({
   );
 }
 
-// Render the still frame for a resolved song at a given orientation. The route
-// sets the X-Clip-Band / X-Clip-Size headers (it knows the orientation) so the
-// worker can paint the waveform without any shared coordinate constant.
-export async function renderClipFrame(
+// Build the still-frame ImageResponse for a song at a given orientation. Both
+// the brand (Geist) and Arabic (Tajawal) faces are handed to Satori so a mixed
+// Latin+Arabic title renders per-glyph instead of throwing on the first glyph
+// the Latin face can't cover (the old 500 that killed the video).
+async function buildClipFrame(
   data: ShareCardData,
-  orientation: ClipOrientation,
-  options: { headers?: Record<string, string> } = {},
+  geo: ClipGeo,
 ): Promise<ImageResponse> {
-  const geo = CLIP_GEO[orientation];
   const qrDataUri = await QRCode.toDataURL(data.url, {
     errorCorrectionLevel: "H",
     margin: 2,
@@ -400,6 +400,60 @@ export async function renderClipFrame(
   });
   return new ImageResponse(
     <ClipFrame data={data} geo={geo} qrDataUri={qrDataUri} />,
-    { width: geo.width, height: geo.height, headers: options.headers },
+    { width: geo.width, height: geo.height, fonts: await getOgFonts() },
   );
+}
+
+// Force Satori to actually paint (a font/glyph error surfaces while the body is
+// consumed, NOT at construction) and re-wrap the bytes as a PNG carrying the
+// worker's headers. Buffering is what lets us catch a render error here instead
+// of streaming a silent 5xx.
+async function pngResponse(
+  image: ImageResponse,
+  headers?: Record<string, string>,
+): Promise<Response> {
+  const body = await image.arrayBuffer();
+  return new Response(body, {
+    headers: { "Content-Type": "image/png", ...headers },
+  });
+}
+
+// Render the still frame for a resolved song at a given orientation. The route
+// sets the X-Clip-Band / X-Clip-Size headers (it knows the orientation) so the
+// worker can paint the waveform without any shared coordinate constant.
+//
+// HARDENED: the full render is buffered so a Satori failure is caught here and
+// logged with the REAL error (id, title, orientation) instead of a silent 5xx.
+// If it ever fails anyway, we DEGRADE — render the same-sized, same-band branded
+// frame without the title/credits text (text being the only thing that can trip
+// a glyph/font error) so the worker still gets a valid frame and the video is
+// still made, rather than 500-ing the route and killing the clip.
+export async function renderClipFrame(
+  data: ShareCardData,
+  orientation: ClipOrientation,
+  options: { headers?: Record<string, string> } = {},
+): Promise<Response> {
+  const geo = CLIP_GEO[orientation];
+  try {
+    return await pngResponse(await buildClipFrame(data, geo), options.headers);
+  } catch (err) {
+    console.error(
+      `[clip-frame] render failed for work url=${data.url} orientation=${orientation} title=${JSON.stringify(
+        data.title,
+      )}:`,
+      err,
+    );
+    try {
+      // Drop the user-supplied text (title + credits) — everything else is
+      // brand chrome that cannot trip a glyph error. Same dimensions, same band.
+      const safe: ShareCardData = { ...data, title: "", quote: false, names: [] };
+      return await pngResponse(await buildClipFrame(safe, geo), options.headers);
+    } catch (degradedErr) {
+      console.error(
+        `[clip-frame] degraded render ALSO failed orientation=${orientation}:`,
+        degradedErr,
+      );
+      return new Response("clip frame render failed", { status: 500 });
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import QRCode from "qrcode";
 
 import { formatCatalogId } from "@/lib/catalog";
+import { getOgFonts, OG_FONT_FAMILY } from "@/lib/share/fonts";
 import { createClient } from "@/lib/supabase/server";
 
 // Shared renderer for the Phase 4 #2 share card. The downloadable PNG at
@@ -25,7 +26,7 @@ type WorkRow = {
   title: string;
 };
 
-function fallback(message: string) {
+async function fallback(message: string) {
   return new ImageResponse(
     (
       <div
@@ -38,12 +39,13 @@ function fallback(message: string) {
           alignItems: "center",
           justifyContent: "center",
           fontSize: 48,
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
         {message}
       </div>
     ),
-    CARD_SIZE,
+    { ...CARD_SIZE, fonts: await getOgFonts() },
   );
 }
 
@@ -97,7 +99,7 @@ export async function renderCertCard(workId: number): Promise<ImageResponse> {
           display: "flex",
           flexDirection: "column",
           padding: 80,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           position: "relative",
         }}
       >
@@ -324,6 +326,6 @@ export async function renderCertCard(workId: number): Promise<ImageResponse> {
         </div>
       </div>
     ),
-    CARD_SIZE,
+    { ...CARD_SIZE, fonts: await getOgFonts() },
   );
 }

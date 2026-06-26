@@ -1,6 +1,8 @@
 import { ImageResponse } from "next/og";
 import QRCode from "qrcode";
 
+import { getOgFonts, OG_FONT_FAMILY } from "@/lib/share/fonts";
+
 // Branded, scannable AIRED QR poster — the "scan to enter" artifact for posters,
 // stickers, cards, and IRL. Reuses the cert card's QR technique
 // (src/app/cert/[id]/cert-card-image.tsx): QRCode.toDataURL → an <img> inside an
@@ -63,7 +65,7 @@ export async function renderQrPoster({
           alignItems: "center",
           justifyContent: "space-between",
           padding: 72,
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
           position: "relative",
         }}
       >
@@ -198,6 +200,6 @@ export async function renderQrPoster({
         </div>
       </div>
     ),
-    POSTER_SIZE,
+    { ...POSTER_SIZE, fonts: await getOgFonts() },
   );
 }
