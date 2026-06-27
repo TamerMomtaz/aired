@@ -1,6 +1,6 @@
 // AIRED service worker — installability, a faster shell, and OFFLINE DOWNLOADS.
 //
-// Three jobs, in priority order on the fetch path:
+// Four jobs, in priority order on the fetch path:
 //
 //   1. DOWNLOADED AUDIO. A song is "downloaded" when the page has cached its HLS
 //      manifest + every .ts segment + its artwork into the offline cache (see
@@ -9,23 +9,35 @@
 //      online playback of a downloaded song skips the re-fetch (faster). A miss
 //      falls straight through to the network, exactly as before.
 //
-//   2. APP SHELL, offline-tolerant. Page navigations (and Next's RSC fetches) go
-//      network-FIRST — a signed-in user always sees fresh data online — but when
-//      the network is gone we fall back to a cached copy, and finally to the
+//   2. RSC / FLIGHT REQUESTS — NETWORK-ONLY, NEVER CACHED. A React Server
+//      Component payload (a request with `?_rsc=…`, the `RSC: 1` header, or
+//      `Accept: text/x-component`) is NOT an HTML document. If one is ever cached
+//      under a route key and later replayed to a top-level navigation, the
+//      browser paints the raw Flight stream as text — that is the "garbled text
+//      on PWA launch" bug. So RSC requests always hit the network untouched and
+//      are never written to or read from any cache. Offline, the RSC fetch simply
+//      fails and Next falls back to a hard navigation, which job 3 handles.
+//
+//   3. APP NAVIGATIONS, offline-tolerant. Top-level navigations go network-FIRST
+//      — a signed-in user always sees fresh data online — but when the network is
+//      gone we fall back to a cached *HTML document* copy, and finally to the
 //      Downloads screen, so the app lands on a calm offline state instead of a
 //      browser error. Only PUBLIC routes are ever runtime-cached (never /manage,
-//      /upload, /settings, /review, /auth), so this never stashes private pages.
+//      /upload, /settings, /review, /auth), and only genuine `text/html`
+//      responses — never a Flight payload — so this can never stash raw RSC.
 //
-//   3. IMMUTABLE BUILD ASSETS. /_next/static/ is content-hashed → cache-first
+//   4. IMMUTABLE BUILD ASSETS. /_next/static/ is content-hashed → cache-first
 //      forever (swept on a version bump), as before.
 //
 // Conservative by default: anything not matched here hits the network untouched
-// (Supabase API, auth, every non-GET).
+// (Supabase API, auth, RSC, every non-GET).
 
 // Versioned caches — bumped to roll the worker. The activate sweep deletes every
-// cache NOT in KEEP, so old versions clear on the next visit.
-const STATIC_CACHE = "aired-static-v2";
-const RUNTIME_CACHE = "aired-runtime-v2";
+// cache NOT in KEEP, so old versions clear on the next visit. The bump to v3 also
+// purges any v2 runtime cache that an older worker may have poisoned with an RSC
+// payload, so existing installs self-heal on their next launch.
+const STATIC_CACHE = "aired-static-v3";
+const RUNTIME_CACHE = "aired-runtime-v3";
 // The downloads cache is UNVERSIONED on purpose: it holds the listener's actual
 // downloaded songs and must survive every deploy. Kept out of the sweep below.
 // MUST match OFFLINE_CACHE in src/lib/offline/cache.ts.
@@ -111,23 +123,37 @@ self.addEventListener("fetch", (event) => {
   // Never cache anything touching auth.
   if (url.pathname.startsWith("/auth/")) return;
 
-  // 3) Immutable Next build assets: cache-first forever.
+  // 2) RSC / Flight requests: NETWORK-ONLY. Never cached, never served from cache
+  //    — replaying a Flight payload to a navigation is what paints raw text on
+  //    launch. Returning without respondWith lets the browser fetch it normally;
+  //    offline it fails and Next falls back to a hard navigation (handled below).
+  if (isRscRequest(req, url)) return;
+
+  // 4) Immutable Next build assets: cache-first forever.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(cacheFirst(req, STATIC_CACHE));
     return;
   }
 
-  // 2) App navigations + Next RSC fetches: network-first with an offline fallback.
-  const isNav = req.mode === "navigate";
-  const isRsc =
-    req.headers.get("RSC") === "1" || url.searchParams.has("_rsc");
-  if (isNav || isRsc) {
-    event.respondWith(networkFirstApp(req, url, isNav, isRsc));
+  // 3) Top-level navigations: network-first, with an HTML-only offline fallback.
+  if (req.mode === "navigate") {
+    event.respondWith(navigateNetworkFirst(req, url));
     return;
   }
 
   // Everything else same-origin (icons, route handlers, images): pass through.
 });
+
+// True for any React Server Component / Flight fetch. Next marks these with a
+// cache-busting `_rsc` query param, the `RSC: 1` header, and an
+// `Accept: text/x-component`. A real top-level navigation carries none of these,
+// so this never misclassifies a document request.
+function isRscRequest(request, url) {
+  if (url.searchParams.has("_rsc")) return true;
+  if (request.headers.get("RSC") === "1") return true;
+  const accept = request.headers.get("Accept") || "";
+  return accept.includes("text/x-component");
+}
 
 // Serve a cross-origin GET from the offline cache if we have it; otherwise go to
 // the network. On a miss while offline the fetch rejects, which is the correct
@@ -156,32 +182,37 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-// Network-first for app pages / RSC, falling back to cache when offline. Successful
-// responses for PUBLIC routes are stashed for that fallback; RSC URLs are
-// normalized (the cache-busting `_rsc` query dropped) so the offline match hits.
-async function networkFirstApp(request, url, isNav, isRsc) {
+// Network-first for top-level navigations, falling back to cache only when the
+// network is gone. A successful response is stashed ONLY when it's a PUBLIC route
+// AND a genuine HTML document — so the runtime cache can never hold a Flight
+// payload, and an offline launch always paints HTML, never raw text. Keyed by the
+// navigation request; since RSC is never cached, no key collision is possible.
+async function navigateNetworkFirst(request, url) {
   const cache = await caches.open(RUNTIME_CACHE);
-  const key = isRsc ? rscKey(url) : request;
   try {
     const response = await fetch(request);
-    if (response && response.ok && isCacheableRoute(url.pathname)) {
-      cache.put(key, response.clone()).catch(() => {});
+    if (
+      response &&
+      response.ok &&
+      isCacheableRoute(url.pathname) &&
+      isHtmlDocument(response)
+    ) {
+      cache.put(request, response.clone()).catch(() => {});
     }
     return response;
   } catch (err) {
-    const cached = await cache.match(key, { ignoreVary: true });
+    const cached = await cache.match(request, { ignoreVary: true });
     if (cached) return cached;
-    if (isNav) {
-      const fallback = await cache.match(OFFLINE_FALLBACK, { ignoreVary: true });
-      if (fallback) return fallback;
-    }
+    const fallback = await cache.match(OFFLINE_FALLBACK, { ignoreVary: true });
+    if (fallback) return fallback;
     throw err;
   }
 }
 
-// A stable cache key for an RSC request: same URL minus the `_rsc` cache-buster.
-function rscKey(url) {
-  const u = new URL(url.href);
-  u.searchParams.delete("_rsc");
-  return u.toString();
+// Only ever treat a real HTML document as cacheable shell. A Flight response is
+// `text/x-component`; gating on `text/html` keeps it out of the cache even if the
+// request-side RSC check above ever misses an edge case.
+function isHtmlDocument(response) {
+  const type = response.headers.get("Content-Type") || "";
+  return type.includes("text/html");
 }
