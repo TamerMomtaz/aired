@@ -44,6 +44,7 @@ export function WorksSection({
                       </span>
                     ) : null}
                   </div>
+                  <PublishedVia work={work} />
                 </div>
                 <WorkAlbumSelect work={work} albums={albums} />
               </div>
@@ -152,6 +153,30 @@ function WorkAlbumSelect({
         </p>
       ) : null}
     </div>
+  );
+}
+
+// HOW this work reached AIRED — the second honest fact, beside WHO AUTHORED it
+// (the Volley Ledger). Stated plainly, per work, with no drama: hands at the web
+// UI, or a program posting on a named human's delegated authority. It records
+// DELEGATION, never autonomy: a machine does not decide to publish here — a human
+// holds the token, and the work still lands as a draft for that human to promote.
+function PublishedVia({ work }: { work: ManageWork }) {
+  if (work.publishedVia !== "delegated_api") {
+    return (
+      <p className="text-[11px] text-muted/60">Uploaded via web</p>
+    );
+  }
+  return (
+    <p className="text-[11px] text-muted/70">
+      Delegated upload
+      {work.authorityName ? (
+        <> · authorized by {work.authorityName}</>
+      ) : null}
+      {work.ingestTokenLabel ? (
+        <> · <span className="text-muted/60">{work.ingestTokenLabel}</span></>
+      ) : null}
+    </p>
   );
 }
 
