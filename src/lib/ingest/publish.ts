@@ -12,10 +12,23 @@
 //     find-or-create, so a name never fractures into two discographies;
 //   • ffmpeg → HLS is kicked by the same triggerTranscode() the UI path uses.
 //
-// What it adds is the second honest fact: `published_via = 'delegated_api'` plus
-// the human authority that authorized it. It NEVER publishes: the work lands at
-// status 'draft' and a human still promotes it (Go Live). The
-// enforce_publish_honesty trigger refuses any row that says otherwise.
+// What it adds are the two honest facts beside the ledger:
+//
+//   • `published_via = 'delegated_api'` + the human authority that authorized it;
+//   • the work files under the CREDITED PERFORMER (`creator_id`), so an AI
+//     performer is a first-class artist with their own rail, catalog and albums —
+//     while the human who carried it stays named as the hands.
+//
+// That is reciprocal provenance, in Tee's words: "I am just their hands, and
+// credited as they are in my ledger — I am in their ledger." On a human's work
+// the AI is a credited contributor; on a performer's own work the authorizing
+// human is credited as the one who carried it to shore. Neither is the tool. So
+// this door also writes the human INTO the performer's ledger (the hands volley
+// below) rather than leaving them a column nobody reads.
+//
+// It NEVER publishes: the work lands at status 'draft' and a human still
+// promotes it (Go Live). The enforce_publish_honesty trigger refuses any row
+// that says otherwise.
 //
 // SERVER ONLY. Runs on the service client — RLS is bypassed there, so every
 // ownership question is answered HERE, before a write, and the DB triggers
@@ -39,7 +52,7 @@ import {
 import { writeVolley } from "@/lib/ledger/write";
 import { SUPABASE_URL } from "@/lib/supabase/config";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { DelegatedAuthority } from "./tokens";
+import type { DelegatedGrant } from "./tokens";
 
 // Same buckets as the human upload path (upload-form.tsx): the master is PRIVATE
 // and never served (Rule 6 — audio reaches listeners only from R2 via the CDN,
@@ -99,6 +112,10 @@ export type IngestedWork = {
   status: "draft";
   publishedVia: "delegated_api";
   publishedByAuthority: string;
+  /** The credited performer whose rail this work landed on (work.creator_id). */
+  performerProfileId: string;
+  /** That performer's public artist name, echoed so a caller can read it back. */
+  performerName: string;
   ingestTokenLabel: string;
   albumId: string | null;
   volleyCount: number;
@@ -126,8 +143,13 @@ function fileExt(name: string, fallback: string): string {
 // — is what stops a delegated token from attaching another creator's private
 // master or artwork to its work. Keys are `<authority-uuid>/<upload-uuid>/<file>`,
 // exactly as the web upload writes them.
-function ownedByAuthority(path: string, authorityUserId: string): boolean {
-  return path.startsWith(`${authorityUserId}/`) && !path.includes("..");
+//
+// This stays scoped to the AUTHORITY even when the work files under a performer:
+// the bytes were uploaded by the human's own Supabase-authenticated client, into
+// the human's own folder. A performer has no session and can upload nothing, so
+// a performer-scoped folder would be a folder no one could ever write to.
+function ownedByAuthority(path: string, authorityProfileId: string): boolean {
+  return path.startsWith(`${authorityProfileId}/`) && !path.includes("..");
 }
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -137,13 +159,13 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 // each other's works through a colliding uuid.
 async function findReplay(
   supabase: ServiceClient,
-  authorityUserId: string,
+  authorityProfileId: string,
   idempotencyKey: string,
 ): Promise<{ id: number; title: string; album_id: string | null } | null> {
   const { data } = await supabase
     .from("work")
     .select("id, title, album_id")
-    .eq("published_by_authority", authorityUserId)
+    .eq("published_by_authority", authorityProfileId)
     .eq("ingest_idempotency_key", idempotencyKey)
     .maybeSingle();
   return data ?? null;
@@ -160,11 +182,62 @@ async function countVolleys(
   return count ?? 0;
 }
 
+// The `agent` row that credits the authorizing human — the hands, in the
+// performer's ledger.
+//
+// A human who has ever been credited already has an agent row linked to their
+// profile; we reuse it so the hands keep ONE public page and ONE discography
+// (Rule 3a) instead of sprouting a fresh identity per performer they carry. Only
+// if no linked human agent exists do we find-or-create one from their artist
+// name — through the SAME resolver the editor uses, so it lands on their
+// canonical row if the name is already known.
+//
+// The row must be type `human`: the volley below is declared origin HUMAN, and
+// enforce_volley_origin refuses HUMAN on an ai_model contributor. That is the
+// point — a human carried this, and the trail may not say otherwise.
+async function resolveHandsAgent(
+  supabase: ServiceClient,
+  authorityProfileId: string,
+  authorityName: string,
+): Promise<{ ok: true; agentId: string; name: string } | { ok: false; error: string }> {
+  const { data: linkedRows } = await supabase
+    .from("agent")
+    .select("id, name, type")
+    .eq("profile_id", authorityProfileId)
+    .order("created_at", { ascending: true });
+  const linked = ((linkedRows ?? []) as Array<{
+    id: string;
+    name: string;
+    type: AgentType;
+  }>).find((a) => a.type === "human");
+  if (linked) {
+    return { ok: true, agentId: linked.id, name: linked.name };
+  }
+
+  const name = authorityName.trim();
+  if (!name) {
+    return {
+      ok: false,
+      error:
+        "The authorizing human has no artist name yet, so they cannot be credited as the hands — set a display name on that profile first.",
+    };
+  }
+  const resolved = await resolveContributor(supabase, { name, type: "human" });
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
+  }
+  return { ok: true, agentId: resolved.agent.id, name: resolved.agent.name };
+}
+
 export async function ingestWork(
-  authority: DelegatedAuthority,
+  grant: DelegatedGrant,
   input: IngestWorkInput,
 ): Promise<IngestResult> {
-  const { authorityUserId, label } = authority;
+  const { authorityProfileId, performerProfileId, label } = grant;
+  // The two facts a token carries. They are the same profile when a human runs
+  // automation over their own catalog, and different when a human carries an AI
+  // performer's work to shore — which is the case this whole path exists for.
+  const carriedForPerformer = performerProfileId !== authorityProfileId;
 
   // ── Validate the envelope ─────────────────────────────────────────────────
   // Cheap, purely-local checks run FIRST, before a client exists — a malformed
@@ -219,8 +292,42 @@ export async function ingestWork(
 
   const supabase = createServiceClient();
 
+  // ── The two profiles this token speaks for ────────────────────────────────
+  // Both must be real profile rows before anything is written: the performer
+  // because the work will file under them (a bad id would be caught by the FK,
+  // but as an opaque constraint error rather than a sentence), and the human
+  // because they must be nameable in the performer's ledger. A token pointing at
+  // a profile that does not exist is a misconfiguration, and it says so.
+  const { data: profileRows } = await supabase
+    .from("profile")
+    .select("id, display_name, handle")
+    .in("id", Array.from(new Set([authorityProfileId, performerProfileId])));
+  const profiles = (profileRows ?? []) as Array<{
+    id: string;
+    display_name: string | null;
+    handle: string | null;
+  }>;
+  const authorityProfile = profiles.find((p) => p.id === authorityProfileId);
+  const performerProfile = profiles.find((p) => p.id === performerProfileId);
+  if (!authorityProfile) {
+    return {
+      ok: false,
+      status: 500,
+      error: "This token's authorizing human is not a profile on AIRED.",
+    };
+  }
+  if (!performerProfile) {
+    return {
+      ok: false,
+      status: 500,
+      error: "This token's performer is not a profile on AIRED.",
+    };
+  }
+  const performerName =
+    (performerProfile.display_name ?? "").trim() || "AIRED artist";
+
   // ── Idempotency: a retry returns the draft it already made ────────────────
-  const existing = await findReplay(supabase, authorityUserId, idempotencyKey);
+  const existing = await findReplay(supabase, authorityProfileId, idempotencyKey);
   if (existing) {
     return {
       ok: true,
@@ -230,7 +337,9 @@ export async function ingestWork(
         title: existing.title,
         status: "draft",
         publishedVia: "delegated_api",
-        publishedByAuthority: authorityUserId,
+        publishedByAuthority: authorityProfileId,
+        performerProfileId,
+        performerName,
         ingestTokenLabel: label,
         albumId: existing.album_id,
         volleyCount: await countVolleys(supabase, Number(existing.id)),
@@ -333,7 +442,59 @@ export async function ingestWork(
     });
   }
 
+  // ── The hands, written into the performer's ledger ────────────────────────
+  // THE LAW, IN CODE. On a human's work the AI is a credited contributor; on a
+  // performer's own work the authorizing human is credited too — as the hands
+  // that carried it to shore, never as its author. So this door appends one more
+  // volley the caller did not send, and cannot omit.
+  //
+  // It is honest about what it claims:
+  //   role   `audit`  — a record of process, the one role that is not a claim on
+  //                     the craft. The human did not write, arrange, or render
+  //                     this; they carried it.
+  //   origin `HUMAN`  — a person did this act. enforce_volley_origin holds it to
+  //                     a human contributor.
+  //   delta  `added`  — the arrival is added to the trail; nothing is rewritten.
+  //
+  // Only when the performer is someone OTHER than the authorizing human. A human
+  // publishing their own catalog through their own automation is already the
+  // artist on every volley; a "carried by me" credit on my own work would be
+  // noise, and `published_via` already records how it arrived.
+  //
+  // It is prepared HERE, with the caller's volleys, so it is covered by the same
+  // all-or-nothing: if the hands cannot be credited, no work row is created at
+  // all. A performer's work never lands without the hands named on it.
+  if (carriedForPerformer) {
+    const hands = await resolveHandsAgent(
+      supabase,
+      authorityProfileId,
+      authorityProfile.display_name ?? "",
+    );
+    if (!hands.ok) {
+      return bad(hands.error);
+    }
+    const maxSeq = prepared.reduce((m, v) => Math.max(m, v.seq), -1);
+    prepared.push({
+      seq: prepared.length ? Math.floor(maxSeq) + 1 : 0,
+      agentId: hands.agentId,
+      role: "audit",
+      origin: "HUMAN",
+      deltaType: "added",
+      craft: {
+        prompt: "",
+        style_reference_raw: "",
+        rejected_branches: "",
+        rationale: `Carried to shore by ${hands.name} for ${performerName}, under the delegated token "${label}". Published on ${hands.name}'s authority — not authored by them.`,
+      },
+    });
+  }
+
   // ── Placement (single / existing album / new album) ────────────────────────
+  // Albums belong to the ARTIST, and for a delegated publish that is the
+  // performer — enforce_album_ownership requires album.profile_id = creator_id,
+  // so a performer's work can only ever sit in a performer's album. The
+  // authorizing human's own albums are not offered here on purpose: carrying a
+  // work does not file it into your catalog.
   const placement: IngestPlacement = input.placement ?? { mode: "single" };
   let albumId: string | null = null;
   let createdAlbumId: string | null = null;
@@ -348,8 +509,12 @@ export async function ingestWork(
       .select("id, profile_id")
       .eq("id", placement.albumId)
       .maybeSingle();
-    if (!album || album.profile_id !== authorityUserId) {
-      return bad("That album doesn't belong to the authorizing artist.");
+    if (!album || album.profile_id !== performerProfileId) {
+      return bad(
+        carriedForPerformer
+          ? `That album doesn't belong to ${performerName}, the performer this token publishes for.`
+          : "That album doesn't belong to the authorizing artist.",
+      );
     }
     albumId = album.id as string;
   } else if (placement.mode === "new_album") {
@@ -364,7 +529,7 @@ export async function ingestWork(
       .insert({
         title: albumTitle,
         description: albumDesc,
-        profile_id: authorityUserId,
+        profile_id: performerProfileId,
       })
       .select("id")
       .single();
@@ -399,7 +564,7 @@ export async function ingestWork(
       await discardCreatedAlbum();
       return bad("audio.master_path is required.");
     }
-    if (!ownedByAuthority(path, authorityUserId)) {
+    if (!ownedByAuthority(path, authorityProfileId)) {
       await discardCreatedAlbum();
       return bad(
         "audio.master_path must live in the authorizing artist's own folder.",
@@ -420,7 +585,7 @@ export async function ingestWork(
     masterPath = path;
   } else {
     const file = input.audio.file;
-    masterPath = `${authorityUserId}/${uploadId}/master.${fileExt(file.name, "bin")}`;
+    masterPath = `${authorityProfileId}/${uploadId}/master.${fileExt(file.name, "bin")}`;
     const { error: upErr } = await supabase.storage
       .from(MASTERS_BUCKET)
       .upload(masterPath, file, {
@@ -440,7 +605,7 @@ export async function ingestWork(
   if (input.artwork) {
     if (input.artwork.kind === "path") {
       const path = (input.artwork.path ?? "").trim().replace(/^\/+/, "");
-      if (!ownedByAuthority(path, authorityUserId)) {
+      if (!ownedByAuthority(path, authorityProfileId)) {
         await discardCreatedAlbum();
         return bad(
           "artwork.path must live in the authorizing artist's own folder.",
@@ -449,7 +614,7 @@ export async function ingestWork(
       artworkUrl = `${SUPABASE_URL}/storage/v1/object/public/${ARTWORK_BUCKET}/${path}`;
     } else {
       const file = input.artwork.file;
-      const artPath = `${authorityUserId}/${uploadId}/cover.${fileExt(file.name, "png")}`;
+      const artPath = `${authorityProfileId}/${uploadId}/cover.${fileExt(file.name, "png")}`;
       const { error: artErr } = await supabase.storage
         .from(ARTWORK_BUCKET)
         .upload(artPath, file, {
@@ -483,14 +648,20 @@ export async function ingestWork(
       : null;
 
   // ── The work row ──────────────────────────────────────────────────────────
-  // status 'draft' is hard-coded: this door cannot publish. creator_id is the
-  // authorizing human — the delegated publish is filed under the artist whose
-  // authority carried it, and published_by_authority states that plainly.
+  // status 'draft' is hard-coded: this door cannot publish.
+  //
+  // The two columns that carry reciprocal provenance, side by side:
+  //   creator_id             = the CREDITED PERFORMER. Their rail, their catalog,
+  //                            their artist page — a performer is an artist here,
+  //                            not a credit line on someone else's shelf.
+  //   published_by_authority = the HUMAN who authorized it. Not owner, not
+  //                            erased: the hands, stated plainly, and credited by
+  //                            name in this work's ledger by the volley above.
   const { data: workRow, error: workError } = await supabase
     .from("work")
     .insert({
       title,
-      creator_id: authorityUserId,
+      creator_id: performerProfileId,
       duration_seconds: duration,
       master_storage_path: masterPath,
       artwork_url: artworkUrl,
@@ -498,7 +669,7 @@ export async function ingestWork(
       descriptors,
       status: "draft",
       published_via: "delegated_api",
-      published_by_authority: authorityUserId,
+      published_by_authority: authorityProfileId,
       ingest_token_label: label,
       ingest_idempotency_key: idempotencyKey,
     })
@@ -509,7 +680,7 @@ export async function ingestWork(
     // 23505 = unique violation: a concurrent identical POST won the idempotency
     // index. Resolve to the work that call created rather than erroring.
     if (workError?.code === "23505") {
-      const raced = await findReplay(supabase, authorityUserId, idempotencyKey);
+      const raced = await findReplay(supabase, authorityProfileId, idempotencyKey);
       if (raced) {
         await discardCreatedAlbum();
         return {
@@ -520,7 +691,9 @@ export async function ingestWork(
             title: raced.title,
             status: "draft",
             publishedVia: "delegated_api",
-            publishedByAuthority: authorityUserId,
+            publishedByAuthority: authorityProfileId,
+            performerProfileId,
+            performerName,
             ingestTokenLabel: label,
             albumId: raced.album_id,
             volleyCount: await countVolleys(supabase, Number(raced.id)),
@@ -588,7 +761,9 @@ export async function ingestWork(
       title,
       status: "draft",
       publishedVia: "delegated_api",
-      publishedByAuthority: authorityUserId,
+      publishedByAuthority: authorityProfileId,
+      performerProfileId,
+      performerName,
       ingestTokenLabel: label,
       albumId,
       volleyCount: prepared.length,

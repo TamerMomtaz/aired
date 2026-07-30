@@ -27,10 +27,14 @@ import { triggerTranscode } from "@/lib/works/transcode";
 // work still waits for a human to promote it (Go Live). The
 // enforce_publish_honesty trigger makes a contradictory record impossible.
 //
-// Auth: `Authorization: Bearer <token>`, resolved to a named human authority in
-// constant time (src/lib/ingest/tokens.ts). A missing, blank, malformed, or
-// unknown token gets the same generic 401 — no detail leaks, and the presented
-// token is never echoed or logged.
+// The work files under the PERFORMER the token speaks for, so an AI performer
+// gets their own rail and catalog, with the authorizing human named as the hands
+// in that work's ledger. Two artists, each in the other's trail.
+//
+// Auth: `Authorization: Bearer <token>`, resolved in constant time
+// (src/lib/ingest/tokens.ts) to a grant naming the human authority and the
+// performer. A missing, blank, malformed, or unknown token gets the same generic
+// 401 — no detail leaks, and the presented token is never echoed or logged.
 //
 // Request bodies are never logged: the volley craft carries verbatim prompts,
 // which live only in the encrypted private ledger (CLAUDE.md Rule 1).
@@ -218,8 +222,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!token) {
     return unauthorized();
   }
-  const authority = resolveIngestToken(token);
-  if (!authority) {
+  // The grant names BOTH profiles: the human who authorizes, and the performer
+  // the work is filed under. Same token, two facts, neither optional downstream.
+  const grant = resolveIngestToken(token);
+  if (!grant) {
     if (!ingestConfigured()) {
       // Server-side only — the caller still sees a plain 401.
       console.error(
@@ -265,7 +271,7 @@ export async function POST(request: Request): Promise<Response> {
   //     and the honesty trigger refuses anything else through this door.
   let result: Awaited<ReturnType<typeof ingestWork>>;
   try {
-    result = await ingestWork(authority, input);
+    result = await ingestWork(grant, input);
   } catch (e) {
     // A missing service-role key (or any other unexpected throw) must not leak a
     // stack trace or a config detail to the caller. Log server-side, answer
@@ -305,6 +311,9 @@ export async function POST(request: Request): Promise<Response> {
         status: work.status,
         published_via: work.publishedVia,
         published_by_authority: work.publishedByAuthority,
+        // Whose rail it landed on — the credited performer (work.creator_id).
+        performer_profile_id: work.performerProfileId,
+        performer: work.performerName,
         ingest_token_label: work.ingestTokenLabel,
         album_id: work.albumId,
         volleys: work.volleyCount,
@@ -313,7 +322,7 @@ export async function POST(request: Request): Promise<Response> {
       replay: work.replay,
       // Names the reference-sanitizer kept out of public data (Rule 2).
       dropped_names: work.droppedNames,
-      note: "Landed as a draft. A human still promotes it to live.",
+      note: "Landed as a draft on the performer's catalog. A human still promotes it to live.",
     },
     work.replay ? 200 : 201,
   );

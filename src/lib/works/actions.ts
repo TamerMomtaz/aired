@@ -5,6 +5,7 @@ import { after } from "next/server";
 
 import { sanitizeDescriptorList } from "@/lib/ledger/sanitizeReference";
 import { createClient } from "@/lib/supabase/server";
+import { canManageWork } from "./authority";
 import { triggerPurge } from "./purge";
 import { triggerTranscode } from "./transcode";
 
@@ -133,11 +134,18 @@ export type GoLiveResult =
 
 // Publish a draft work — the "Go Live" action, now gated by the Review Gate.
 // We use the session-bound server client (NOT the service role), so RLS runs as
-// the user: `work_owner_upd` (creator_id = auth.uid()) is what actually enforces
-// ownership. The `status = 'draft'` guard scopes the flip and makes a re-click a
-// harmless no-op once the work has left draft (live or pending).
+// the user: `work_owner_upd` — the artist, or the human who carried the work
+// here — is what actually enforces ownership. The `status = 'draft'` guard
+// scopes the flip and makes a re-click a harmless no-op once the work has left
+// draft (live or pending).
 //
-// The gate: the creator's own `profile.trusted` decides the destination —
+// This is the step no machine takes. A delegated publish lands as a draft and
+// waits here for a person to press the button; on an AI performer's work that
+// person is the human whose token carried it, which is why they can reach it.
+//
+// The gate reads the SIGNED-IN human's `profile.trusted`, not the artist's:
+// trust is accountability for what you put on the shelf, and the human pressing
+// this is the one accountable. The destination —
 //   trusted   → 'live' instantly, released_at stamped (unchanged behavior);
 //   untrusted → 'pending' (the Review queue) — hidden from the public until an
 //               admin approves; released_at stays NULL until then.
@@ -154,8 +162,9 @@ export async function goLive(workId: number): Promise<GoLiveResult> {
     return { ok: false, error: "Sign in to publish a work." };
   }
 
-  // Read the author's trust at publish time. profile_read_all lets the owner read
-  // their own flag; a missing row reads as untrusted (the safe default).
+  // Read the publishing human's trust at publish time. profile_read_all lets
+  // them read their own flag; a missing row reads as untrusted (the safe
+  // default).
   const { data: profile } = await supabase
     .from("profile")
     .select("trusted")
@@ -212,7 +221,7 @@ export async function issueCertificate(
 
   const { data: work, error: workErr } = await supabase
     .from("work")
-    .select("id, title, creator_id, status, descriptors")
+    .select("id, title, creator_id, published_by_authority, status, descriptors")
     .eq("id", workId)
     .maybeSingle();
   if (workErr) {
@@ -221,8 +230,15 @@ export async function issueCertificate(
   if (!work) {
     return { ok: false, error: "Couldn't find this work." };
   }
-  if (work.creator_id !== user.id) {
-    return { ok: false, error: "Only the work's owner can issue its Red Line." };
+  // The artist, or the human who carried this work here — an AI performer never
+  // signs in, so minting the Red Line for their work is the accountable human's
+  // act. What the certificate SAYS is unchanged: authorship and process, every
+  // contributor named from the public trail (Rules 3 / 3a).
+  if (!canManageWork(work, user.id)) {
+    return {
+      ok: false,
+      error: "Only the work's artist, or the human who carried it here, can issue its Red Line.",
+    };
   }
   if (work.status !== "live") {
     return { ok: false, error: "Publish this work before certifying it." };
@@ -459,13 +475,13 @@ export async function discardWork(
     return { ok: false, error: "Sign in to discard a work." };
   }
 
-  // RLS returns this row to its owner (or an admin); we still assert ownership so
-  // ONLY the creator can discard their own work — never an admin via this path,
-  // and never someone else's stranded draft.
+  // RLS returns this row to its artist, the human who carried it, or an admin;
+  // we still assert here so ONLY the first two can discard it — never an admin
+  // via this path, and never someone else's stranded draft.
   const { data: work, error: readErr } = await supabase
     .from("work")
     .select(
-      "id, creator_id, status, master_storage_path, play_count, red_line_certified",
+      "id, creator_id, published_by_authority, status, master_storage_path, play_count, red_line_certified",
     )
     .eq("id", workId)
     .maybeSingle();
@@ -475,8 +491,11 @@ export async function discardWork(
   if (!work) {
     return { ok: false, error: "Couldn't find this work." };
   }
-  if (work.creator_id !== user.id) {
-    return { ok: false, error: "Only the work's owner can discard it." };
+  if (!canManageWork(work, user.id)) {
+    return {
+      ok: false,
+      error: "Only the work's artist, or the human who carried it here, can discard it.",
+    };
   }
 
   const hasHistory =

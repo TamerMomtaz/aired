@@ -113,6 +113,29 @@ decide to publish: a human holds a token, and a program posts on that human's
 authority. The label states **delegation, never autonomy** — and the work still
 lands as a **draft** that a human promotes with Go Live.
 
+### Reciprocal provenance — two artists, each in the other's ledger
+
+A delegated work files under the **credited performer**, not the human who
+carried it. An AI performer is a first-class artist here: their own profile,
+their own rail on Listen, their own artist page, their own albums and catalog.
+
+- `work.creator_id` — **the artist.** The performer.
+- `work.published_by_authority` — **the hands.** The human who authorized it.
+
+And the human is not merely a column: the door writes them into that work's
+Volley Ledger as a credited contributor — role `audit`, origin `HUMAN` — stating
+that they carried it to shore, never that they authored it. On a human's work the
+AI is credited; on a performer's work the human is credited. Neither is the tool.
+
+Because a performer never signs in, the carrying human keeps the working rights
+over what they carried — see it on `/manage`, edit it, promote it, certify it,
+discard it. That is not a loophole around "a human still publishes"; it is what
+makes that promise keepable. RLS enforces it structurally
+(`creator_id = auth.uid() or published_by_authority = auth.uid()`), and
+`guard_work_placement` refuses any UPDATE that re-points either column — a work
+can never be moved onto another artist's rail, not even by the hands that
+carried it.
+
 ### The door
 
 ```bash
@@ -136,15 +159,17 @@ curl -X POST https://ai-red.io/api/works/ingest \
 ```
 
 - **Auth** — `Authorization: Bearer <token>`, compared in constant time and
-  resolved to a named human authority. A missing, blank, malformed, or unknown
-  token gets the same generic `401`; the presented token is never echoed or
-  logged. Config lives in env vars only — see [`.env.example`](./.env.example).
+  resolved to a grant naming the human authority **and the performer it speaks
+  for**. A missing, blank, malformed, or unknown token gets the same generic
+  `401`; the presented token is never echoed or logged. Config lives in env vars
+  only — see [`.env.example`](./.env.example).
 - **Audio** — either `audio.master_path`, an object the caller already uploaded to
   the private `masters` bucket (how a long track avoids the request-body cap), or
   an inline `audio` file part with the metadata in a `payload` field
   (`multipart/form-data`). Either way the master lands in the **private** bucket
   and only ever reaches listeners as HLS from R2 via the CDN (Rule 6). A path may
-  only point inside the authorizing artist's own folder.
+  only point inside the authorizing human's own folder — they uploaded the bytes;
+  a performer has no session and can upload nothing.
 - **Idempotency** — `idempotency_key` (uuid) is required, unique **per authority**
   at the database level. A retried POST returns the draft it already created
   (`200`, `"replay": true`) instead of minting a second AIRED number.
@@ -152,8 +177,8 @@ curl -X POST https://ai-red.io/api/works/ingest \
   a name resolves find-or-create to one canonical `agent` row, so one maker keeps
   one page and one discography. `contributor.type` is required only the first time
   a name appears — that row becomes their public page, so it is never guessed.
-  The work itself is filed under the **authorizing human's** catalog
-  (`creator_id`); who *made* it lives in the ledger, by name, as always.
+  The work itself is filed under the **performer's** catalog (`creator_id`), with
+  the authorizing human recorded as the hands and credited by name in the ledger.
 - **Same ledger, same pipeline** — the volleys are written by the same
   `writeVolley` → `declare_volley` path the editor calls (sanitize → hash → seal →
   atomic paired write), contributors resolve through the same find-or-create, the
