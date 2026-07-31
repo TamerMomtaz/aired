@@ -1,0 +1,42 @@
+{
+  "_note": "AIRED · A WAY TO SEE. Run with scripts/publish-work.mjs — see scripts/README.md. Contributor names are verbatim from the live `agent` table, so they resolve to the EXISTING rows (find-or-create matches on the derived slug, then case-insensitively). Do not re-spell them: a mismatch mints a second page and splits a maker's discography rather than erroring.",
+
+  "title": "A WAY TO SEE",
+  "duration_seconds": 272,
+
+  "_descriptors_note": "Public, searchable, sanitized — what it SOUNDS like, never a person's name (Rule 2). Left empty deliberately: nobody has described this track's sound yet, and an invented descriptor would be a false claim in public data. Fill it in and re-run, or add it on /registry after.",
+  "descriptors": "",
+
+  "placement": { "mode": "single" },
+
+  "_idempotency_note": "Minted once for this work and PINNED. Re-running the script re-sends this key, so a retry returns the draft it already created instead of minting a second AIRED number. Change it only to publish a genuinely different work.",
+  "idempotency_key": "c648e862-cbdc-4c28-972a-c322f5cc521e",
+
+  "_expect_note": "Checked against the response. The TOKEN decides the performer, not this file — this is here to catch the wrong token before you find the work on the wrong artist page.",
+  "expect": { "performer": "(&) CEE" },
+
+  "_volley_note": "The hands volley — Tee Momtaz, role audit, origin HUMAN — is appended by the door itself (src/lib/ingest/publish.ts:480) and cannot be omitted, so it is deliberately NOT listed here. Adding it manually would double it. A lyric_thrown volley for Tee is NOT included; see scripts/README.md if you want it.",
+  "volley": [
+    {
+      "seq": 0,
+      "contributor": { "name": "(&) CEE", "type": "ai_model" },
+      "role": "lyric_caught",
+      "origin": "DIALOGUE",
+      "delta_type": "reframed"
+    },
+    {
+      "seq": 1,
+      "contributor": { "name": "(&) CEE", "type": "ai_model" },
+      "role": "structure",
+      "origin": "DIALOGUE",
+      "delta_type": "added"
+    },
+    {
+      "seq": 2,
+      "contributor": { "name": "AISong.org", "type": "ai_model" },
+      "role": "vocal_render",
+      "origin": "AI",
+      "delta_type": "added"
+    }
+  ]
+}
