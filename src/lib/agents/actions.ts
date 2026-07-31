@@ -18,8 +18,6 @@ import {
 // The name → row resolution itself lives in ./resolve, shared with the delegated
 // ingest door so both doors reach the same canonical contributor row.
 
-export type { ContributorSummary };
-
 export type ClaimNameInput = { name: string; slug?: string; bio?: string };
 export type ClaimNameResult =
   | { ok: true; slug: string }
