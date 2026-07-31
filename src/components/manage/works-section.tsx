@@ -238,6 +238,17 @@ function PerformerPlacement({ work }: { work: ManageWork }) {
 // the artist whose work it is, and the hands that carried it. Neither is hidden,
 // and neither is called the other.
 function PublishedVia({ work }: { work: ManageWork }) {
+  // Filed by hand at the upload page, onto an artist's rail the uploader is
+  // authorized to carry. No token was involved, so none is named — the only two
+  // facts are the artist and the hands, and both are stated.
+  if (work.publishedVia === "ui_performer") {
+    return (
+      <p className="text-[11px] text-muted/70">
+        Uploaded via web for {work.performerName}
+        {work.authorityName ? <> · carried by {work.authorityName}</> : null}
+      </p>
+    );
+  }
   if (work.publishedVia !== "delegated_api") {
     return (
       <p className="text-[11px] text-muted/60">Uploaded via web</p>

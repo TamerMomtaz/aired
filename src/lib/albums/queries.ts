@@ -24,10 +24,11 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type WorkStatus = "draft" | "live" | "pending";
 
-// How a work reached AIRED (the honest wheelbarrow): by hands at the web UI, or
-// by a program posting on a human's delegated authority. Never autonomy — a
-// delegated upload always names the human whose token authorized it.
-export type PublishedVia = "human_ui" | "delegated_api";
+// How a work reached AIRED (the honest wheelbarrow): by hands at the web UI, by
+// a program posting on a human's delegated authority, or by hands at the web UI
+// filing under a performer that human is authorized to carry. Never autonomy —
+// the last two always name the human accountable for the arrival.
+export type PublishedVia = "human_ui" | "delegated_api" | "ui_performer";
 
 // Cover derivation (read-side; reused by browse next). An album's cover is its
 // explicit cover_url if one was set, else the artwork of its newest member work,

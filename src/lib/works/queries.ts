@@ -1,4 +1,6 @@
+import { artistName } from "@/lib/albums/public-queries";
 import { createClient } from "@/lib/supabase/server";
+import { manageableWorkFilter } from "./authority";
 
 // Shared read queries for the listener's door: the public Browse feed and
 // Search. Both return the same `FeedWork` shape so cards render uniformly.
@@ -247,34 +249,52 @@ export type DraftWork = {
   title: string;
   artworkUrl: string | null;
   createdAt: string;
+  // Whose rail this draft is on, when it isn't mine — a work I carried for a
+  // performer. Null for my own drafts. Named, never implied: the list must not
+  // quietly show someone else's artist page as if it were my catalog.
+  carriedForName: string | null;
 };
 
 // The signed-in creator's unpublished drafts (EDIT & TIDY — Resume). Surfaced on
 // /upload so a creator continues an in-progress work rather than starting fresh
-// and minting another orphan. Owner-scoped (status='draft' + creator_id), and
-// RLS (work_read_live_or_owner) backs that — a draft is only ever its creator's.
+// and minting another orphan.
+//
+// "Mine" here means the same thing it means in Manage: works on my rail, PLUS
+// works I carried for a performer. A carried draft is unpublished work I am
+// accountable for finishing — and since the upload page can now create one
+// (the performer selector), a Resume list that couldn't show it would hide a
+// draft the user had just made on that very page. RLS
+// (work_read_live_or_owner) returns exactly this set and no more.
 export async function getMyDrafts(
   supabase: SupabaseServerClient,
   userId: string,
 ): Promise<DraftWork[]> {
   const { data } = await supabase
     .from("work")
-    .select("id, title, artwork_url, created_at")
-    .eq("creator_id", userId)
+    .select(
+      "id, title, artwork_url, created_at, creator_id, performer:creator_id(display_name)",
+    )
+    .or(manageableWorkFilter(userId))
     .eq("status", "draft")
     .order("id", { ascending: false });
   return (
-    (data ?? []) as Array<{
+    (data ?? []) as unknown as Array<{
       id: number;
       title: string;
       artwork_url: string | null;
       created_at: string;
+      creator_id: string;
+      performer: { display_name: string | null } | null;
     }>
   ).map((w) => ({
     id: w.id,
     title: w.title,
     artworkUrl: w.artwork_url,
     createdAt: w.created_at,
+    carriedForName:
+      w.creator_id === userId
+        ? null
+        : artistName(w.performer?.display_name ?? null),
   }));
 }
 
