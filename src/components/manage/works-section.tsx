@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { GoLiveButton } from "@/components/go-live-button";
 import { WorkTitle } from "@/components/work-title";
 import { DiscardButton } from "@/components/works/discard-button";
 import { TeaserClipEditor } from "@/components/works/teaser-clip-editor";
@@ -24,6 +25,20 @@ import type { ManageWork, WorkStatus } from "@/lib/albums/queries";
 // then belong to different artists. So a carried work shows where it sits on the
 // performer's catalog instead of an album picker; the enforce_album_ownership
 // trigger is the structural backstop behind that, not the UI.
+//
+// RELEASING FROM HERE. Go Live used to live only on the work page, and nothing in
+// Manage linked to it — which was invisible for a web upload (uploading redirects
+// you straight to that page) and a dead end for a delegated one, because a work
+// carried onto a performer's rail only ever announces itself HERE. So a draft
+// nobody could navigate to was a draft nobody could release, even though the
+// authority to release it was already correct.
+//
+// No new permission rule is introduced by showing the button here. This list is
+// already scoped to works I am the artist of OR carried (getManageData ->
+// manageableWorkFilter), and goLive() runs as the signed-in user under
+// work_owner_upd, which carries the same predicate. So the control can neither
+// appear for, nor function for, anyone else — and on a performer's rail the
+// artist never signs in, so it means the authorizing human alone.
 type AlbumOption = { id: string; title: string };
 const SINGLE = "__single__";
 
@@ -44,7 +59,12 @@ export function WorksSection({
             <li key={work.id} className="flex flex-col gap-3 px-4 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-col gap-1.5">
-                  <WorkTitle id={work.id} title={work.title} size="sm" />
+                  <Link
+                    href={`/registry/${work.id}`}
+                    className="min-w-0 rounded-sm transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cert-red/60"
+                  >
+                    <WorkTitle id={work.id} title={work.title} size="sm" />
+                  </Link>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={work.status} />
                     {work.takenDown ? (
@@ -72,6 +92,9 @@ export function WorksSection({
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
+                {work.status === "draft" && !work.takenDown ? (
+                  <GoLiveButton workId={work.id} />
+                ) : null}
                 <WorkEditor
                   workId={work.id}
                   initialTitle={work.title}
