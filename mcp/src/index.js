@@ -232,7 +232,16 @@ async function uploadMasterViaSignedUrl(filePath) {
     return { error: `Couldn't reach AIRED at ${API_BASE}: ${e.message}` };
   }
 
-  if (grantRes.status === 404 || grantRes.status === 405) {
+  // A deployment older than this route does not answer 404: Next serves its
+  // not-found PAGE, which is HTML with HTTP 200. So "unsupported" is decided by
+  // the response being anything other than JSON, not by the status alone —
+  // otherwise the fallback silently never fires. (Verified against production.)
+  const grantType = grantRes.headers.get("content-type") ?? "";
+  if (
+    grantRes.status === 404 ||
+    grantRes.status === 405 ||
+    !grantType.includes("application/json")
+  ) {
     return { unsupported: true };
   }
   if (grantRes.status === 401) {

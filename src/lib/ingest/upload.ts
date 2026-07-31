@@ -78,6 +78,23 @@ function safeExtension(filename: string | null | undefined): string {
 }
 
 /**
+ * Where a master lands, given ONLY the token's authority and an advisory
+ * filename. Exported and pure so the scoping guarantee is provable on its own,
+ * with no network and no credentials: for every possible `filename`, the result
+ * is `<authorityProfileId>/<uuid>/master.<ext>`.
+ *
+ * `filename` contributes its extension and nothing else — it is never joined
+ * into the path — so `../`, an absolute path, or another artist's uuid inside it
+ * cannot move the object. The folder uuid is minted here, never accepted.
+ */
+export function masterObjectPath(
+  authorityProfileId: string,
+  filename?: string | null,
+): string {
+  return `${authorityProfileId}/${crypto.randomUUID()}/master.${safeExtension(filename)}`;
+}
+
+/**
  * Mint a signed upload URL for a master, scoped to the token's own folder.
  *
  * `filename` is advisory — only its extension survives. The folder is always
@@ -94,8 +111,7 @@ export async function createMasterUploadGrant(
   // folder — the same convention the web upload writes, and the same one
   // ingestWork()'s ownedByAuthority() check requires. A performer has no session
   // and uploads nothing, so a performer-scoped folder would be unwritable.
-  const uploadId = crypto.randomUUID();
-  const path = `${authorityProfileId}/${uploadId}/master.${safeExtension(filename)}`;
+  const path = masterObjectPath(authorityProfileId, filename);
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage
