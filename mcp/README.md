@@ -7,6 +7,9 @@ honesty trigger, the same draft state. **Convenience, not a second code path.**
 
 ## What it is not
 
+It uploads a local master through a short-lived signed URL rather than inline, so
+a full-length track is not capped by any request-body limit (CLAUDE.md Rule 4).
+
 It does not publish anything on its own, and nothing here should ever be
 described as if it did. A **human holds the token** this server carries, the work
 lands as a **draft**, and a human still promotes it to live from Manage. The

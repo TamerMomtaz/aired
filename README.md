@@ -163,13 +163,14 @@ curl -X POST https://ai-red.io/api/works/ingest \
   for**. A missing, blank, malformed, or unknown token gets the same generic
   `401`; the presented token is never echoed or logged. Config lives in env vars
   only — see [`.env.example`](./.env.example).
-- **Audio** — either `audio.master_path`, an object the caller already uploaded to
-  the private `masters` bucket (how a long track avoids the request-body cap), or
-  an inline `audio` file part with the metadata in a `payload` field
-  (`multipart/form-data`). Either way the master lands in the **private** bucket
-  and only ever reaches listeners as HLS from R2 via the CDN (Rule 6). A path may
-  only point inside the authorizing human's own folder — they uploaded the bytes;
-  a performer has no session and can upload nothing.
+- **Audio** — either `audio.master_path`, an object already in the private
+  `masters` bucket (see *Full-length masters* below — this is the path for
+  anything longer than about three minutes), or an inline `audio` file part with
+  the metadata in a `payload` field (`multipart/form-data`), which is bounded by
+  the platform's 4.5 MB request-body cap. Either way the master lands in the
+  **private** bucket and only ever reaches listeners as HLS from R2 via the CDN
+  (Rule 6). A path may only point inside the authorizing human's own folder —
+  they uploaded the bytes; a performer has no session and can upload nothing.
 - **Idempotency** — `idempotency_key` (uuid) is required, unique **per authority**
   at the database level. A retried POST returns the draft it already created
   (`200`, `"replay": true`) instead of minting a second AIRED number.
@@ -189,8 +190,75 @@ curl -X POST https://ai-red.io/api/works/ingest \
   is deleted (its rows cascade with it) and the same `idempotency_key` can be
   retried cleanly.
 
+### Full-length masters — `POST /api/works/upload-url`
+
+**Rule 4 says there is no song length cap.** A serverless request body is capped
+at 4.5 MB — roughly a three-minute MP3 — so the inline audio part could never
+carry the 12-minute tracks the platform exists to accept. Getting into the
+private bucket first used to require a Supabase session or the service-role key,
+and a delegated caller has neither (and must never be handed the service key).
+
+So the door hands out a **short-lived, folder-scoped upload URL** in exchange for
+the token the caller already holds:
+
+```bash
+# 1 · ask for a grant (same Bearer as the ingest door)
+curl -X POST https://ai-red.io/api/works/upload-url \
+  -H "Authorization: Bearer $AIRED_INGEST_SECRET" \
+  -H 'content-type: application/json' \
+  -d '{"filename":"master.mp3"}'
+# → { "upload": { "url": "…/object/upload/sign/masters/<path>?token=…",
+#                 "path": "<authority-uuid>/<upload-uuid>/master.mp3",
+#                 "method": "PUT", "expires_in_seconds": 7200 } }
+
+# 2 · PUT the master straight to storage — no size ceiling, no other credential
+curl -X PUT "$UPLOAD_URL" -H 'content-type: audio/mpeg' --data-binary @master.mp3
+
+# 3 · publish with the path you were given
+curl -X POST https://ai-red.io/api/works/ingest \
+  -H "Authorization: Bearer $AIRED_INGEST_SECRET" -H 'content-type: application/json' \
+  -d '{"title":"…","audio":{"master_path":"<path>"},"volley":[…],"idempotency_key":"…"}'
+```
+
+The bytes go caller → Supabase Storage and never pass through a function, so a
+12-minute master is no different from a 3-minute one.
+
+**The caller does not choose the path.** It is derived entirely from the token's
+own authority plus a fresh server-minted uuid; the only thing a caller
+influences is the file extension, sanitized to a short alphanumeric. There is no
+input — no `../`, no absolute path, no other artist's uuid — that yields a grant
+outside the token's own folder. That is structural, not a validation rule.
+
+**Masters only, deliberately.** The `artwork` bucket is public-read, so signed
+write URLs there would let any token host arbitrary public files under the
+platform's domain. `masters` is private and never served, so a grant there can
+only feed the pipeline it was meant for. Artwork stays inline, where the size
+ceiling is not a real constraint for cover images.
+
+**Grants are rate-limited: 60 per token per hour**, answered `429` with
+`Retry-After` (and `X-RateLimit-*` on every response). One song needs one grant
+and a twenty-track album with a retry on each needs ~40, so real publishing
+never meets the ceiling — it exists to stop a runaway client filling the private
+bucket with slots no work will reference. The counter is a fixed window in
+module memory, so it is **per serverless instance**: the effective global ceiling
+is the limit times the number of warm instances, and a cold start resets it. That
+is a deliberate trade for needing no table and no external service; it stops the
+failure mode it exists for, and it is a guardrail, not a security boundary — a
+hostile holder of a valid token already has the ingest door, and the answer there
+is to rotate the token. `src/lib/ingest/rateLimit.ts` is the seam if a hard
+global ceiling is ever wanted.
+
+This changes **how the bytes arrive and nothing else**: placement (the work
+files under the credited performer), the reciprocal ledger (the authorizing
+human written in as the hands, role `audit`, origin `HUMAN`),
+`enforce_publish_honesty`, `guard_work_placement` and draft-on-arrival are all
+downstream of the ingest door and untouched. Nobody is credited differently
+because their master took a different road.
+
 The [`mcp/`](./mcp) directory wraps the same route as an MCP tool,
 `aired_publish_work`, for agent contexts — same token, same stamp, same draft.
+Hand it `audio.file_path` and it takes the signed-URL road for you, so
+agent-side publishing carries full-length masters too.
 
 ### Why the database is the guarantee
 
