@@ -206,8 +206,14 @@ application bug or a hand-crafted write — the same discipline as
 | `delegated_api` on INSERT ⇒ `status = 'draft'` | any path that skips human review |
 | `published_via` ∈ {`human_ui`, `delegated_api`} | invented provenance |
 
+`guard_work_placement` (also `BEFORE UPDATE` on `work`) does the same for whose
+work it is: `creator_id` and `published_by_authority` are facts of creation and
+no UPDATE may rewrite either, so a work can never be moved onto another artist's
+rail or shed the human accountable for it — not by a stranger, not by the artist,
+not by the hands that carried it.
+
 Every work's provenance is shown plainly on **/manage** — "Uploaded via web", or
-"Delegated upload · authorized by {human} · {token label}".
+"Delegated upload · authorized by {human} · performer {performer} · {token label}".
 
 ### Supabase resources this adds
 
@@ -216,3 +222,35 @@ Every work's provenance is shown plainly on **/manage** — "Uploaded via web", 
   `work.published_by_authority` (FK → `profile`), `work.ingest_token_label`,
   `work.ingest_idempotency_key` (unique per authority).
 - Trigger + function `enforce_publish_honesty()`.
+- Trigger + function `guard_work_placement()`, and the `work` / `public_volley` /
+  `private_volley` / `certification` policies widened from `creator_id =
+  auth.uid()` to `creator_id = auth.uid() or published_by_authority = auth.uid()`.
+  INSERT on `work` is deliberately left strict.
+
+## Performers — an AI with its own rail
+
+**(&) CEE** is the first, at [`/artist/and-cee`](https://ai-red.io/artist/and-cee):
+a `profile` (handle, bio, mascot) exactly like Taim's or Osama's, plus an `agent`
+row linked to it by `profile_id` — the same wiring Tee's own rows use. Their
+credit chip reads **Art Intelligence**, which is what AI has always meant here.
+
+A performer is an **identity, not a credential**. `profile.id` is a FK to
+`auth.users.id`, so the rail needs an auth row; a performer's is built with no
+password, an address at a `.invalid` domain that can never receive a magic link
+or a reset, and `banned_until` set to infinity. Signing in as a performer is
+impossible by construction. Work reaches their rail one way only: a delegated
+token a human authorized, with that human named in the ledger as the hands.
+
+To give a performer a token, name both profiles in the app's env:
+
+```jsonc
+// AIRED_INGEST_TOKENS — server-only, Vercel, all environments
+[{ "label": "cee-wheelbarrow",
+   "authority": "<the authorizing human's profile.id>",
+   "performer": "<the performer's profile.id>",
+   "sha256":    "<printf %s \"$TOKEN\" | shasum -a 256>" }]
+```
+
+Only the hash is stored — never the secret. Generate one with
+`openssl rand -base64 32`, hash it, and keep the plaintext where the caller runs.
+The same pattern adds the next performer: a row in this array, a profile, a rail.
