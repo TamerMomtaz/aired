@@ -118,7 +118,7 @@ export default async function ArtistPage({
           ) : null}
           {header.mascotName ? (
             <p className="text-sm text-muted">
-              AI voices as{" "}
+              Art Intelligence as{" "}
               <span className="text-foreground">{header.mascotName}</span>
             </p>
           ) : null}

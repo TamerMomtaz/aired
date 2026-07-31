@@ -23,7 +23,7 @@ AIRED_INGEST_SECRET=… npm start        # speaks MCP over stdio
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `AIRED_INGEST_SECRET` | yes | The delegated token. Read from this server's own environment — never a tool argument, never echoed in a result or a log. |
+| `AIRED_INGEST_SECRET` | yes | The delegated token. Read from this server's own environment — never a tool argument, never echoed in a result or a log. AIRED resolves it to the authorizing human **and** the performer the work files under; neither is chosen by the caller. |
 | `AIRED_API_BASE` | no | Defaults to `https://ai-red.io`. |
 
 Register it with any MCP client, e.g.:

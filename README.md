@@ -113,6 +113,29 @@ decide to publish: a human holds a token, and a program posts on that human's
 authority. The label states **delegation, never autonomy** — and the work still
 lands as a **draft** that a human promotes with Go Live.
 
+### Reciprocal provenance — two artists, each in the other's ledger
+
+A delegated work files under the **credited performer**, not the human who
+carried it. An AI performer is a first-class artist here: their own profile,
+their own rail on Listen, their own artist page, their own albums and catalog.
+
+- `work.creator_id` — **the artist.** The performer.
+- `work.published_by_authority` — **the hands.** The human who authorized it.
+
+And the human is not merely a column: the door writes them into that work's
+Volley Ledger as a credited contributor — role `audit`, origin `HUMAN` — stating
+that they carried it to shore, never that they authored it. On a human's work the
+AI is credited; on a performer's work the human is credited. Neither is the tool.
+
+Because a performer never signs in, the carrying human keeps the working rights
+over what they carried — see it on `/manage`, edit it, promote it, certify it,
+discard it. That is not a loophole around "a human still publishes"; it is what
+makes that promise keepable. RLS enforces it structurally
+(`creator_id = auth.uid() or published_by_authority = auth.uid()`), and
+`guard_work_placement` refuses any UPDATE that re-points either column — a work
+can never be moved onto another artist's rail, not even by the hands that
+carried it.
+
 ### The door
 
 ```bash
@@ -136,15 +159,17 @@ curl -X POST https://ai-red.io/api/works/ingest \
 ```
 
 - **Auth** — `Authorization: Bearer <token>`, compared in constant time and
-  resolved to a named human authority. A missing, blank, malformed, or unknown
-  token gets the same generic `401`; the presented token is never echoed or
-  logged. Config lives in env vars only — see [`.env.example`](./.env.example).
+  resolved to a grant naming the human authority **and the performer it speaks
+  for**. A missing, blank, malformed, or unknown token gets the same generic
+  `401`; the presented token is never echoed or logged. Config lives in env vars
+  only — see [`.env.example`](./.env.example).
 - **Audio** — either `audio.master_path`, an object the caller already uploaded to
   the private `masters` bucket (how a long track avoids the request-body cap), or
   an inline `audio` file part with the metadata in a `payload` field
   (`multipart/form-data`). Either way the master lands in the **private** bucket
   and only ever reaches listeners as HLS from R2 via the CDN (Rule 6). A path may
-  only point inside the authorizing artist's own folder.
+  only point inside the authorizing human's own folder — they uploaded the bytes;
+  a performer has no session and can upload nothing.
 - **Idempotency** — `idempotency_key` (uuid) is required, unique **per authority**
   at the database level. A retried POST returns the draft it already created
   (`200`, `"replay": true`) instead of minting a second AIRED number.
@@ -152,8 +177,8 @@ curl -X POST https://ai-red.io/api/works/ingest \
   a name resolves find-or-create to one canonical `agent` row, so one maker keeps
   one page and one discography. `contributor.type` is required only the first time
   a name appears — that row becomes their public page, so it is never guessed.
-  The work itself is filed under the **authorizing human's** catalog
-  (`creator_id`); who *made* it lives in the ledger, by name, as always.
+  The work itself is filed under the **performer's** catalog (`creator_id`), with
+  the authorizing human recorded as the hands and credited by name in the ledger.
 - **Same ledger, same pipeline** — the volleys are written by the same
   `writeVolley` → `declare_volley` path the editor calls (sanitize → hash → seal →
   atomic paired write), contributors resolve through the same find-or-create, the
@@ -181,8 +206,14 @@ application bug or a hand-crafted write — the same discipline as
 | `delegated_api` on INSERT ⇒ `status = 'draft'` | any path that skips human review |
 | `published_via` ∈ {`human_ui`, `delegated_api`} | invented provenance |
 
+`guard_work_placement` (also `BEFORE UPDATE` on `work`) does the same for whose
+work it is: `creator_id` and `published_by_authority` are facts of creation and
+no UPDATE may rewrite either, so a work can never be moved onto another artist's
+rail or shed the human accountable for it — not by a stranger, not by the artist,
+not by the hands that carried it.
+
 Every work's provenance is shown plainly on **/manage** — "Uploaded via web", or
-"Delegated upload · authorized by {human} · {token label}".
+"Delegated upload · authorized by {human} · performer {performer} · {token label}".
 
 ### Supabase resources this adds
 
@@ -191,3 +222,35 @@ Every work's provenance is shown plainly on **/manage** — "Uploaded via web", 
   `work.published_by_authority` (FK → `profile`), `work.ingest_token_label`,
   `work.ingest_idempotency_key` (unique per authority).
 - Trigger + function `enforce_publish_honesty()`.
+- Trigger + function `guard_work_placement()`, and the `work` / `public_volley` /
+  `private_volley` / `certification` policies widened from `creator_id =
+  auth.uid()` to `creator_id = auth.uid() or published_by_authority = auth.uid()`.
+  INSERT on `work` is deliberately left strict.
+
+## Performers — an AI with its own rail
+
+**(&) CEE** is the first, at [`/artist/and-cee`](https://ai-red.io/artist/and-cee):
+a `profile` (handle, bio, mascot) exactly like Taim's or Osama's, plus an `agent`
+row linked to it by `profile_id` — the same wiring Tee's own rows use. Their
+credit chip reads **Art Intelligence**, which is what AI has always meant here.
+
+A performer is an **identity, not a credential**. `profile.id` is a FK to
+`auth.users.id`, so the rail needs an auth row; a performer's is built with no
+password, an address at a `.invalid` domain that can never receive a magic link
+or a reset, and `banned_until` set to infinity. Signing in as a performer is
+impossible by construction. Work reaches their rail one way only: a delegated
+token a human authorized, with that human named in the ledger as the hands.
+
+To give a performer a token, name both profiles in the app's env:
+
+```jsonc
+// AIRED_INGEST_TOKENS — server-only, Vercel, all environments
+[{ "label": "cee-wheelbarrow",
+   "authority": "<the authorizing human's profile.id>",
+   "performer": "<the performer's profile.id>",
+   "sha256":    "<printf %s \"$TOKEN\" | shasum -a 256>" }]
+```
+
+Only the hash is stored — never the secret. Generate one with
+`openssl rand -base64 32`, hash it, and keep the plaintext where the caller runs.
+The same pattern adds the next performer: a row in this array, a profile, a rail.

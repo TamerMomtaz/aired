@@ -18,6 +18,8 @@ import { DiscardButton } from "@/components/works/discard-button";
 import { WorkEditor } from "@/components/works/work-editor";
 import { type ContributorSummary } from "@/lib/agents/actions";
 import { getMyAlbumOptions, type AlbumOption } from "@/lib/albums/queries";
+import { artistName } from "@/lib/albums/public-queries";
+import { canManageWork, isCarriedForAnother } from "@/lib/works/authority";
 import { songShareProps } from "@/lib/share/props";
 import { formatCatalogId } from "@/lib/catalog";
 import { formatDuration, formatPlays } from "@/lib/format";
@@ -135,13 +137,21 @@ export default async function WorkPage({
   const { data: work } = await supabase
     .from("work")
     .select(
-      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, created_at, play_count, moderation_note, album_id, taken_down, takedown_reason",
+      "id, title, artwork_url, status, red_line_certified, duration_seconds, descriptors, hls_playlist_key, lyrics, creator_id, published_by_authority, created_at, play_count, moderation_note, album_id, taken_down, takedown_reason",
     )
     .eq("id", workId)
     .maybeSingle();
   if (!work) notFound();
 
+  // Whose rail this work sits on. For a delegated publish that is the credited
+  // PERFORMER, who never signs in — so `isOwner` alone would leave the draft
+  // unreachable by every living person.
   const isOwner = !!user && user.id === work.creator_id;
+  // The human who carried it here keeps the working rights over it: promote,
+  // edit, certify, discard. Someone human has to, and the RLS policies say the
+  // same thing structurally (performer_placement_and_carrier_rights).
+  const canManage = canManageWork(work, user?.id ?? null);
+  const carriedForAnother = isCarriedForAnother(work, user?.id ?? null);
   // Admin governance: an admin may take ANY work down (and restore it). is_admin
   // comes from the cached profile (shares getCurrentUser's round-trip).
   const profile = await getCurrentProfile();
@@ -239,7 +249,11 @@ export default async function WorkPage({
   let agents: ContributorSummary[] = [];
   let suggestedSeq = 0;
   let albumOptions: AlbumOption[] = [];
-  if (isOwner) {
+  // A work carried for a performer sits in the PERFORMER'S album; the editor
+  // states that instead of offering a picker it must not honour (the album and
+  // the work would end up with different artists — enforce_album_ownership).
+  let lockedAlbumLabel: string | null = null;
+  if (canManage) {
     const { data: agentData } = await supabase
       .from("agent")
       .select("id, name, type, profile_slug")
@@ -247,9 +261,27 @@ export default async function WorkPage({
     agents = (agentData ?? []) as ContributorSummary[];
     const maxSeq = volleys.reduce((m, v) => Math.max(m, Number(v.seq)), -1);
     suggestedSeq = volleys.length ? Math.floor(maxSeq) + 1 : 0;
-    // The album picker for the in-place editor — the owner's own albums.
-    // isOwner ⇒ work.creator_id is this signed-in owner's id.
-    albumOptions = await getMyAlbumOptions(supabase, work.creator_id);
+    if (isOwner) {
+      // The album picker for the in-place editor — the owner's own albums.
+      // isOwner ⇒ work.creator_id is this signed-in owner's id.
+      albumOptions = await getMyAlbumOptions(supabase, work.creator_id);
+    } else {
+      const [{ data: performer }, { data: album }] = await Promise.all([
+        supabase
+          .from("profile")
+          .select("display_name")
+          .eq("id", work.creator_id)
+          .maybeSingle(),
+        work.album_id
+          ? supabase
+              .from("album")
+              .select("title")
+              .eq("id", work.album_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null as { title: string } | null }),
+      ]);
+      lockedAlbumLabel = `${album?.title ?? "Single (no album)"} · ${artistName(performer?.display_name ?? null)}`;
+    }
   }
 
   // A live, streamable track viewed by anyone (most arrivals are share-card taps,
@@ -400,7 +432,7 @@ export default async function WorkPage({
             ) : null}
           </div>
 
-          {isOwner && takenDown ? (
+          {canManage && takenDown ? (
             <p className="rounded-lg border border-cert-red/40 bg-cert-red/[0.08] px-4 py-3 text-sm leading-relaxed text-foreground">
               <span className="font-medium">
                 Taken down by AIRED
@@ -411,21 +443,21 @@ export default async function WorkPage({
             </p>
           ) : null}
 
-          {isOwner && !takenDown && work.status === "pending" ? (
+          {canManage && !takenDown && work.status === "pending" ? (
             <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground">
               In review — an admin is taking a quick look. The moment it&apos;s
               approved, {formatCatalogId(work.id)} goes live. Nothing else to do.
             </p>
           ) : null}
 
-          {isOwner && work.status === "draft" && work.moderation_note ? (
+          {canManage && work.status === "draft" && work.moderation_note ? (
             <p className="rounded-lg border border-cert-red/30 bg-cert-red/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground">
               <span className="font-medium">Sent back for a change:</span>{" "}
               {work.moderation_note} Make the change, then publish again.
             </p>
           ) : null}
 
-          {isOwner && work.status === "draft" && !takenDown ? (
+          {canManage && work.status === "draft" && !takenDown ? (
             <GoLiveButton workId={work.id} />
           ) : null}
 
@@ -446,7 +478,7 @@ export default async function WorkPage({
                 >
                   View Certificate →
                 </Link>
-              ) : isOwner ? (
+              ) : canManage ? (
                 <IssueCertButton workId={work.id} />
               ) : null}
               <ShareSheet
@@ -472,7 +504,7 @@ export default async function WorkPage({
           {/* Owner tools (EDIT & TIDY): fix this work in place — the wizard's
               "Back to a field without restarting" — or discard the attempt. NO
               new row; the AIRED number is unchanged. */}
-          {isOwner ? (
+          {canManage ? (
             <div className="flex flex-wrap items-center gap-2">
               <WorkEditor
                 workId={work.id}
@@ -482,6 +514,7 @@ export default async function WorkPage({
                 initialArtworkUrl={work.artwork_url}
                 initialAlbumId={work.album_id}
                 albums={albumOptions}
+                lockedAlbumLabel={lockedAlbumLabel ?? undefined}
               />
               <DiscardButton
                 workId={work.id}
@@ -502,7 +535,7 @@ export default async function WorkPage({
         track={track}
         queue={queue}
         lyrics={work.lyrics}
-        isOwner={isOwner}
+        isOwner={canManage}
       />
 
       {/* On the conversion layout the chrome (cert · share · save · owner tools)
@@ -529,7 +562,7 @@ export default async function WorkPage({
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {!isCertified && isOwner ? (
+            {!isCertified && canManage ? (
               <IssueCertButton workId={work.id} />
             ) : null}
             <ShareSheet
@@ -549,7 +582,7 @@ export default async function WorkPage({
             />
           </div>
 
-          {isOwner ? (
+          {canManage ? (
             <div className="flex flex-wrap items-center justify-center gap-2">
               <WorkEditor
                 workId={work.id}
@@ -559,6 +592,7 @@ export default async function WorkPage({
                 initialArtworkUrl={work.artwork_url}
                 initialAlbumId={work.album_id}
                 albums={albumOptions}
+                lockedAlbumLabel={lockedAlbumLabel ?? undefined}
               />
               <DiscardButton
                 workId={work.id}
@@ -591,17 +625,17 @@ export default async function WorkPage({
         <VolleyTrail
           volleys={volleys}
           descriptors={descriptors}
-          canEdit={isOwner}
+          canEdit={canManage}
           workId={work.id}
         />
       </section>
 
-      {isOwner ? (
+      {canManage ? (
         <section className="flex flex-col gap-3">
           <p className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-xs text-muted">
-            This is your draft. Declare the volleys that made it — typically 5–15
-            for a track. The Red Line player above goes live once this track&apos;s
-            audio is processed for streaming.
+            {carriedForAnother
+              ? "You carried this work here, so its ledger is yours to complete. Declare the volleys that made it — typically 5–15 for a track. The Red Line player above goes live once this track's audio is processed for streaming."
+              : "This is your draft. Declare the volleys that made it — typically 5–15 for a track. The Red Line player above goes live once this track's audio is processed for streaming."}
           </p>
           <VolleyEditor
             workId={work.id}

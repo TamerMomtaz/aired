@@ -4,12 +4,14 @@ import { PlayCount } from "@/components/play-count";
 import { WorkTitle } from "@/components/work-title";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
+import { manageableWorkFilter } from "@/lib/works/authority";
 
 export const metadata = { title: "Registry · AIRED" };
 
 // The catalog. The public sees only what's live; a signed-in creator also sees
 // their own in-progress works here (drafts, and anything held 'In review'),
-// badged. We filter to "live OR mine" EXPLICITLY rather than leaning on RLS
+// badged — plus any they CARRIED for a performer, which are equally theirs to
+// finish. We filter to "live OR mine" EXPLICITLY rather than leaning on RLS
 // alone: admins can now read every work (the Review queue needs that), and this
 // public list must never become a window onto other creators' unpublished
 // works — not even for an admin. Their pending items live in /review, never here.
@@ -23,7 +25,7 @@ export default async function RegistryPage() {
     .order("id", { ascending: true });
 
   const { data: works, error } = await (user
-    ? worksQuery.or(`status.eq.live,creator_id.eq.${user.id}`)
+    ? worksQuery.or(`status.eq.live,${manageableWorkFilter(user.id)}`)
     : worksQuery.eq("status", "live"));
 
   let hasAgent = false;

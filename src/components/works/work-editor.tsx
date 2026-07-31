@@ -22,6 +22,14 @@ import { updateWork } from "@/lib/works/actions";
 //    LRC timings are preserved by position and only re-sent when the text
 //    actually changes — fix a typo and the beat survives. New lines come back
 //    un-timed; re-open the tap-sync editor on the work page to time them.
+//
+// `lockedAlbumLabel` covers the reciprocal-provenance case: a work I CARRIED for
+// a performer sits in the PERFORMER'S album, and the albums I could offer are
+// mine. Showing my picker there would either misreport the album (its id isn't in
+// my list, so the select would read "Single") or let a save try to move the work
+// into an album with a different artist, which enforce_album_ownership refuses.
+// So the field goes read-only and states where the work actually sits; the album
+// id rides through the save untouched.
 
 const SINGLE = "__single__";
 
@@ -45,6 +53,7 @@ export function WorkEditor({
   initialArtworkUrl,
   initialAlbumId,
   albums,
+  lockedAlbumLabel,
   triggerLabel = "Edit",
   triggerClassName,
 }: {
@@ -55,6 +64,8 @@ export function WorkEditor({
   initialArtworkUrl: string | null;
   initialAlbumId: string | null;
   albums: AlbumOption[];
+  /** Set on a work whose album belongs to another artist: shown instead of the picker. */
+  lockedAlbumLabel?: string | null;
   triggerLabel?: string;
   triggerClassName?: string;
 }) {
@@ -82,6 +93,7 @@ export function WorkEditor({
           initialArtworkUrl={initialArtworkUrl}
           initialAlbumId={initialAlbumId}
           albums={albums}
+          lockedAlbumLabel={lockedAlbumLabel}
           onClose={() => setOpen(false)}
           onSaved={() => {
             setOpen(false);
@@ -101,6 +113,7 @@ function EditorModal({
   initialArtworkUrl,
   initialAlbumId,
   albums,
+  lockedAlbumLabel,
   onClose,
   onSaved,
 }: {
@@ -111,6 +124,7 @@ function EditorModal({
   initialArtworkUrl: string | null;
   initialAlbumId: string | null;
   albums: AlbumOption[];
+  lockedAlbumLabel?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -323,22 +337,32 @@ function EditorModal({
           <DescriptorPreview preview={descriptorPreview} />
         </label>
 
-        <label className="flex flex-col gap-1.5">
-          <span className={labelText}>Album</span>
-          <select
-            className={`${inputClass} appearance-none`}
-            value={albumId}
-            onChange={(e) => setAlbumId(e.target.value)}
-            disabled={busy}
-          >
-            <option value={SINGLE}>Single (no album)</option>
-            {albums.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        {lockedAlbumLabel != null ? (
+          <div className="flex flex-col gap-1.5">
+            <span className={labelText}>Album</span>
+            <p className={`${inputClass} text-muted`}>{lockedAlbumLabel}</p>
+            <span className="text-[11px] text-muted/70">
+              This work sits on another artist&rsquo;s catalog — only they file it.
+            </span>
+          </div>
+        ) : (
+          <label className="flex flex-col gap-1.5">
+            <span className={labelText}>Album</span>
+            <select
+              className={`${inputClass} appearance-none`}
+              value={albumId}
+              onChange={(e) => setAlbumId(e.target.value)}
+              disabled={busy}
+            >
+              <option value={SINGLE}>Single (no album)</option>
+              {albums.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="flex flex-col gap-1.5">
           <span className={labelText}>Lyrics</span>

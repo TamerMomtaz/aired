@@ -5,6 +5,7 @@ import { WorkTitle } from "@/components/work-title";
 import { AGENT_TYPE_LABELS, type AgentType } from "@/lib/ledger/types";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
+import { canManageWork } from "@/lib/works/authority";
 
 type WorkRow = {
   id: number;
@@ -13,6 +14,7 @@ type WorkRow = {
   red_line_certified: boolean;
   created_at: string;
   creator_id: string;
+  published_by_authority: string | null;
 };
 
 export async function generateMetadata({
@@ -55,7 +57,7 @@ export default async function AgentPage({
   const { data: volleyRows } = await supabase
     .from("public_volley")
     .select(
-      "work:work_id ( id, title, status, red_line_certified, created_at, creator_id )",
+      "work:work_id ( id, title, status, red_line_certified, created_at, creator_id, published_by_authority )",
     )
     .eq("agent_id", agent.id);
 
@@ -66,7 +68,9 @@ export default async function AgentPage({
   for (const row of (volleyRows ?? []) as unknown as { work: WorkRow | null }[]) {
     const w = row.work;
     if (!w) continue;
-    const mine = !!user && w.creator_id === user.id;
+    // Mine to see before it is live: my own work, or one I carried for a
+    // performer (their rail, my hands — see src/lib/works/authority.ts).
+    const mine = canManageWork(w, user?.id ?? null);
     if (w.status !== "live" && !mine) continue;
     if (!seen.has(w.id)) {
       seen.add(w.id);

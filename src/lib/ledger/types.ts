@@ -38,6 +38,11 @@ export const ROLE_LABELS: Record<VolleyRole, string> = {
   audit: "Audit",
 };
 
+// Which side carried a move. `AI` stays the two letters on purpose: AIRED keeps
+// the acronym and redefines it (AI-ed and proud — Added / Art Intelligence), so
+// the ledger's vocabulary is not the thing that needed renaming. It was "AI
+// model" — which reads as *artificial* — and that is what AGENT_TYPE_LABELS
+// fixes.
 export const ORIGIN_LABELS: Record<VolleyOrigin, string> = {
   HUMAN: "Human",
   AI: "AI",
@@ -50,10 +55,21 @@ export const DELTA_LABELS: Record<DeltaType, string> = {
   reframed: "reframed",
 };
 
+// What a contributor IS, in the platform's own words. AI here means **Art
+// Intelligence**, never Artificial (CLAUDE.md §0) — so the chip on Claude, Suno,
+// Gemini, chatGPT and (&) CEE alike reads "Art Intelligence". The stored enum
+// values are untouched; this is the display layer, and it is the ONLY place
+// these words are written, so the naming can never drift between surfaces.
+//
+// `ai_voice` keeps its own reading because the platform genuinely distinguishes
+// it: a voice engine carries no origin restriction where an ai_model may never
+// hold a HUMAN-origin volley (see originConflictMessage / enforce_volley_origin),
+// and `vocal_render` is its own role. Same family word, honest about the
+// difference.
 export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   human: "Human",
-  ai_model: "AI model",
-  ai_voice: "AI voice",
+  ai_model: "Art Intelligence",
+  ai_voice: "Art Intelligence · voice",
   tool: "Tool",
 };
 
