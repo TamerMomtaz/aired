@@ -3,10 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import {
-  createContributor,
-  type ContributorSummary,
-} from "@/lib/agents/actions";
+import { createContributor } from "@/lib/agents/actions";
+import type { ContributorSummary } from "@/lib/agents/resolve";
 import { declareVolley } from "@/lib/ledger/actions";
 import { sanitizeReference } from "@/lib/ledger/sanitizeReference";
 import {

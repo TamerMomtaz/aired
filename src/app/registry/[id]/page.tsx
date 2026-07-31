@@ -16,7 +16,7 @@ import { VolleyTrail, type TrailVolley } from "@/components/ledger/volley-trail"
 import { WorkTitle } from "@/components/work-title";
 import { DiscardButton } from "@/components/works/discard-button";
 import { WorkEditor } from "@/components/works/work-editor";
-import { type ContributorSummary } from "@/lib/agents/actions";
+import type { ContributorSummary } from "@/lib/agents/resolve";
 import { getMyAlbumOptions, type AlbumOption } from "@/lib/albums/queries";
 import { artistName } from "@/lib/albums/public-queries";
 import { canManageWork, isCarriedForAnother } from "@/lib/works/authority";
