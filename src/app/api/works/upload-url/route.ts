@@ -1,3 +1,4 @@
+import { checkGrantRate, tokenRateKey } from "@/lib/ingest/rateLimit";
 import { createMasterUploadGrant } from "@/lib/ingest/upload";
 import {
   ingestConfigured,
@@ -31,6 +32,11 @@ import {
 // missing / blank / malformed / unknown token all get the same generic 401 with
 // no detail. The presented token is never echoed or logged — and neither is the
 // signed URL this route hands back, which is itself a credential.
+//
+// A grant is cheap to ask for and creates a writable slot in the private bucket,
+// so grants are rate-limited per token (see ../../../lib/ingest/rateLimit). The
+// ceiling is set far above any real publishing session — one song needs one
+// grant — so a normal publish can never meet it.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +73,32 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     return unauthorized();
+  }
+
+  // Count this grant before minting one. Only a caller that has already proved
+  // authority is counted, so an unauthenticated flood can never consume another
+  // token's budget.
+  const rate = checkGrantRate(tokenRateKey(grant));
+  if (!rate.allowed) {
+    console.error(
+      `[upload-url] rate limit reached for token ${tokenRateKey(grant)} (${rate.limit}/hour).`,
+    );
+    return new Response(
+      JSON.stringify({
+        error: `Too many upload grants for this token — ${rate.limit} per hour. Retry in ${rate.retryAfterSeconds}s. Masters already uploaded are unaffected, and publishing one you have is not limited.`,
+      }),
+      {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+          "retry-after": String(rate.retryAfterSeconds),
+          "x-ratelimit-limit": String(rate.limit),
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-reset": String(Math.ceil(rate.resetAtMs / 1000)),
+        },
+      },
+    );
   }
 
   // The body is optional and advisory. `filename` contributes its EXTENSION and
@@ -112,8 +144,8 @@ export async function POST(request: Request): Promise<Response> {
   const { url, token: uploadToken, path, bucket, expiresInSeconds } =
     result.grant;
 
-  return json(
-    {
+  return new Response(
+    JSON.stringify({
       upload: {
         url,
         token: uploadToken,
@@ -123,8 +155,17 @@ export async function POST(request: Request): Promise<Response> {
         expires_in_seconds: expiresInSeconds,
       },
       note: `PUT the master to upload.url, then POST /api/works/ingest with audio.master_path = "${path}". The master stays in the private bucket and is never served directly; the work still lands as a draft a human promotes.`,
+    }),
+    {
+      status: 201,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-ratelimit-limit": String(rate.limit),
+        "x-ratelimit-remaining": String(rate.remaining),
+        "x-ratelimit-reset": String(Math.ceil(rate.resetAtMs / 1000)),
+      },
     },
-    201,
   );
 }
 

@@ -235,6 +235,19 @@ platform's domain. `masters` is private and never served, so a grant there can
 only feed the pipeline it was meant for. Artwork stays inline, where the size
 ceiling is not a real constraint for cover images.
 
+**Grants are rate-limited: 60 per token per hour**, answered `429` with
+`Retry-After` (and `X-RateLimit-*` on every response). One song needs one grant
+and a twenty-track album with a retry on each needs ~40, so real publishing
+never meets the ceiling — it exists to stop a runaway client filling the private
+bucket with slots no work will reference. The counter is a fixed window in
+module memory, so it is **per serverless instance**: the effective global ceiling
+is the limit times the number of warm instances, and a cold start resets it. That
+is a deliberate trade for needing no table and no external service; it stops the
+failure mode it exists for, and it is a guardrail, not a security boundary — a
+hostile holder of a valid token already has the ingest door, and the answer there
+is to rotate the token. `src/lib/ingest/rateLimit.ts` is the seam if a hard
+global ceiling is ever wanted.
+
 This changes **how the bytes arrive and nothing else**: placement (the work
 files under the credited performer), the reciprocal ledger (the authorizing
 human written in as the hands, role `audit`, origin `HUMAN`),
