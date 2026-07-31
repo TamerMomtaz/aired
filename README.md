@@ -73,6 +73,7 @@ the Red Line player are Phase 3).
 | `/agent/[slug]` | A contributor's page + discography (carbon or silicon) |
 | `/login`, `/signup` | Email + Google auth |
 | `/auth/callback`, `/auth/confirm` | OAuth / email code + token-hash exchange |
+| `POST /api/works/ingest` | The delegated publish door — lands a work as a **draft** on a human's delegated authority (see below) |
 
 ### Supabase resources this phase added
 
@@ -94,6 +95,99 @@ the Red Line player are Phase 3).
 3. **Pre-existing advisories (optional).** Enable leaked-password protection
    (Auth → Providers); the Phase-0 `handle_new_user` trigger shows a benign
    SECURITY DEFINER advisory.
-   
 
-   
+## The honest wheelbarrow — delegated publishing
+
+The Volley Ledger already tells the truth about **who authored** a work (HUMAN /
+AI / DIALOGUE). This adds the truth about **how it reached the shore**, side by
+side with it on every work forever:
+
+- **`published_via = 'human_ui'`** — hands at the web UI. The session user is the
+  uploader, so there is no separate delegating authority.
+- **`published_via = 'delegated_api'`** — a program posted it through
+  `POST /api/works/ingest`, and `published_by_authority` names the **human whose
+  token authorized it**.
+
+Nothing here creates or implies autonomous AI will. An AI performer does not
+decide to publish: a human holds a token, and a program posts on that human's
+authority. The label states **delegation, never autonomy** — and the work still
+lands as a **draft** that a human promotes with Go Live.
+
+### The door
+
+```bash
+curl -X POST https://ai-red.io/api/works/ingest \
+  -H "Authorization: Bearer $AIRED_INGEST_SECRET" \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "The Loyal Donkey",
+    "audio": { "master_path": "<artist-uuid>/<upload-uuid>/master.mp3" },
+    "placement": { "mode": "single" },
+    "descriptors": "trance, mantra, spoken verses",
+    "volley": [
+      { "contributor": { "name": "Tee / Kahotia", "type": "human" },
+        "role": "lyric_thrown", "origin": "HUMAN", "delta_type": "added",
+        "craft": { "prompt": "…sealed, never served…" } },
+      { "contributor": { "name": "(&) CEE", "type": "ai_model" },
+        "role": "structure", "origin": "DIALOGUE", "delta_type": "reframed" }
+    ],
+    "idempotency_key": "4f1a…"
+  }'
+```
+
+- **Auth** — `Authorization: Bearer <token>`, compared in constant time and
+  resolved to a named human authority. A missing, blank, malformed, or unknown
+  token gets the same generic `401`; the presented token is never echoed or
+  logged. Config lives in env vars only — see [`.env.example`](./.env.example).
+- **Audio** — either `audio.master_path`, an object the caller already uploaded to
+  the private `masters` bucket (how a long track avoids the request-body cap), or
+  an inline `audio` file part with the metadata in a `payload` field
+  (`multipart/form-data`). Either way the master lands in the **private** bucket
+  and only ever reaches listeners as HLS from R2 via the CDN (Rule 6). A path may
+  only point inside the authorizing artist's own folder.
+- **Idempotency** — `idempotency_key` (uuid) is required, unique **per authority**
+  at the database level. A retried POST returns the draft it already created
+  (`200`, `"replay": true`) instead of minting a second AIRED number.
+- **Contributors by name** — each volley credits its maker by name (Rule 3a), and
+  a name resolves find-or-create to one canonical `agent` row, so one maker keeps
+  one page and one discography. `contributor.type` is required only the first time
+  a name appears — that row becomes their public page, so it is never guessed.
+  The work itself is filed under the **authorizing human's** catalog
+  (`creator_id`); who *made* it lives in the ledger, by name, as always.
+- **Same ledger, same pipeline** — the volleys are written by the same
+  `writeVolley` → `declare_volley` path the editor calls (sanitize → hash → seal →
+  atomic paired write), contributors resolve through the same find-or-create, the
+  catalog number comes from the same identity column, and the same Railway
+  transcode is kicked afterwards. The wheelbarrow is a new *door*, not a new
+  *ledger*.
+- **Nothing half-made keeps an AIRED number** — if any volley fails, the work row
+  is deleted (its rows cascade with it) and the same `idempotency_key` can be
+  retried cleanly.
+
+The [`mcp/`](./mcp) directory wraps the same route as an MCP tool,
+`aired_publish_work`, for agent contexts — same token, same stamp, same draft.
+
+### Why the database is the guarantee
+
+`enforce_publish_honesty` (a `BEFORE INSERT OR UPDATE` trigger on `work`) makes
+the platform **structurally unable** to misreport how a work arrived, even with an
+application bug or a hand-crafted write — the same discipline as
+`enforce_volley_origin` and `enforce_album_ownership`:
+
+| Rule | Refused |
+| --- | --- |
+| `delegated_api` ⇒ `published_by_authority` NOT NULL | an anonymous machine arrival |
+| `human_ui` ⇒ authority, token label and idempotency key all NULL | a hand upload dressed as delegated |
+| `delegated_api` on INSERT ⇒ `status = 'draft'` | any path that skips human review |
+| `published_via` ∈ {`human_ui`, `delegated_api`} | invented provenance |
+
+Every work's provenance is shown plainly on **/manage** — "Uploaded via web", or
+"Delegated upload · authorized by {human} · {token label}".
+
+### Supabase resources this adds
+
+- `work.published_via` (NOT NULL, default `'human_ui'`, CHECK-constrained — every
+  pre-existing row backfills to `human_ui`, because they were all hand-uploaded),
+  `work.published_by_authority` (FK → `profile`), `work.ingest_token_label`,
+  `work.ingest_idempotency_key` (unique per authority).
+- Trigger + function `enforce_publish_honesty()`.

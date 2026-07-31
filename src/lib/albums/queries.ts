@@ -1,5 +1,6 @@
 import { normalizeDescriptors } from "@/lib/ledger/descriptors";
 import { createClient } from "@/lib/supabase/server";
+import { artistName } from "./public-queries";
 
 // Read side of ORGANIZE: a creator's own albums and works, plus the cover
 // derivation reused by browse-as-label next. Everything here is owner-scoped —
@@ -9,6 +10,11 @@ import { createClient } from "@/lib/supabase/server";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type WorkStatus = "draft" | "live" | "pending";
+
+// How a work reached AIRED (the honest wheelbarrow): by hands at the web UI, or
+// by a program posting on a human's delegated authority. Never autonomy — a
+// delegated upload always names the human whose token authorized it.
+export type PublishedVia = "human_ui" | "delegated_api";
 
 // Cover derivation (read-side; reused by browse next). An album's cover is its
 // explicit cover_url if one was set, else the artwork of its newest member work,
@@ -86,6 +92,12 @@ export type ManageWork = {
   // the reason — they can edit or appeal it, but never re-publish it.
   takenDown: boolean;
   takedownReason: string | null;
+  // Provenance of arrival, shown plainly on every work. `human_ui` carries no
+  // authority or token (the session user was the uploader); `delegated_api`
+  // always names the human who authorized it and the token label used.
+  publishedVia: PublishedVia;
+  authorityName: string | null;
+  ingestTokenLabel: string | null;
 };
 
 type AlbumRow = {
@@ -112,6 +124,11 @@ type WorkRow = {
   red_line_certified: boolean | null;
   taken_down: boolean | null;
   takedown_reason: string | null;
+  published_via: PublishedVia | null;
+  ingest_token_label: string | null;
+  // The delegating human, embedded through the published_by_authority FK. Null
+  // for every hand upload.
+  authority: { display_name: string | null } | null;
 };
 
 // Everything the /manage surface needs in two owner-scoped reads: the caller's
@@ -132,14 +149,14 @@ export async function getManageData(
     supabase
       .from("work")
       .select(
-        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, duration_seconds, clip_start_seconds, clip_length_seconds, play_count, red_line_certified, taken_down, takedown_reason",
+        "id, title, status, album_id, artwork_url, created_at, descriptors, lyrics, duration_seconds, clip_start_seconds, clip_length_seconds, play_count, red_line_certified, taken_down, takedown_reason, published_via, ingest_token_label, authority:published_by_authority(display_name)",
       )
       .eq("creator_id", userId)
       .order("id", { ascending: false }),
   ]);
 
   const albumRows = (albumsRes.data ?? []) as AlbumRow[];
-  const workRows = (worksRes.data ?? []) as WorkRow[];
+  const workRows = (worksRes.data ?? []) as unknown as WorkRow[];
 
   // Group works by album for counts + cover derivation.
   const membersByAlbum = new Map<string, WorkRow[]>();
@@ -192,6 +209,13 @@ export async function getManageData(
     certified: !!w.red_line_certified,
     takenDown: !!w.taken_down,
     takedownReason: w.takedown_reason,
+    // Rows written before the column existed are hand uploads by definition, so
+    // a NULL reads as 'human_ui' — the same default the DB now applies.
+    publishedVia: w.published_via ?? "human_ui",
+    // Only a delegated upload has an authority to name; the warm fallback keeps
+    // a nameless-but-real artist readable rather than blank.
+    authorityName: w.authority ? artistName(w.authority.display_name) : null,
+    ingestTokenLabel: w.ingest_token_label,
   }));
 
   return { albums, works };
