@@ -35,6 +35,7 @@
 // remain the structural backstop.
 
 import { formatCatalogId } from "@/lib/catalog";
+import { handsVolleyRationale, resolveHandsAgent } from "@/lib/agents/hands";
 import { findExistingAgent, resolveContributor } from "@/lib/agents/resolve";
 import { sanitizeDescriptorList } from "@/lib/ledger/sanitizeReference";
 import type { Craft } from "@/lib/ledger/seal";
@@ -183,51 +184,9 @@ async function countVolleys(
 }
 
 // The `agent` row that credits the authorizing human — the hands, in the
-// performer's ledger.
-//
-// A human who has ever been credited already has an agent row linked to their
-// profile; we reuse it so the hands keep ONE public page and ONE discography
-// (Rule 3a) instead of sprouting a fresh identity per performer they carry. Only
-// if no linked human agent exists do we find-or-create one from their artist
-// name — through the SAME resolver the editor uses, so it lands on their
-// canonical row if the name is already known.
-//
-// The row must be type `human`: the volley below is declared origin HUMAN, and
-// enforce_volley_origin refuses HUMAN on an ai_model contributor. That is the
-// point — a human carried this, and the trail may not say otherwise.
-async function resolveHandsAgent(
-  supabase: ServiceClient,
-  authorityProfileId: string,
-  authorityName: string,
-): Promise<{ ok: true; agentId: string; name: string } | { ok: false; error: string }> {
-  const { data: linkedRows } = await supabase
-    .from("agent")
-    .select("id, name, type")
-    .eq("profile_id", authorityProfileId)
-    .order("created_at", { ascending: true });
-  const linked = ((linkedRows ?? []) as Array<{
-    id: string;
-    name: string;
-    type: AgentType;
-  }>).find((a) => a.type === "human");
-  if (linked) {
-    return { ok: true, agentId: linked.id, name: linked.name };
-  }
-
-  const name = authorityName.trim();
-  if (!name) {
-    return {
-      ok: false,
-      error:
-        "The authorizing human has no artist name yet, so they cannot be credited as the hands — set a display name on that profile first.",
-    };
-  }
-  const resolved = await resolveContributor(supabase, { name, type: "human" });
-  if (!resolved.ok) {
-    return { ok: false, error: resolved.error };
-  }
-  return { ok: true, agentId: resolved.agent.id, name: resolved.agent.name };
-}
+// performer's ledger — now lives in @/lib/agents/hands, shared with the UI
+// performer path so the hands are credited identically whichever door filed the
+// work. See that module for why the row must be type `human`.
 
 export async function ingestWork(
   grant: DelegatedGrant,
@@ -484,7 +443,11 @@ export async function ingestWork(
         prompt: "",
         style_reference_raw: "",
         rejected_branches: "",
-        rationale: `Carried to shore by ${hands.name} for ${performerName}, under the delegated token "${label}". Published on ${hands.name}'s authority — not authored by them.`,
+        rationale: handsVolleyRationale({
+          handsName: hands.name,
+          performerName,
+          tokenLabel: label,
+        }),
       },
     });
   }

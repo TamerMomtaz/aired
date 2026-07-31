@@ -5,9 +5,11 @@ import { redirect } from "next/navigation";
 import { UploadForm } from "@/components/upload/upload-form";
 import { WorkTitle } from "@/components/work-title";
 import { DiscardButton } from "@/components/works/discard-button";
-import { getMyAlbumOptions } from "@/lib/albums/queries";
+import { artistName } from "@/lib/albums/public-queries";
+import { getMyAlbumOptions, type AlbumOption } from "@/lib/albums/queries";
 import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getCarriedPerformers } from "@/lib/works/performers";
 import { getMyDrafts } from "@/lib/works/queries";
 
 export const metadata = { title: "Upload · AIRED" };
@@ -28,10 +30,30 @@ export default async function UploadPage() {
   // creator continues an in-progress work instead of starting fresh and minting
   // another orphan (EDIT & TIDY).
   const supabase = await createClient();
-  const [albums, drafts] = await Promise.all([
+  const [albums, drafts, performers] = await Promise.all([
     getMyAlbumOptions(supabase, user.id),
     getMyDrafts(supabase, user.id),
+    // The artists this human is authorized to carry — empty for everyone the
+    // platform has not explicitly vouched for, and then the form renders no
+    // selector at all. This shapes the CONTROL only; createWork re-checks the
+    // authority server-side and the work_owner_ins policy re-checks it again in
+    // the database, so a crafted request gets nothing from the absence of a
+    // dropdown.
+    getCarriedPerformers(supabase, user.id),
   ]);
+
+  // Each carriable performer's own albums: an album belongs to the artist, so
+  // filing under a performer offers THEIR shelf. Fetched here (server-side, and
+  // only for performers the grant already allowed) so the form can switch
+  // shelves without a round-trip.
+  const performerAlbums: Record<string, AlbumOption[]> = Object.fromEntries(
+    await Promise.all(
+      performers.map(
+        async (p) =>
+          [p.profileId, await getMyAlbumOptions(supabase, p.profileId)] as const,
+      ),
+    ),
+  );
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-5 py-10">
@@ -78,7 +100,14 @@ export default async function UploadPage() {
                       no art
                     </div>
                   )}
-                  <WorkTitle id={d.id} title={d.title} size="sm" />
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <WorkTitle id={d.id} title={d.title} size="sm" />
+                    {d.carriedForName ? (
+                      <span className="text-[11px] text-muted/70">
+                        on {d.carriedForName}&apos;s rail · carried by you
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <Link
@@ -103,7 +132,12 @@ export default async function UploadPage() {
         </section>
       ) : null}
 
-      <UploadForm albums={albums} />
+      <UploadForm
+        albums={albums}
+        performers={performers}
+        performerAlbums={performerAlbums}
+        selfName={`Myself (${artistName(profile?.display_name)})`}
+      />
 
       <p className="mt-6 text-center text-xs text-muted/70">
         Haven&apos;t claimed your name yet?{" "}

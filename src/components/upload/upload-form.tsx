@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 
 import type { AlbumOption } from "@/lib/albums/queries";
 import { createWork, type CreateWorkAlbum } from "@/lib/works/actions";
+import type { CarriedPerformer } from "@/lib/works/performers";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration } from "@/lib/format";
 
@@ -48,7 +49,25 @@ type Phase = "idle" | "reading" | "uploading" | "saving";
 // creates one inline; "single" leaves the work album-less on purpose.
 type AlbumMode = "existing" | "new" | "single";
 
-export function UploadForm({ albums }: { albums: AlbumOption[] }) {
+export function UploadForm({
+  albums,
+  // The artists this signed-in human is authorized to carry. Empty for almost
+  // everyone, and then this form is exactly what it has always been: no selector
+  // renders, nothing about the upload changes. The list only shapes the control —
+  // the authority is re-checked server-side on submit and again by RLS.
+  performers = [],
+  // Each carriable performer's own albums, keyed by profile id. An album belongs
+  // to the ARTIST, so filing under a performer offers THEIR shelf, never mine.
+  performerAlbums = {},
+  // How to name "me" in the selector, so the default reads as a person rather
+  // than as an absence.
+  selfName = "Myself",
+}: {
+  albums: AlbumOption[];
+  performers?: CarriedPerformer[];
+  performerAlbums?: Record<string, AlbumOption[]>;
+  selfName?: string;
+}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [audio, setAudio] = useState<File | null>(null);
@@ -57,6 +76,16 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // "" = myself, the default and the unchanged path. A profile id here means the
+  // work files on that artist's rail with me recorded as the authorizing hands.
+  const [performerId, setPerformerId] = useState<string>("");
+  const performer = performers.find((p) => p.profileId === performerId) ?? null;
+
+  // Whose shelf the album step is offering: mine, or the selected performer's.
+  const activeAlbums = performer
+    ? (performerAlbums[performer.profileId] ?? [])
+    : albums;
 
   // Default: file into your newest album if you have one, else release as a
   // single. Either way the choice is explicit and visible — no more works that
@@ -67,6 +96,18 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
   const [albumId, setAlbumId] = useState<string>(albums[0]?.id ?? "");
   const [newAlbumTitle, setNewAlbumTitle] = useState("");
   const [newAlbumDesc, setNewAlbumDesc] = useState("");
+
+  // Switching artist switches shelves, so the album choice cannot carry over: a
+  // work may only be filed into an album owned by the same artist
+  // (enforce_album_ownership), and silently keeping a stale id would be a
+  // guaranteed rejection at submit.
+  function onPerformerChange(next: string) {
+    setPerformerId(next);
+    const nextAlbums = next ? (performerAlbums[next] ?? []) : albums;
+    setAlbumMode(nextAlbums.length > 0 ? "existing" : "single");
+    setAlbumId(nextAlbums[0]?.id ?? "");
+    setError(null);
+  }
 
   const busy = phase !== "idle";
 
@@ -153,6 +194,10 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
         masterPath,
         artworkUrl,
         album,
+        // Null unless an authorized carrier picked an artist. The server re-asks
+        // whether this human may carry them and refuses (403) if not — this
+        // field is a request, never a permission.
+        performerId: performerId || null,
       });
       if (!result.ok) throw new Error(result.error);
 
@@ -169,7 +214,9 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
       ? "Uploading…"
       : phase === "saving"
         ? "Creating work…"
-        : "Upload & start the ledger";
+        : performer
+          ? `Upload for ${performer.name} & start the ledger`
+          : "Upload & start the ledger";
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-5">
@@ -221,10 +268,60 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
         />
       </label>
 
-      <fieldset className="flex flex-col gap-2" disabled={busy}>
-        <legend className="mb-1 text-xs font-medium text-muted">Album</legend>
+      {/*
+        PUBLISH AS PERFORMER — only for a human the platform has authorized to
+        carry an artist, and absent entirely for everyone else (their upload
+        experience is byte-for-byte what it was). Quiet by design: a small
+        labelled select, not a mode switch. What it says under it is the whole
+        honesty of the feature — the artist owns the work, and the person filing
+        it is named in the ledger as the hands, never as the author.
+      */}
+      {performers.length > 0 ? (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted">
+            Publish as performer
+          </span>
+          <select
+            className={inputClass}
+            value={performerId}
+            onChange={(e) => onPerformerChange(e.target.value)}
+            disabled={busy}
+          >
+            <option value="">{selfName}</option>
+            {performers.map((p) => (
+              <option key={p.profileId} value={p.profileId}>
+                {p.name}
+                {p.kindLabel ? ` · ${p.kindLabel}` : ""}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-muted/60">
+            {performer ? (
+              <>
+                Files under {performer.name}&apos;s catalog; you are recorded as
+                the authorizing hands in the ledger.
+              </>
+            ) : (
+              <>
+                Files under your own catalog. Choose an artist you carry to
+                release on their rail instead.
+              </>
+            )}
+          </span>
+        </label>
+      ) : null}
 
-        {albums.length > 0 ? (
+      <fieldset className="flex flex-col gap-2" disabled={busy}>
+        <legend className="mb-1 text-xs font-medium text-muted">
+          Album
+          {performer ? (
+            <span className="ml-1.5 font-normal normal-case text-muted/60">
+              · on {performer.name}&apos;s rail
+            </span>
+          ) : null}
+        </legend>
+
+        {activeAlbums.length > 0 ? (
           <label className={albumOptionClass}>
             <input
               type="radio"
@@ -235,7 +332,9 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
             />
             <span className="flex min-w-0 flex-1 flex-col gap-2">
               <span className="text-sm text-foreground">
-                Add to one of your albums
+                {performer
+                  ? `Add to one of ${performer.name}'s albums`
+                  : "Add to one of your albums"}
               </span>
               {albumMode === "existing" ? (
                 <select
@@ -244,7 +343,7 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
                   onChange={(e) => setAlbumId(e.target.value)}
                   aria-label="Choose an album"
                 >
-                  {albums.map((a) => (
+                  {activeAlbums.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.title}
                     </option>
@@ -264,7 +363,11 @@ export function UploadForm({ albums }: { albums: AlbumOption[] }) {
             onChange={() => setAlbumMode("new")}
           />
           <span className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="text-sm text-foreground">Start a new album</span>
+            <span className="text-sm text-foreground">
+              {performer
+                ? `Start a new album on ${performer.name}'s rail`
+                : "Start a new album"}
+            </span>
             {albumMode === "new" ? (
               <span className="flex flex-col gap-2">
                 <input

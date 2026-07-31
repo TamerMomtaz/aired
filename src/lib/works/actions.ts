@@ -3,9 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
+import { handsVolleyRationale, resolveHandsAgent } from "@/lib/agents/hands";
+import { artistName } from "@/lib/albums/public-queries";
 import { sanitizeDescriptorList } from "@/lib/ledger/sanitizeReference";
+import { writeVolley } from "@/lib/ledger/write";
 import { createClient } from "@/lib/supabase/server";
 import { canManageWork } from "./authority";
+import { carriesPerformer } from "./performers";
 import { triggerPurge } from "./purge";
 import { triggerTranscode } from "./transcode";
 
@@ -34,11 +38,28 @@ export type CreateWorkInput = {
   artworkUrl: string | null;
   // The album step. Defaults to a single if omitted.
   album?: CreateWorkAlbum;
+  // File this work under ANOTHER artist's rail — a performer this human is
+  // authorized to carry. Null/absent/self = an ordinary self-upload, unchanged.
+  // Naming a performer without the authority to carry them is refused below.
+  performerId?: string | null;
 };
 
 export type CreateWorkResult =
-  | { ok: true; workId: number }
-  | { ok: false; error: string };
+  | { ok: true; workId: number; carriedFor: string | null }
+  // `status` carries the refusal's kind so the caller can tell "you may not do
+  // this" apart from "that didn't work" — 403 is only ever the authority gate.
+  | { ok: false; error: string; status?: 403 };
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// One sentence for every unauthorized attempt, whatever shape it arrived in: a
+// forged performer id, a stale grant, a hand-crafted POST from a user who never
+// saw a selector. It says what is missing (authority) without confirming whether
+// the named performer exists — an unauthorized caller learns nothing about the
+// platform's rails from probing this.
+const NO_AUTHORITY =
+  "You are not authorized to file works under that artist. Only a human the platform has authorized to carry a performer can put a work on their rail.";
 
 export async function createWork(
   input: CreateWorkInput,
@@ -59,6 +80,50 @@ export async function createWork(
     return { ok: false, error: "The audio master didn't upload — try again." };
   }
 
+  // ── THE GATE ──────────────────────────────────────────────────────────────
+  // Filing under a performer is an ADDED capability, and this is where it is
+  // refused. It runs before any write, on the server, off the verified session
+  // user — never off anything the client sent about who they are. The UI hides
+  // the selector from everyone without a grant, but hiding is not the gate: a
+  // crafted request naming a performer lands right here and is refused 403.
+  //
+  // Two more refusals stand behind this one, so a bug in this function cannot
+  // become a work on someone's rail: the `work_owner_ins` RLS policy (this same
+  // grant, re-asked by the database as the session user) and the
+  // `enforce_publish_honesty` trigger (re-asked for EVERY writer, service role
+  // included). Three layers, one question.
+  const requestedPerformer = (input.performerId ?? "").trim() || null;
+  // Naming yourself is not carrying — it is the ordinary upload path, and it
+  // needs no grant. Normalizing it here keeps `carrying` meaning exactly what
+  // the honesty trigger means by 'ui_performer': someone ELSE'S rail.
+  const performerId =
+    requestedPerformer && requestedPerformer !== user.id
+      ? requestedPerformer
+      : null;
+  const carrying = performerId !== null;
+
+  let performerName: string | null = null;
+  if (performerId) {
+    if (!UUID_RE.test(performerId)) {
+      return { ok: false, status: 403, error: NO_AUTHORITY };
+    }
+    if (!(await carriesPerformer(supabase, user.id, performerId))) {
+      return { ok: false, status: 403, error: NO_AUTHORITY };
+    }
+    // Authorized. Read the artist's name — it goes in the hands volley, so the
+    // ledger says who this was carried for, by name (Rule 3a).
+    const { data: performer } = await supabase
+      .from("profile")
+      .select("display_name")
+      .eq("id", performerId)
+      .maybeSingle();
+    performerName = artistName(performer?.display_name ?? null);
+  }
+
+  // Whose rail this work lands on. For a self-upload that is the uploader; for a
+  // carried work it is the performer, and the uploader becomes the hands.
+  const railOwner = performerId ?? user.id;
+
   const duration =
     input.durationSeconds != null && Number.isFinite(input.durationSeconds)
       ? Math.max(0, Math.round(input.durationSeconds))
@@ -68,11 +133,31 @@ export async function createWork(
   // choice creates the album first as a normal owner insert (album_owner_ins);
   // its cover is left to derivation (this work's artwork). The
   // enforce_album_ownership trigger validates the link on the work insert below,
-  // so an "existing" id that isn't the caller's own album is rejected there.
+  // so an "existing" id that isn't the rail owner's album is rejected there.
+  //
+  // An album belongs to the ARTIST, so a carried work files into the PERFORMER'S
+  // album — never the carrier's. Carrying a work does not file it into your
+  // catalog, and the album RLS + enforce_album_ownership both say so.
   const album = input.album ?? { kind: "single" };
   let albumId: string | null = null;
+  let createdAlbumId: string | null = null;
   if (album.kind === "existing") {
     albumId = album.albumId;
+    if (carrying) {
+      // Checked here only to answer in a sentence; enforce_album_ownership is
+      // the actual backstop and would refuse this on the insert regardless.
+      const { data: target } = await supabase
+        .from("album")
+        .select("id, profile_id")
+        .eq("id", albumId)
+        .maybeSingle();
+      if (!target || target.profile_id !== railOwner) {
+        return {
+          ok: false,
+          error: `That album isn't ${performerName}'s — pick one of their albums, start a new one, or release it as a single.`,
+        };
+      }
+    }
   } else if (album.kind === "new") {
     const albumTitle = (album.title ?? "").trim().slice(0, 200);
     if (!albumTitle) {
@@ -81,7 +166,7 @@ export async function createWork(
     const albumDesc = (album.description ?? "").trim().slice(0, 2000) || null;
     const { data: createdAlbum, error: albumError } = await supabase
       .from("album")
-      .insert({ title: albumTitle, description: albumDesc, profile_id: user.id })
+      .insert({ title: albumTitle, description: albumDesc, profile_id: railOwner })
       .select("id")
       .single();
     if (albumError || !createdAlbum) {
@@ -91,29 +176,129 @@ export async function createWork(
       };
     }
     albumId = createdAlbum.id as string;
+    createdAlbumId = albumId;
   }
 
-  // RLS (work_owner_ins) enforces creator_id = auth.uid(); we set it explicitly
-  // from the verified server session.
+  // Roll back an album we created inline, if the work never lands. Nothing
+  // half-made is left standing on an artist's rail.
+  async function discardCreatedAlbum() {
+    if (createdAlbumId) {
+      await supabase.from("album").delete().eq("id", createdAlbumId);
+    }
+  }
+
+  // RLS (work_owner_ins) is what enforces this: `creator_id = auth.uid()` for a
+  // self-upload, or a grant-backed `ui_performer` draft naming the session user
+  // as the authority. We set both columns explicitly from the verified session —
+  // never from client input — so the row states exactly what happened:
+  //
+  //   creator_id             = the ARTIST whose rail this is (me, or a performer)
+  //   published_by_authority = the HANDS accountable for it (me, when carrying)
+  //   published_via          = the DOOR it came through
+  //
+  // The audio master sits in the uploader's own storage folder either way: the
+  // bytes were uploaded by this human's authenticated browser client, and a
+  // performer has no session and could never write a folder of their own. That
+  // is the same reasoning the delegated door applies (see ownedByAuthority).
   const { data, error } = await supabase
     .from("work")
     .insert({
       title,
-      creator_id: user.id,
+      creator_id: railOwner,
       duration_seconds: duration,
       master_storage_path: input.masterPath,
       artwork_url: input.artworkUrl,
       album_id: albumId,
       status: "draft",
+      ...(carrying
+        ? {
+            published_via: "ui_performer",
+            published_by_authority: user.id,
+          }
+        : {}),
     })
     .select("id")
     .single();
 
   if (error || !data) {
+    await discardCreatedAlbum();
+    // RLS refusing the insert (42501) is the gate firing behind us — say so as a
+    // refusal, not as a mysterious failure.
+    if (error?.code === "42501") {
+      return { ok: false, status: 403, error: NO_AUTHORITY };
+    }
     return { ok: false, error: error?.message ?? "Couldn't create the work." };
   }
 
   const workId = Number(data.id);
+
+  // ── The hands, written into the performer's ledger ────────────────────────
+  // The reciprocal credit, identical to the delegated door's: role `audit` (a
+  // record of process — the one role that claims nothing about the craft),
+  // origin HUMAN (a person did this), delta `added` (the arrival is added; the
+  // trail is never rewritten). Same shared writeVolley: same sanitize → hash →
+  // seal → atomic paired write, so this trail is indistinguishable from one the
+  // token door produced.
+  //
+  // seq 0 because carrying it here IS the first recorded act on this work — the
+  // craft volleys are declared next, in the editor, and number up from 1.
+  //
+  // All-or-nothing, exactly as the door is: if the hands cannot be credited, the
+  // work row is removed and nothing keeps an AIRED number. A performer's work
+  // never lands without the hands named on it.
+  if (carrying && performerName) {
+    const { data: me } = await supabase
+      .from("profile")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    const hands = await resolveHandsAgent(
+      supabase,
+      user.id,
+      me?.display_name ?? "",
+    );
+    const written = hands.ok
+      ? await writeVolley(supabase, {
+          workId,
+          seq: 0,
+          agentId: hands.agentId,
+          role: "audit",
+          origin: "HUMAN",
+          deltaType: "added",
+          craft: {
+            prompt: "",
+            style_reference_raw: "",
+            rejected_branches: "",
+            rationale: handsVolleyRationale({
+              handsName: hands.name,
+              performerName,
+              tokenLabel: null,
+            }),
+          },
+        })
+      : { ok: false as const, error: hands.error };
+
+    if (!written.ok) {
+      const { error: cleanupError } = await supabase
+        .from("work")
+        .delete()
+        .eq("id", workId);
+      await discardCreatedAlbum();
+      if (cleanupError) {
+        // Cleanup failed — say so plainly rather than reporting a rollback that
+        // did not happen. The draft is visible in Manage and can be discarded
+        // there.
+        return {
+          ok: false,
+          error: `The hands couldn't be credited (${written.error}) and the partial draft could NOT be removed (${cleanupError.message}) — discard it in Manage before retrying.`,
+        };
+      }
+      return {
+        ok: false,
+        error: `The hands couldn't be credited in ${performerName}'s ledger (${written.error}). Nothing was kept — try again.`,
+      };
+    }
+  }
 
   // Kick the Railway worker after the response is sent — the user redirects
   // to /registry/[id] immediately while ffmpeg + R2 upload run in the
@@ -123,9 +308,10 @@ export async function createWork(
 
   revalidatePath("/registry");
   // The new work (and any inline-created album) shows up on the creator's
-  // manage surface immediately.
+  // manage surface immediately — including a carried draft, which appears there
+  // for the carrying human because that is who has to promote it.
   revalidatePath("/manage");
-  return { ok: true, workId };
+  return { ok: true, workId, carriedFor: performerName };
 }
 
 export type GoLiveResult =
