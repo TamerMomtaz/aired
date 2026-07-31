@@ -13,9 +13,19 @@
 //
 // The bearer token is read from this server's own environment and never appears
 // as a tool argument, in a tool result, or in a log line.
+//
+// FULL-LENGTH MASTERS. A local `audio.file_path` is NOT sent inline through the
+// serverless request body — that is capped at 4.5 MB, about three minutes of
+// MP3, and CLAUDE.md Rule 4 says there is no song length cap. Instead this
+// server asks the door for a short-lived, folder-scoped upload URL
+// (POST /api/works/upload-url, same token), PUTs the master straight to the
+// private bucket, and publishes with the returned path. The bytes never pass
+// through a function, so a 12-minute master is no different from a 3-minute one.
+// Only the road changes: placement, the ledger, and the draft state are
+// identical to any other publish.
 
-import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, extname } from "node:path";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -109,13 +119,13 @@ const inputSchema = {
         .string()
         .optional()
         .describe(
-          "Path to a master already uploaded to the private `masters` bucket, inside the authorizing artist's own folder (<artist-uuid>/<upload-uuid>/master.mp3). Preferred for long tracks.",
+          "Path to a master ALREADY in the private `masters` bucket, inside the authorizing artist's own folder (<artist-uuid>/<upload-uuid>/master.mp3) — e.g. one returned by /api/works/upload-url. Use file_path to have this server upload it for you.",
         ),
       file_path: z
         .string()
         .optional()
         .describe(
-          "Local file to send inline instead. Subject to the platform's request-body limit — use master_path for large masters.",
+          "A local master to upload. Any length: it is PUT straight to AIRED's private bucket through a short-lived signed URL, so it is not subject to any request-body limit.",
         ),
     })
     .describe("The audio master. Give master_path or file_path."),
@@ -183,6 +193,109 @@ async function loadFilePart(path) {
   return new File([buf], basename(path));
 }
 
+// Storage wants an honest content-type; it is stored with the object and the
+// transcoder reads it. Unknown extensions fall back to a neutral binary type
+// rather than a guess that would be wrong.
+const AUDIO_TYPES = {
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/opus",
+  ".aiff": "audio/aiff",
+  ".aif": "audio/aiff",
+};
+
+// Ask the door for a signed upload URL, PUT the master straight to the private
+// bucket, and return the path to publish with. The door derives the destination
+// folder from OUR token's authority — we cannot ask for a path, which is exactly
+// why this is safe to expose to an agent.
+//
+// Returns { path } on success, { unsupported: true } when the deployment
+// predates this route (so the caller can fall back to inline), or { error }.
+async function uploadMasterViaSignedUrl(filePath) {
+  const filename = basename(filePath);
+
+  let grantRes;
+  try {
+    grantRes = await fetch(`${API_BASE}/api/works/upload-url`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${INGEST_SECRET}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ filename }),
+    });
+  } catch (e) {
+    return { error: `Couldn't reach AIRED at ${API_BASE}: ${e.message}` };
+  }
+
+  if (grantRes.status === 404 || grantRes.status === 405) {
+    return { unsupported: true };
+  }
+  if (grantRes.status === 401) {
+    return {
+      error:
+        "AIRED refused the delegated token (401). Check AIRED_INGEST_SECRET and that it is registered against a human authority.",
+    };
+  }
+  if (!grantRes.ok) {
+    const text = await grantRes.text();
+    let detail = text.slice(0, 200);
+    try {
+      detail = JSON.parse(text).error ?? detail;
+    } catch {
+      /* keep the raw snippet */
+    }
+    return { error: `AIRED refused the upload URL (HTTP ${grantRes.status}): ${detail}` };
+  }
+
+  let upload;
+  try {
+    ({ upload } = await grantRes.json());
+  } catch {
+    return { error: "AIRED returned a non-JSON upload grant." };
+  }
+  if (!upload?.url || !upload?.path) {
+    return { error: "AIRED returned an upload grant with no url or path." };
+  }
+
+  let body;
+  try {
+    body = await readFile(filePath);
+  } catch (e) {
+    return { error: `Couldn't read the master at ${filePath}: ${e.message}` };
+  }
+
+  let putRes;
+  try {
+    // The signed URL carries its own credential — no bearer, no service key.
+    // This is the request with no size ceiling: it goes to storage, not to a
+    // serverless function.
+    putRes = await fetch(upload.url, {
+      method: "PUT",
+      headers: {
+        "content-type":
+          AUDIO_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream",
+        "cache-control": "max-age=3600",
+      },
+      body,
+    });
+  } catch (e) {
+    return { error: `The master upload failed: ${e.message}` };
+  }
+  if (!putRes.ok) {
+    const text = await putRes.text();
+    return {
+      error: `The master upload failed (HTTP ${putRes.status}): ${text.slice(0, 200)}`,
+    };
+  }
+
+  return { path: upload.path };
+}
+
 // Build the request for POST /api/works/ingest. Inline files (file_path) go as
 // multipart with the metadata in a `payload` field; otherwise it is plain JSON.
 // Identical contract either way — the route normalizes both into one input.
@@ -227,9 +340,36 @@ async function publishWork(args) {
     );
   }
 
+  // A local master goes to storage DIRECTLY, via a signed upload URL, so its
+  // size is bounded by the bucket (500 MB) and not by a serverless request body
+  // (4.5 MB). Rule 4 — no song length cap — is only true if this path is taken.
+  let args_ = args;
+  const localMaster = args.audio?.file_path;
+  if (localMaster && !args.audio?.master_path) {
+    try {
+      await stat(localMaster);
+    } catch (e) {
+      return toolError(`Couldn't read the master at ${localMaster}: ${e.message}`);
+    }
+    const uploaded = await uploadMasterViaSignedUrl(localMaster);
+    if (uploaded.error) {
+      return toolError(uploaded.error);
+    }
+    if (uploaded.path) {
+      // Publish by path; the bytes are already in the private bucket.
+      args_ = { ...args, audio: { master_path: uploaded.path } };
+    } else if (uploaded.unsupported) {
+      // A deployment older than the upload-url route: fall back to inline, which
+      // still works for a master under the request-body cap.
+      log(
+        "this AIRED deployment has no /api/works/upload-url — falling back to an inline upload, which is capped at ~4.5 MB.",
+      );
+    }
+  }
+
   let request;
   try {
-    request = await buildRequest(args);
+    request = await buildRequest(args_);
   } catch (e) {
     return toolError(`Couldn't read a local file: ${e.message}`);
   }
