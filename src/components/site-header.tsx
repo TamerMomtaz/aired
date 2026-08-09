@@ -60,6 +60,10 @@ export async function SiteHeader() {
 
           {user ? (
             <>
+              {/* The listener's own two shelves. They sit before Manage because
+                  every account listens, while only some upload. */}
+              <NavLink href="/adorned">Adorned</NavLink>
+              <NavLink href="/moods">Moods</NavLink>
               <NavLink href="/manage">Manage</NavLink>
               <NavLink href="/upload" variant="cta">
                 Upload

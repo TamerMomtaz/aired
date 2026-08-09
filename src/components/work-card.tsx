@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { AdornButton } from "@/components/library/adorn-button";
 import { CardPlayButton } from "@/components/player/card-play-button";
 import type { Track } from "@/components/player/track";
 import { PlayCount } from "@/components/play-count";
@@ -76,6 +77,14 @@ export function WorkCard({
         {queue && work.hls_playlist_key ? (
           <CardPlayButton queue={queue} workId={work.id} title={work.title} />
         ) : null}
+        {/* Bottom-left, opposite the play button and clear of the Red Line
+            badge — a sibling of the cover Link, never a child, so a tap on the
+            heart keeps you where you are. */}
+        <AdornButton
+          workId={work.id}
+          title={work.title}
+          className="absolute bottom-2 left-2 z-10 border border-white/15 bg-background/70 backdrop-blur hover:border-white/30 hover:bg-background/85"
+        />
       </div>
 
       <div className="flex flex-col gap-2">

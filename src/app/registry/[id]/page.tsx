@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 
 import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
+import { AddToMood } from "@/components/library/add-to-mood";
+import { AdornButton } from "@/components/library/adorn-button";
 import { DownloadButton } from "@/components/offline/download-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
@@ -565,6 +567,16 @@ export default async function WorkPage({
             {!isCertified && canManage ? (
               <IssueCertButton workId={work.id} />
             ) : null}
+            {/* The listener's two acts, beside the maker's: keep this song, or
+                place it in a run of your own. */}
+            <AdornButton workId={work.id} title={work.title} variant="full" />
+            <AddToMood
+              workId={work.id}
+              title={work.title}
+              signedIn={!!user}
+              label="Add to a mood"
+              triggerClassName="inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 px-4 py-2.5 text-sm font-medium text-foreground transition hover:border-white/25 hover:bg-white/[0.04] active:scale-[0.98]"
+            />
             <ShareSheet
               {...songShareProps(work.id, work.title, contributorNames)}
             />
