@@ -16,17 +16,25 @@ import { usePathname } from "next/navigation";
 //
 // Match rule: "/" must match exactly — every path starts with "/" — while other
 // hrefs match by prefix so /upload stays lit on /upload/anything.
+//
+// `alsoActiveFor` exists for an entry that stands for more than one route: the
+// phone rail's Shelf goes to /adorned but speaks for /moods too, and it would
+// read as "you are somewhere else" on the mood pages without this.
 export function NavLink({
   href,
   children,
   variant = "link",
+  alsoActiveFor,
 }: {
   href: string;
   children: React.ReactNode;
   variant?: "link" | "cta";
+  alsoActiveFor?: string[];
 }) {
   const pathname = usePathname();
-  const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const matches = (p: string) =>
+    p === "/" ? pathname === "/" : pathname.startsWith(p);
+  const active = matches(href) || !!alsoActiveFor?.some(matches);
 
   if (variant === "cta") {
     return (

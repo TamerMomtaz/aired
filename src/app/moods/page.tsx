@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { MoodCreateForm } from "@/components/library/mood-create-form";
+import { ShelfTabs } from "@/components/library/shelf-tabs";
 import { getMyMoods, type MoodSummary } from "@/lib/library/queries";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -21,6 +22,9 @@ export default async function MoodsPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
+      {/* The other half of the phone's single Shelf entry — see /adorned. */}
+      <ShelfTabs />
+
       <header className="mb-7 flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">

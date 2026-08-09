@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PlayAllButton } from "@/components/library/play-all-button";
+import { ShelfTabs } from "@/components/library/shelf-tabs";
 import { trackFromFeedWork } from "@/components/player/track";
 import { WorkCard } from "@/components/work-card";
 import { getAdornedWorks } from "@/lib/library/queries";
@@ -30,6 +31,11 @@ export default async function AdornedPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:py-10">
+      {/* On a phone the header carries one Shelf entry for both shelves; these
+          tabs are how Moods stays one tap away. Above sm: the rail names them
+          both and the tabs step aside. */}
+      <ShelfTabs />
+
       <header className="mb-7 flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
