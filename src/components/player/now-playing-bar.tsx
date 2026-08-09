@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { AdornButton } from "@/components/library/adorn-button";
 import { DownloadButton } from "@/components/offline/download-button";
 import { usePlayer, usePlayerClock } from "@/components/player/player-provider";
 import { formatCatalogId } from "@/lib/catalog";
@@ -171,6 +172,9 @@ export function NowPlayingBar() {
           </Link>
 
           <div className="flex shrink-0 items-center gap-1">
+            {/* Keep the song you're hearing, without leaving the page you're on
+                — the most natural moment to adorn something is while it plays. */}
+            <AdornButton workId={current.id} title={current.title} size="sm" />
             {current.hlsPlaylistKey ? (
               <DownloadButton
                 variant="compact"
@@ -193,13 +197,33 @@ export function NowPlayingBar() {
             >
               <PrevIcon />
             </button>
+            {/* The bar had no error state at all, so a stream that died while
+                the listener was browsing left a dead play button and a page
+                reload as the only way out. The engine now recovers on its own;
+                this is what's left when even that is exhausted — a way back
+                that isn't a refresh. */}
             <button
               type="button"
-              onClick={player.toggle}
-              aria-label={player.isPlaying ? "Pause" : "Play"}
-              className="flex size-10 items-center justify-center rounded-full bg-cert-red text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cert-red/50"
+              onClick={player.loadError ? player.retry : player.toggle}
+              aria-label={
+                player.loadError
+                  ? "Playback stopped — try again"
+                  : player.isPlaying
+                    ? "Pause"
+                    : "Play"
+              }
+              title={
+                player.loadError ? "Playback stopped — tap to try again" : undefined
+              }
+              className={`flex size-10 items-center justify-center rounded-full text-white shadow-[0_0_18px_-6px_var(--cert-red)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cert-red/50 ${
+                player.loadError
+                  ? "border border-cert-red/60 bg-background text-cert-red"
+                  : "bg-cert-red"
+              }`}
             >
-              {player.buffering ? (
+              {player.loadError ? (
+                <RetryIcon />
+              ) : player.buffering ? (
                 <span className="size-2 rounded-full bg-white motion-safe:animate-pulse" />
               ) : player.isPlaying ? (
                 <PauseIcon />
@@ -274,6 +298,24 @@ function NextIcon() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden fill="currentColor">
       <path d="M17 6a1 1 0 0 0-2 0v5L6.6 5.4A1 1 0 0 0 5 6.2v11.6a1 1 0 0 0 1.6.8L15 13v5a1 1 0 0 0 2 0V6Z" />
+    </svg>
+  );
+}
+
+function RetryIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4"
+      aria-hidden
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 12a9 9 0 1 1-3-6.7" />
+      <path d="M21 3v6h-6" />
     </svg>
   );
 }

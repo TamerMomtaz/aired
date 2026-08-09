@@ -4,11 +4,18 @@
 :root {
   --background: #0a0a0a;
   --foreground: #ededed;
+  /* RESERVED. cert-red is the Red Line — the certificate, the single 🔴, the
+     glowing underline in the lockup. It is the scarcest thing on the platform
+     and nothing outside certification may spend it. */
   --cert-red: #ff2d2d;
   --muted: #8a8a8a;
-  /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer.
-     cert-red stays the platform's one accent everywhere else. */
+  /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer. */
   --matrix-blue: #2f6bff;
+  /* The listener's keep-mark: the ankh on an adorned song. Deliberately NOT
+     cert-red — an adornment is the most frequent gesture on AIRED, and putting
+     the certification colour on every song row would spend the mark that means
+     "attested" on the one that means "I kept this". */
+  --adorn-blue: #2d2dff;
 }
 
 @theme inline {
@@ -17,6 +24,7 @@
   --color-cert-red: var(--cert-red);
   --color-muted: var(--muted);
   --color-matrix-blue: var(--matrix-blue);
+  --color-adorn-blue: var(--adorn-blue);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
