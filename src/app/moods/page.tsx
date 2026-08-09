@@ -96,7 +96,10 @@ function MoodCard({ mood }: { mood: MoodSummary }) {
       </div>
 
       <div className="flex flex-col gap-1">
-        <span className="line-clamp-2 h-[2.5rem] text-sm font-medium leading-tight text-foreground">
+        {/* Same reason as the mood page's title: a name with no spaces has
+            nowhere to wrap. The clamp already stopped it escaping the card —
+            break-words is what makes the second line readable instead of blank. */}
+        <span className="line-clamp-2 h-[2.5rem] text-sm font-medium leading-tight break-words text-foreground">
           {mood.name}
         </span>
         <span className="font-mono text-[11px] text-muted/60">

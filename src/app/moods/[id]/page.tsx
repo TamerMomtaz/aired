@@ -60,7 +60,11 @@ export default async function MoodPage({
       <header className="mb-7 flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
+            {/* `break-words` because the listener names their own moods: a name
+                with no spaces in it has nowhere to wrap, and at 2xl it would run
+                clean off the screen and drag the whole page with it. Words still
+                break at spaces first — this only bites when one word can't fit. */}
+            <h1 className="text-2xl font-semibold break-words text-foreground sm:text-3xl">
               {mood.name}
             </h1>
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted/60">

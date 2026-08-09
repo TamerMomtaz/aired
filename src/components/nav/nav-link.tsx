@@ -33,7 +33,7 @@ export function NavLink({
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
-        className={`rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110 ${
+        className={`rounded-md bg-cert-red px-3 py-1.5 font-medium whitespace-nowrap text-white transition hover:brightness-110 ${
           active
             ? "ring-2 ring-white/70 ring-offset-2 ring-offset-background"
             : ""
@@ -48,7 +48,7 @@ export function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`relative rounded-md px-2.5 py-1.5 transition after:absolute after:inset-x-2.5 after:bottom-1 after:h-0.5 after:rounded-full after:bg-cert-red after:transition-opacity ${
+      className={`relative rounded-md px-2.5 py-1.5 whitespace-nowrap transition after:absolute after:inset-x-2.5 after:bottom-1 after:h-0.5 after:rounded-full after:bg-cert-red after:transition-opacity ${
         active
           ? "text-foreground after:opacity-100"
           : "text-muted hover:text-foreground after:opacity-0"

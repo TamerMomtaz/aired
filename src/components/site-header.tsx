@@ -31,75 +31,93 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/8 bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-5">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-5">
         <Link
           href="/"
-          className="text-lg font-semibold tracking-[0.2em] text-foreground"
+          className="shrink-0 text-lg font-semibold tracking-[0.2em] text-foreground"
         >
           AIRED
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm sm:gap-2">
-          <NavLink href="/">Listen</NavLink>
-          <NavLink href="/downloads">Downloads</NavLink>
+        {/* The strip carries its own horizontal scroll (see .nav-rail in
+            globals.css). `min-w-0` is the load-bearing class: a flex child
+            defaults to min-width:auto, which means "never shrink below your
+            content", so without it the nav lays out at its full content width
+            and shoves the whole document sideways — the page slides under your
+            thumb instead of the nav. `flex-1` hands it the space left over
+            beside the lockup; `-my-2 py-2` gives the Upload CTA's active ring
+            room to breathe, since a scroll container clips on both axes. */}
+        <nav
+          aria-label="Main"
+          className="nav-rail -my-2 flex min-w-0 flex-1 items-center overflow-x-auto py-2 text-sm"
+        >
+          {/* The items ride on their own track: `shrink-0` keeps them at full
+              width so the rail scrolls rather than squeezing them, and `ml-auto`
+              parks them at the right edge whenever they DO fit (a flex auto
+              margin resolves to zero once space runs out, so nothing is ever
+              stranded off the left edge, unreachable). */}
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            <NavLink href="/">Listen</NavLink>
+            <NavLink href="/downloads">Downloads</NavLink>
 
-          {profile?.is_admin ? (
-            <NavLink href="/review">
-              <span className="inline-flex items-center gap-1.5">
-                Review
-                {pendingCount > 0 ? (
-                  <span className="rounded-full bg-cert-red px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-                    {pendingCount}
-                  </span>
-                ) : null}
-              </span>
-            </NavLink>
-          ) : null}
-
-          <InstallTrigger />
-
-          {user ? (
-            <>
-              {/* The listener's own two shelves. They sit before Manage because
-                  every account listens, while only some upload. */}
-              <NavLink href="/adorned">Adorned</NavLink>
-              <NavLink href="/moods">Moods</NavLink>
-              <NavLink href="/manage">Manage</NavLink>
-              <NavLink href="/upload" variant="cta">
-                Upload
+            {profile?.is_admin ? (
+              <NavLink href="/review">
+                <span className="inline-flex items-center gap-1.5">
+                  Review
+                  {pendingCount > 0 ? (
+                    <span className="rounded-full bg-cert-red px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                      {pendingCount}
+                    </span>
+                  ) : null}
+                </span>
               </NavLink>
-              <Link
-                href="/settings"
-                className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 transition hover:text-foreground sm:inline"
-                title={`${user.email ?? "Your account"} — edit your identity`}
-              >
-                {user.email}
-              </Link>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="rounded-md border border-white/10 px-2.5 py-1.5 text-muted transition hover:border-white/20 hover:text-foreground"
+            ) : null}
+
+            <InstallTrigger />
+
+            {user ? (
+              <>
+                {/* The listener's own two shelves. They sit before Manage because
+                    every account listens, while only some upload. */}
+                <NavLink href="/adorned">Adorned</NavLink>
+                <NavLink href="/moods">Moods</NavLink>
+                <NavLink href="/manage">Manage</NavLink>
+                <NavLink href="/upload" variant="cta">
+                  Upload
+                </NavLink>
+                <Link
+                  href="/settings"
+                  className="hidden max-w-[12rem] truncate px-2 text-xs text-muted/70 transition hover:text-foreground sm:inline"
+                  title={`${user.email ?? "Your account"} — edit your identity`}
                 >
-                  Log out
-                </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/login"
-                className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/signup?next=/upload"
-                className="rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110"
-              >
-                Create
-              </Link>
-            </>
-          )}
+                  {user.email}
+                </Link>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="rounded-md border border-white/10 px-2.5 py-1.5 whitespace-nowrap text-muted transition hover:border-white/20 hover:text-foreground"
+                  >
+                    Log out
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-md px-2.5 py-1.5 text-muted transition hover:text-foreground"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup?next=/upload"
+                  className="rounded-md bg-cert-red px-3 py-1.5 font-medium text-white transition hover:brightness-110"
+                >
+                  Create
+                </Link>
+              </>
+            )}
+          </div>
         </nav>
       </div>
     </header>
