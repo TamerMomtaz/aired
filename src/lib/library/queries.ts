@@ -57,7 +57,7 @@ function shape(row: WorkRow): FeedWork {
 
 // ── Adorned ────────────────────────────────────────────────────────────────
 
-// Just the ids, for painting hearts. This runs in the root layout on every page,
+// Just the ids, for painting the ankh. This runs in the root layout on every page,
 // so it stays deliberately tiny: one indexed column, no joins, no work rows.
 // Signed out ⇒ [] without a round trip.
 export async function getAdornedWorkIds(
@@ -73,7 +73,7 @@ export async function getAdornedWorkIds(
   return ((data ?? []) as { work_id: number }[]).map((r) => r.work_id);
 }
 
-// The Adorned shelf itself: the listener's hearts, newest first, card-ready.
+// The Adorned shelf itself: what the listener kept, newest first, card-ready.
 // Two steps rather than one embed — the order that matters is the ADORNMENT's
 // created_at (when you kept it), not the work's (when it was made), and that
 // ordering can't be expressed through a nested embed.

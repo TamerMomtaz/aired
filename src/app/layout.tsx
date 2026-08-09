@@ -74,11 +74,11 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Which songs this listener has adorned, seeded once for the whole shell so a
-  // heart is already filled on first paint — no flash of "not kept", and the
-  // card and the now-playing bar can never disagree about the same song. Signed
+  // Which songs this listener has adorned, seeded once for the whole shell so an
+  // ankh is already lit on first paint — no flash of "not kept", and the card
+  // and the now-playing bar can never disagree about the same song. Signed
   // out this costs no round trip, and it fails soft: a library that can't be
-  // read shows no hearts rather than taking the site down.
+  // read shows no adornments rather than taking the site down.
   const user = await getCurrentUser();
   const supabase = await createClient();
   const adornedIds = await getAdornedWorkIds(supabase, user?.id ?? null);

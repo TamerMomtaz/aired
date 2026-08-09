@@ -15,8 +15,8 @@ import { toggleAdornment } from "@/lib/library/actions";
 // Which songs the signed-in listener has ADORNED, held once for the whole app.
 //
 // Why a shared set rather than per-button state: the same song can be on screen
-// twice at once — a card in the feed and the now-playing bar above it — and a
-// heart tapped in one place has to fill in the other immediately. One set means
+// twice at once — a card in the feed and the now-playing bar above it — and an
+// ankh tapped in one place has to fill in the other immediately. One set means
 // they cannot disagree.
 //
 // The set is seeded server-side on every full render (see the root layout) and
@@ -26,7 +26,7 @@ import { toggleAdornment } from "@/lib/library/actions";
 type AdornedContextValue = {
   isAdorned: (workId: number) => boolean;
   toggle: (workId: number) => void;
-  // False for a signed-out visitor: the heart still shows, but tapping it goes
+  // False for a signed-out visitor: the ankh still shows, but tapping it goes
   // to sign-up rather than pretending to keep something.
   signedIn: boolean;
 };
@@ -83,7 +83,7 @@ export function AdornedProvider({
       void toggleAdornment(workId)
         .then((res) => {
           // Settle on what the database says, whatever we guessed. On failure
-          // the heart springs back — the UI telling the truth IS the error
+          // the ankh springs back — the UI telling the truth IS the error
           // message here; there is no toast to lie in.
           const settled = new Set(idsRef.current);
           const adorned = res.ok ? res.adorned : wasAdorned;

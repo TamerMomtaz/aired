@@ -44,8 +44,9 @@ export default async function MoodsPage() {
       ) : (
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-white/12 px-6 py-16 text-center">
           <p className="max-w-md text-sm leading-relaxed text-muted">
-            No moods yet. Name one above, then add songs to it from the heart row
-            on any song — or from a song&rsquo;s page.
+            No moods yet. Name one above, then add songs to it from{" "}
+            <span className="text-foreground">Add to a mood</span> on any
+            song&rsquo;s page.
           </p>
           <Link
             href="/"

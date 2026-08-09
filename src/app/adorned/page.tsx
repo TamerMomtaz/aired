@@ -16,7 +16,7 @@ export const metadata = { title: "Adorned · AIRED" };
 //
 // A song you adorned and that has since been pulled simply isn't here (the
 // query filters to live works); the row stays in the database, so if it ever
-// returns, so does your heart.
+// returns, so does your adornment.
 export default async function AdornedPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/adorned");
@@ -61,11 +61,11 @@ export default async function AdornedPage() {
         </ul>
       ) : (
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-white/12 px-6 py-16 text-center">
-          <span aria-hidden className="text-2xl text-cert-red/70">
-            ♥
+          <span aria-hidden className="text-3xl leading-none text-adorn-blue/70">
+            ☥
           </span>
           <p className="max-w-md text-sm leading-relaxed text-muted">
-            Tap the heart on any song and it waits for you here — no hunting for
+            Tap the ankh on any song and it waits for you here — no hunting for
             the name next time.
           </p>
           <Link

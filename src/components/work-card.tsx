@@ -79,7 +79,7 @@ export function WorkCard({
         ) : null}
         {/* Bottom-left, opposite the play button and clear of the Red Line
             badge — a sibling of the cover Link, never a child, so a tap on the
-            heart keeps you where you are. */}
+            ankh keeps you where you are. */}
         <AdornButton
           workId={work.id}
           title={work.title}

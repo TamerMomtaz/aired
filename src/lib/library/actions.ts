@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 // Write side of the listener's library — the Adorned shelf and the Moods Feed.
 //
 // Every action runs on the session-bound anon client (NEVER the service role),
-// so RLS is the real authorization: adornment_{ins,del}_own pin every heart to
+// so RLS is the real authorization: adornment_{ins,del}_own pin every adornment to
 // profile_id = auth.uid(), and the mood / mood_item policies pin every list and
 // every song in it to its owner. Server Actions are reachable by direct POST, so
 // none of this leans on the UI having hidden a button. We still bail early for a
@@ -38,7 +38,7 @@ function cleanDescription(raw: string | null | undefined): string | null {
 
 // ── Adorned ────────────────────────────────────────────────────────────────
 
-// Toggle the heart on one song, and report the state it ended in so the client
+// Toggle the adornment on one song, and report the state it ended in so the client
 // can reconcile its optimistic paint against what the database actually did.
 //
 // The read-then-write is deliberately not a transaction: two taps racing can
