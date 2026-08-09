@@ -40,6 +40,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The header's nav strip (src/components/site-header.tsx).
+   On a phone the entries are wider than the screen, so the strip carries its own
+   horizontal scroll: it slides under the thumb while the document stays put.
+   Never reach for overflow-x:hidden on html/body to stop the page sliding — it
+   suppresses the symptom by making every entry past the screen edge permanently
+   unreachable, and it silently breaks position:sticky on the header above. */
+.nav-rail {
+  /* Momentum scrolling on iOS, so the strip glides like the rest of the OS. */
+  -webkit-overflow-scrolling: touch;
+  /* The swipe stops at the ends of the strip: it never chains onward into the
+     page, and never trips Safari's edge back-gesture. */
+  overscroll-behavior-x: contain;
+  /* The strip scrolls silently — no scrollbar drawn across the header. */
+  scrollbar-width: none;
+}
+
+.nav-rail::-webkit-scrollbar {
+  display: none;
+}
+
 /* The Red Line — the audio progress bar (CLAUDE.md §3).
    There is no audio yet, so it animates as a determinate progress bar to
    show the role it will play once a track is streaming. */
