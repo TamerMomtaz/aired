@@ -48,11 +48,19 @@ export async function SiteHeader() {
   // What the phone's ⋯ door holds — the same destinations the desktop rail
   // shows inline, in the same order. Log out isn't here: it's a server action,
   // so it rides in as the menu's footer.
+  // Diagnostics rides in the ⋯ door for an admin and nowhere else. It needs to
+  // be reachable one-handed, in a parked car, seconds after playback died — and
+  // invisible to every listener, because a black box is workshop equipment, not
+  // part of the offer. Admin-only in the menu; the page itself is unlisted
+  // rather than locked (see app/settings/diagnostics/page.tsx).
   const moreItems: MoreItem[] = user
     ? [
         { href: "/downloads", label: "Downloads" },
         ...(profile?.is_admin
-          ? [{ href: "/review", label: "Review", count: pendingCount }]
+          ? [
+              { href: "/review", label: "Review", count: pendingCount },
+              { href: "/settings/diagnostics", label: "Diagnostics" },
+            ]
           : []),
         { href: "/manage", label: "Manage" },
       ]
