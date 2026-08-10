@@ -8,6 +8,14 @@ export const metadata = {
 
 // The player's black box, read back.
 //
+// ⚠ TEMPORARY. This route, the ⋯ door that reaches it, and the recorder behind
+// it are instrumentation raised to catch ONE bug: audio dying in a car on a
+// locked screen. They come down when that bug is closed. Scaffolding left
+// standing becomes part of the building, and this is not part of the building.
+// Removing it means: this page, src/components/diagnostics/, src/lib/
+// diagnostics/, the Diagnostics entry in site-header.tsx, and the diag() calls
+// threaded through player-provider.tsx.
+//
 // Deliberately NOT gated on auth or on admin. The log is written and stored
 // entirely on the device that produced it — no server data, no other listener's
 // anything — and the one time it matters most is the moment after playback died,
