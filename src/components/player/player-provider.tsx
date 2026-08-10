@@ -11,6 +11,8 @@ import {
 } from "react";
 
 import type { Track } from "@/components/player/track";
+import { diag } from "@/lib/diagnostics/log";
+import { probe } from "@/lib/diagnostics/probe";
 import { recordPlay } from "@/lib/plays/actions";
 import { buildStreamUrl } from "@/lib/stream-url";
 
@@ -46,6 +48,23 @@ const RESUME_PROBE_MS = 1_500;
 // this long is a stall, even if no error was ever raised.
 const STALL_MS = 12_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
+
+// ---- the flight recorder's heartbeat --------------------------------------
+// A timer that asks for nothing and fixes nothing — it only says "I ran, and
+// here is the wall-clock time." Its value is entirely in the GAPS: this
+// interval is asked to tick every 5s, so an entry that lands 60s after the last
+// one is Chrome's background throttling caught in the act, and one that lands
+// after several minutes is a frozen page. Deliberately NOT gated on
+// visibility — unlike the watchdog above it, whose blindness while hidden is
+// precisely what we are here to measure.
+const HEARTBEAT_MS = 5_000;
+// Log a heartbeat when it arrives this much later than asked. 1.75× is well
+// outside ordinary timer jitter and well inside the 1-per-minute floor of
+// intensive throttling, so it catches the first sign of slowdown.
+const HEARTBEAT_LATE_RATIO = 1.75;
+// Even when nothing changes, leave a pulse this often so a quiet stretch is
+// visibly quiet rather than merely absent from the log.
+const HEARTBEAT_PULSE_MS = 60_000;
 
 // The queue lives in React state, so before this it died on any reload — the
 // refresh that unstuck playback also lost the listener's place. Persisting a
@@ -265,28 +284,66 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const currentUrl = buildStreamUrl(current?.hlsPlaylistKey);
 
+  // ---- the flight recorder's view of this provider ------------------------
+  // Everything the recorder needs that only lives in here: the element, the
+  // listener's intent, the recovery budget, and whether hls.js is still alive.
+  // Stable (refs only), so it never re-binds a listener.
+  const snap = useCallback(
+    () =>
+      probe(audioRef.current, {
+        wantsPlay: wantsPlayRef.current,
+        recoveries: recoveriesRef.current,
+        hls: !!hlsRef.current,
+      }),
+    [],
+  );
+
+  // Every play() in this file goes through here. Eight call sites used to end
+  // in `.catch(() => {})` — a rejected play promise is the browser refusing to
+  // make sound, which is exactly the failure being hunted, and it was being
+  // thrown away unread. Behaviour is unchanged: the rejection is still
+  // swallowed, it is simply written down first.
+  const attemptPlay = useCallback(
+    (audio: HTMLAudioElement | null | undefined, reason: string) => {
+      if (!audio) return;
+      diag("play-call", reason, snap());
+      const p = audio.play() as Promise<void> | undefined;
+      if (!p || typeof p.then !== "function") return;
+      p.then(
+        () => diag("play-ok", reason),
+        (err: unknown) => {
+          const name = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+          diag("play-REJECTED", `${reason} · ${name}`, snap());
+        },
+      );
+    },
+    [snap],
+  );
+
   // ---- transport actions (all stable) -------------------------------------
   const play = useCallback(() => {
     wantsPlayRef.current = true;
-    audioRef.current?.play().catch(() => {});
-  }, []);
+    attemptPlay(audioRef.current, "play()");
+  }, [attemptPlay]);
 
   const pause = useCallback(() => {
     wantsPlayRef.current = false;
+    diag("pause()", "listener asked for silence", snap());
     audioRef.current?.pause();
-  }, []);
+  }, [snap]);
 
   const toggle = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
       wantsPlayRef.current = true;
-      audio.play().catch(() => {});
+      attemptPlay(audio, "toggle→play");
     } else {
       wantsPlayRef.current = false;
+      diag("pause()", "toggle→pause", snap());
       audio.pause();
     }
-  }, []);
+  }, [attemptPlay, snap]);
 
   // Spend one unit of the recovery budget. False means it's exhausted and the
   // failure has earned the right to surface. A stream that has behaved for a
@@ -297,9 +354,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (now - lastRecoveryAtRef.current > RECOVERY_RESET_MS) {
       recoveriesRef.current = 0;
     }
-    if (recoveriesRef.current >= MAX_RECOVERIES) return false;
+    if (recoveriesRef.current >= MAX_RECOVERIES) {
+      diag("budget-EXHAUSTED", `${MAX_RECOVERIES} recoveries spent within ${RECOVERY_RESET_MS}ms`);
+      return false;
+    }
     recoveriesRef.current += 1;
     lastRecoveryAtRef.current = now;
+    diag("budget-spend", `${recoveriesRef.current}/${MAX_RECOVERIES}`);
     return true;
   }, []);
 
@@ -308,22 +369,40 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   //   • hls.js — startLoad() re-opens the segment pipeline from where we are.
   //   • native HLS (Safari / iOS) — there is no hls.js to ask, so the element
   //     itself is reloaded and seeked back to the moment it froze.
-  const recoverStream = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+  const recoverStream = useCallback(
+    (reason: string) => {
+      const audio = audioRef.current;
+      if (!audio) {
+        diag("recover-SKIP", `${reason} · no element`);
+        return;
+      }
 
-    const hls = hlsRef.current;
-    if (hls) {
-      hls.startLoad();
-      if (wantsPlayRef.current) audio.play().catch(() => {});
-      return;
-    }
+      const hls = hlsRef.current;
+      if (hls) {
+        diag("recover", `${reason} · hls.startLoad()`, snap());
+        hls.startLoad();
+        if (wantsPlayRef.current) attemptPlay(audio, `recover:${reason}`);
+        return;
+      }
 
-    const at = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
-    restoreTimeRef.current = at > 0 ? at : null;
-    audio.load();
-    if (wantsPlayRef.current) audio.play().catch(() => {});
-  }, []);
+      // No hls.js instance. On Safari/iOS that is native HLS and reloading the
+      // element is the right ladder. On Android it can also mean hls.js was
+      // DESTROYED by an exhausted budget — in which case the element has no
+      // src at all and this reload has nothing to reload. Worth telling apart
+      // in the timeline, so record which it is.
+      const hasSrc = !!audio.currentSrc || !!audio.getAttribute("src");
+      diag(
+        "recover",
+        `${reason} · element.load()${hasSrc ? "" : " · NO SRC (hls destroyed?)"}`,
+        snap(),
+      );
+      const at = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      restoreTimeRef.current = at > 0 ? at : null;
+      audio.load();
+      if (wantsPlayRef.current) attemptPlay(audio, `recover:${reason}`);
+    },
+    [attemptPlay, snap],
+  );
 
   const seekToTime = useCallback((seconds: number) => {
     const audio = audioRef.current;
@@ -349,6 +428,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (tracks.length === 0) return;
     const i = clamp(startIndex, 0, tracks.length - 1);
     const targetUrl = buildStreamUrl(tracks[i].hlsPlaylistKey);
+    diag(
+      "playQueue",
+      `work=${tracks[i].id} "${tracks[i].title}" · ${i + 1}/${tracks.length}`,
+    );
     pendingPlayRef.current = true;
     wantsPlayRef.current = true;
     // A deliberate new listen starts with a full recovery budget.
@@ -361,9 +444,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // re-run (same URL), so kick playback directly here.
     if (targetUrl && targetUrl === lastUrlRef.current) {
       pendingPlayRef.current = false;
-      audioRef.current?.play().catch(() => {});
+      attemptPlay(audioRef.current, "playQueue:same-track");
     }
-  }, []);
+  }, [attemptPlay]);
 
   // Restart the current track from the top and play. Used by repeat-one, and by
   // repeat-all when the queue is a single track — there the target index equals
@@ -374,8 +457,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     wantsPlayRef.current = true;
     audio.currentTime = 0;
     setCurrentTime(0);
-    audio.play().catch(() => {});
-  }, []);
+    attemptPlay(audio, "restartCurrent");
+  }, [attemptPlay]);
 
   const next = useCallback(() => {
     const i = indexRef.current;
@@ -393,6 +476,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // End of the queue — stop. A natural `ended` doesn't fire a `pause` event,
       // so settle the play state explicitly. The run is over, so the wish for
       // sound ends with it: nothing here should be "recovered" later.
+      diag("queue-end", "wantsPlay cleared — nothing will be recovered after this");
       wantsPlayRef.current = false;
       audioRef.current?.pause();
       setIsPlaying(false);
@@ -427,6 +511,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const retry = useCallback(() => {
+    diag("retry", "re-attaching source from scratch", snap());
     setLoadError(false);
     // A deliberate retry hands back a full recovery budget — the listener has
     // told us they think it's worth another go.
@@ -437,7 +522,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const at = audio && Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
     restoreTimeRef.current = at > 0 ? at : null;
     setAttempt((n) => n + 1);
-  }, []);
+  }, [snap]);
 
   const cycleRepeatMode = useCallback(() => {
     setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
@@ -520,19 +605,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
     const onPlay = () => {
+      diag("evt:play", undefined, snap());
       setIsPlaying(true);
       if ("mediaSession" in navigator) {
         navigator.mediaSession.playbackState = "playing";
       }
     };
     const onPause = () => {
+      // The element pausing while the listener still wants sound is the whole
+      // bug in one line — the OS or the engine stopping playback nobody asked
+      // to stop. Called out loudly so it can't be missed in the timeline.
+      diag(
+        wantsPlayRef.current ? "evt:pause-UNWANTED" : "evt:pause",
+        undefined,
+        snap(),
+      );
       setIsPlaying(false);
       if ("mediaSession" in navigator) {
         navigator.mediaSession.playbackState = "paused";
       }
     };
-    const onWaiting = () => setBuffering(true);
+    const onWaiting = () => {
+      // Buffer starvation: the playhead has caught up with the data. In a car
+      // this is the tunnel, the handoff, the dead cell.
+      diag("evt:waiting", "buffer starved", snap());
+      setBuffering(true);
+    };
+    // The element gave up trying to fetch. Log-only — nothing in the player
+    // acts on these, and adding a listener that only records changes nothing.
+    const onStalled = () => diag("evt:stalled", undefined, snap());
+    const onSuspend = () => diag("evt:suspend", undefined, snap());
+    const onRateChange = () => diag("evt:ratechange", undefined, snap());
     const onPlaying = () => {
+      diag("evt:playing", "sound flowing", snap());
       setBuffering(false);
       setIsPlaying(true);
       // Sound is flowing again: clear the error and mark progress so a recovery
@@ -541,28 +646,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       lastProgressAtRef.current = Date.now();
     };
     const onCanPlay = () => {
+      diag("canplay", undefined, snap());
       setBuffering(false);
       if (pendingPlayRef.current) {
         pendingPlayRef.current = false;
-        audio.play().catch(() => {});
+        attemptPlay(audio, "canplay:pending");
       }
     };
     // A new source begins loading: clear any stale error and reset the clock.
     // Doing this here (an element event) — rather than synchronously in the
     // attach effect — keeps the element the single source of truth.
     const onLoadStart = () => {
+      diag("evt:loadstart", undefined, snap());
       setBuffering(true);
       setLoadError(false);
       setCurrentTime(0);
     };
     const onEmptied = () => {
+      diag("evt:emptied", undefined, snap());
       setBuffering(false);
       setCurrentTime(0);
       setDuration(0);
     };
-    const onEnded = () => endedRef.current();
+    const onEnded = () => {
+      diag("evt:ended", undefined, snap());
+      endedRef.current();
+    };
     const onError = () => {
       console.error("[player] audio element error", audio.error);
+      diag(
+        "evt:ERROR",
+        `element · code=${audio.error?.code ?? "?"} ${audio.error?.message ?? ""}`,
+        snap(),
+      );
       // With hls.js attached, its own ERROR event owns the ladder — stepping in
       // here too would race it and burn the budget twice for one failure.
       if (hlsRef.current) return;
@@ -570,13 +686,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // element's to do — reload and seek back. This is the path Tee's iPhone
       // takes, and before this it had no recovery at all.
       if (!wantsPlayRef.current || !spendRecovery()) {
+        diag("give-up", "element error, no budget or no intent", snap());
         setLoadError(true);
         return;
       }
-      recoverStream();
+      recoverStream("element-error");
     };
 
     audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("stalled", onStalled);
+    audio.addEventListener("suspend", onSuspend);
+    audio.addEventListener("ratechange", onRateChange);
     audio.addEventListener("durationchange", onDuration);
     audio.addEventListener("loadedmetadata", onDuration);
     audio.addEventListener("play", onPlay);
@@ -591,6 +711,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("stalled", onStalled);
+      audio.removeEventListener("suspend", onSuspend);
+      audio.removeEventListener("ratechange", onRateChange);
       audio.removeEventListener("durationchange", onDuration);
       audio.removeEventListener("loadedmetadata", onDuration);
       audio.removeEventListener("play", onPlay);
@@ -603,9 +726,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-    // Both callbacks are useCallback(…, []) — stable for the life of the
-    // provider — so the listeners still bind exactly once.
-  }, [recoverStream, spendRecovery]);
+    // Every dependency here is a useCallback whose own deps are stable for the
+    // life of the provider, so the listeners still bind exactly once.
+  }, [recoverStream, spendRecovery, snap, attemptPlay]);
 
   // ---- attach the current track's source: hls.js, or native HLS on Safari ---
   // Resets (buffering / error / clock) are handled by the element's loadstart &
@@ -640,7 +763,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         hlsRef.current = hls;
         hls.loadSource(currentUrl);
         hls.attachMedia(audio);
+        diag("hls-attach", currentUrl, snap());
+        // Record the buffer contract this device actually got, rather than the
+        // one the defaults imply. hls.js sizes its forward buffer from the
+        // LEVEL BITRATE (see getMaxBufferLength): with a bitrate it will hold
+        // up to maxMaxBufferLength, and with none it falls back to the flat
+        // maxBufferLength. AIRED serves a bare media playlist — no master, no
+        // BANDWIDTH attribute — so the expectation is the fallback. This line
+        // is how we confirm that from the car instead of from the source.
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const c = hls.config;
+          const bitrate = hls.levels?.[0]?.maxBitrate ?? 0;
+          const target = bitrate
+            ? Math.min(
+                Math.max((8 * c.maxBufferSize) / bitrate, c.maxBufferLength),
+                c.maxMaxBufferLength,
+              )
+            : c.maxBufferLength;
+          diag(
+            "hls-buffer-config",
+            `levelBitrate=${bitrate} → forward target ${Math.round(target)}s ` +
+              `(maxBufferLength=${c.maxBufferLength} maxMaxBufferLength=${c.maxMaxBufferLength} ` +
+              `maxBufferSize=${c.maxBufferSize})`,
+          );
+        });
         hls.on(Hls.Events.ERROR, (_event, data) => {
+          // NON-FATAL ERRORS ARE THE BREADCRUMBS. The line below this used to
+          // be the first statement in the handler, so every fragLoadError,
+          // fragLoadTimeOut, bufferStalledError and bufferSeekOverHole was
+          // dropped unread — and those are precisely the events that describe
+          // a stream dying slowly in a tunnel. They still change nothing about
+          // behaviour; now they are written down on the way past.
+          diag(
+            data.fatal ? "hls-FATAL" : "hls-warn",
+            `${data.type} · ${data.details}${
+              data.response?.code ? ` · http=${data.response.code}` : ""
+            }${data.error?.message ? ` · ${data.error.message}` : ""}`,
+            snap(),
+          );
           if (!data.fatal) return;
 
           // THE BUG THIS FIXES: this branch used to call hls.destroy() and stop.
@@ -658,6 +818,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
           if (!recoverable || !spendRecovery()) {
             console.error("[player] unrecoverable HLS error", data);
+            // hls.destroy() here is a one-way door: the engine is gone, the
+            // element loses its MSE source, and nothing short of re-attaching
+            // (retry(), i.e. a listener tapping "Try again") can make sound
+            // again. If the timeline ends here, that is why.
+            diag(
+              "give-up-DESTROY",
+              `${recoverable ? "budget spent" : "unrecoverable"} · engine destroyed`,
+              snap(),
+            );
             setLoadError(true);
             hls.destroy();
             if (hlsRef.current === hls) hlsRef.current = null;
@@ -665,17 +834,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           }
 
           console.warn("[player] recovering from HLS error", data.type);
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-          else hls.recoverMediaError();
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            diag("recover", "hls-fatal · startLoad()", snap());
+            hls.startLoad();
+          } else {
+            diag("recover", "hls-fatal · recoverMediaError()", snap());
+            hls.recoverMediaError();
+          }
           // The element is often left paused by the failure; if the listener
           // still wants sound, ask for it once the pipeline is reopened.
-          if (wantsPlayRef.current) audio.play().catch(() => {});
+          if (wantsPlayRef.current) attemptPlay(audio, "hls-fatal-recover");
         });
       } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
         // Safari / iOS play HLS natively from the element source.
+        diag("native-hls-attach", currentUrl, snap());
         audio.src = currentUrl;
       } else {
         console.error("[player] HLS is not supported in this browser");
+        diag("no-hls-support", currentUrl);
         setLoadError(true);
       }
     })();
@@ -687,7 +863,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         hlsRef.current = null;
       }
     };
-  }, [currentUrl, attempt, spendRecovery]);
+  }, [currentUrl, attempt, spendRecovery, snap, attemptPlay]);
 
   // ---- coming back: screen timeout, tab switch, app resume ----------------
   // Nothing in this provider used to notice the page leaving and returning, so
@@ -721,16 +897,29 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (isStalled(audio)) {
-        if (spendRecovery()) recoverStream();
+        diag(
+          "watchdog-STALL",
+          `no progress for >${STALL_MS}ms`,
+          snap(),
+        );
+        if (spendRecovery()) recoverStream("watchdog");
         else setLoadError(true);
         return;
       }
       // Not stalled, merely suspended — the common case after a screen timeout.
-      if (audio.paused) audio.play().catch(() => {});
+      if (audio.paused) attemptPlay(audio, "watchdog:resume-paused");
     };
 
     const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible") {
+        // The page LEAVING. From here until the matching return, the watchdog
+        // below is switched off by its own visibility gate — so if the timeline
+        // shows a failure after this line and no watchdog entry before the
+        // return, the recovery ladder was never given a chance to run.
+        diag("page-HIDDEN", "watchdog now blind", snap());
+        return;
+      }
+      diag("page-visible", "watchdog live again", snap());
       const audio = audioRef.current;
       if (!audio || !wantsPlayRef.current) return;
 
@@ -738,7 +927,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         retry();
         return;
       }
-      if (audio.paused) audio.play().catch(() => {});
+      if (audio.paused) attemptPlay(audio, "onVisible:resume-paused");
 
       // Give it a beat, then judge by whether the clock actually moved. A tab
       // that was merely throttled resumes on its own and needs no help; one
@@ -748,28 +937,88 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const a = audioRef.current;
         if (!a || !wantsPlayRef.current) return;
         if (document.visibilityState !== "visible") return;
-        if (a.currentTime > before + 0.05) return;
-        if (spendRecovery()) recoverStream();
+        if (a.currentTime > before + 0.05) {
+          diag("resume-probe", "clock moved — healthy", snap());
+          return;
+        }
+        diag("resume-probe-FROZEN", `still at ${before.toFixed(1)}s`, snap());
+        if (spendRecovery()) recoverStream("resume-probe");
       }, RESUME_PROBE_MS);
     };
 
-    document.addEventListener("visibilitychange", onVisible);
+    const onVisibility = () => onVisible();
+    const onPageShow = () => {
+      diag("evt:pageshow", undefined, snap());
+      onVisible();
+    };
+    const onPageHide = () => diag("evt:pagehide", undefined, snap());
+    // Page Lifecycle. `freeze` is Chrome telling us outright that it has
+    // stopped running this page's tasks — the single most direct evidence
+    // there is for "the recovery code could not run". `resume` is the thaw.
+    const onFreeze = () => diag("page-FROZEN", "Chrome froze the page", snap());
+    const onResume = () => diag("page-thawed", "Chrome resumed the page", snap());
+
+    document.addEventListener("visibilitychange", onVisibility);
     // iOS restoring a page from the back/forward cache fires pageshow, not
     // visibilitychange — without this, the PWA's most common return path would
     // be the one left unhandled.
-    window.addEventListener("pageshow", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("freeze", onFreeze);
+    document.addEventListener("resume", onResume);
+
     const watchdog = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const audio = audioRef.current;
       if (audio && isStalled(audio)) nudge();
     }, WATCHDOG_INTERVAL_MS);
 
+    // ---- the heartbeat ------------------------------------------------------
+    // Measures the one thing no other instrument can: whether this page is
+    // still being given CPU. It records nothing but its own lateness and the
+    // player's state, and it acts on neither — a diagnostic must not become a
+    // second, secret recovery ladder, or the evidence would describe a player
+    // that no longer exists.
+    let lastBeat = Date.now();
+    let lastLogged = 0;
+    let lastShape = "";
+    const heartbeat = window.setInterval(() => {
+      const now = Date.now();
+      const late = now - lastBeat;
+      lastBeat = now;
+      const s = snap();
+      // A shape change worth a line: playing/paused, visible/hidden, online,
+      // and the buffer bucketed to whole seconds under 10s (where starvation
+      // actually happens) so ordinary drift doesn't fill the ring.
+      const shape = [
+        s.pd ? "p" : "-",
+        s.vs,
+        s.on ? "on" : "OFF",
+        s.rs,
+        s.fb !== undefined ? Math.min(10, Math.floor(s.fb)) : "?",
+      ].join("");
+      const overdue = late > HEARTBEAT_MS * HEARTBEAT_LATE_RATIO;
+      if (overdue || shape !== lastShape || now - lastLogged > HEARTBEAT_PULSE_MS) {
+        lastShape = shape;
+        lastLogged = now;
+        diag(
+          overdue ? "beat-LATE" : "beat",
+          overdue ? `asked for ${HEARTBEAT_MS}ms, arrived after ${late}ms` : undefined,
+          s,
+        );
+      }
+    }, HEARTBEAT_MS);
+
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("pageshow", onVisible);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("freeze", onFreeze);
+      document.removeEventListener("resume", onResume);
       window.clearInterval(watchdog);
+      window.clearInterval(heartbeat);
     };
-  }, [recoverStream, spendRecovery, retry]);
+  }, [recoverStream, spendRecovery, retry, snap, attemptPlay]);
 
   // ---- OS media session: lock-screen + headphone controls (PWA) -----------
   // Action handlers are wired once (the callbacks are stable). The metadata —
@@ -829,6 +1078,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
+    // Mark the boundary. Every reload writes one of these, so a timeline that
+    // shows a session-start the listener didn't ask for is a page the browser
+    // discarded and rebuilt — a different failure entirely from a stall.
+    diag(
+      "session-start",
+      `${
+        window.matchMedia?.("(display-mode: standalone)").matches
+          ? "standalone PWA"
+          : "browser tab"
+      } · watchdog=${WATCHDOG_INTERVAL_MS}ms(visible-only) · stall=${STALL_MS}ms · heartbeat=${HEARTBEAT_MS}ms`,
+      snap(),
+    );
     const saved = readPersistedState();
     if (!saved) return;
     restoreTimeRef.current = saved.time > 0 ? saved.time : null;
@@ -837,7 +1098,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue(saved.queue);
     setIndex(saved.index);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [snap]);
 
   // Write the snapshot whenever the run changes, and again on the way out.
   // `currentTime` deliberately is NOT a dependency — it ticks several times a
