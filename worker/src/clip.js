@@ -1,3 +1,25 @@
+// ⚠ TEMPORARY. The waveform clip — this file and everything listed below — is
+// superseded: the share sheet now makes REELS (src/reel.js here; in the app,
+// src/lib/share/reel.ts — the same teaser window with the lyrics on screen),
+// and nothing in the UI calls this path any more. It stays standing ONLY as a
+// rollback while the lyric reel is unproven. It comes down once the reel is
+// merged and verified in production: a snippet saved from the live share sheet
+// in each shape (9:16, 1:1, 16:9) and one full-song render downloaded.
+// Removing it means:
+//   worker  this file — but MOVE clampClipWindow into src/reel.js first (the
+//           snippet window); renderShareClip + CLIP_RED in src/ffmpeg.js; the
+//           /share-video endpoint, clipInFlight and the clip.js import in
+//           src/index.js; clipFps in src/config.js; CLIP_FPS in .env.example;
+//           the CLIP_* rows and the "waveform clip (legacy)" section in
+//           README.md. KEEP getWorkForClip (rename it getWorkForReel) and
+//           deleteByPrefixExcept — the reel uses both.
+//   app     src/app/share/song/[id]/video/, src/app/share/song/[id]/clip-frame/,
+//           src/lib/share/clip.tsx, src/lib/share/video.ts, and the /video-route
+//           mention in the FeedWork comment (src/lib/works/queries.ts — the
+//           clip_* columns STAY: snippet reels read them)
+//   R2      the cached work/<id>/share/clip-*.mp4 files become orphans — one
+//           prefix sweep, or leave them; nothing will ever ask for them.
+//
 // SHARE VIDEO — render one song's downloadable Reels / TikTok / IG clip.
 //
 // Instagram & TikTok accept no links and only VIDEO carries audio, so to share a

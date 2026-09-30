@@ -1,3 +1,24 @@
+// ⚠ TEMPORARY. The waveform clip — this file, and everything listed below — is
+// superseded: the share sheet now makes REELS (./reel.ts, the same teaser
+// window with the lyrics on screen), and nothing in the UI calls this path any
+// more. It stays standing ONLY as a rollback while the lyric reel is unproven.
+// It comes down once the reel is merged and verified in production: a snippet
+// saved from the live share sheet in each shape (9:16, 1:1, 16:9) and one
+// full-song render downloaded. Removing it means:
+//   app     src/app/share/song/[id]/video/, src/app/share/song/[id]/clip-frame/,
+//           src/lib/share/clip.tsx, this file, and the /video-route mention in
+//           the FeedWork comment (src/lib/works/queries.ts — the clip_* columns
+//           STAY: snippet reels read them)
+//   worker  src/clip.js — but MOVE clampClipWindow into src/reel.js first (the
+//           snippet window); renderShareClip + CLIP_RED in src/ffmpeg.js; the
+//           /share-video endpoint, clipInFlight and the clip.js import in
+//           src/index.js; clipFps in src/config.js; CLIP_FPS in .env.example;
+//           the CLIP_* rows and the "waveform clip (legacy)" section in
+//           README.md. KEEP getWorkForClip (rename it getWorkForReel) and
+//           deleteByPrefixExcept — the reel uses both.
+//   R2      the cached work/<id>/share/clip-*.mp4 files become orphans — one
+//           prefix sweep, or leave them; nothing will ever ask for them.
+//
 import { formatCatalogId } from "@/lib/catalog";
 import { buildStreamUrl } from "@/lib/stream-url";
 
@@ -5,10 +26,7 @@ import { buildStreamUrl } from "@/lib/stream-url";
 // The heavy render runs on the Railway worker (ffmpeg) and is cached in R2; the
 // app only (1) dispatches a render and (2) locates / proxies the cached MP4 off
 // the public CDN. Mirrors the transcode trigger's Bearer-secret contract.
-//
-// LEGACY: the share sheet now makes REELS (./reel.ts — the same teaser window
-// with the lyrics big on screen, or the full song). This waveform clip and its
-// routes stay until the lyric reel is verified in production, then go.
+
 
 export type ClipOrientation = "vertical" | "square";
 export const CLIP_ORIENTATIONS: ClipOrientation[] = ["vertical", "square"];
