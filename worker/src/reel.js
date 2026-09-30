@@ -21,7 +21,7 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 
@@ -58,6 +58,16 @@ export const FULL_MAX_SECONDS = 12 * 60;
 // ink on the background starts to out-contrast off-white.
 const LUMA_INK_THRESHOLD = 118;
 const ART_MAX_BYTES = 25 * 1024 * 1024;
+// Every face a reel is set in (CJK comes from the image). libass falls back
+// SILENTLY when a face is missing — the lockup would quietly draw in the wrong
+// weight — so a missing file fails the render instead.
+const REEL_FONT_FILES = [
+  "Geist-Regular.ttf",
+  "Geist-Bold.ttf",
+  "Geist-ExtraBold.ttf",
+  "Tajawal-Regular.ttf",
+  "Tajawal-Bold.ttf",
+];
 
 // A song that can't have a public reel (not live, taken down, not transcoded, or
 // no public manifest). The HTTP layer maps it to 404, never 500.
@@ -231,6 +241,11 @@ async function renderPlannedReel(plan, report) {
   const { workId, shape } = plan;
   // GUARD again: the song may have been pulled while this job waited in line.
   assertReelable(await getWorkForClip(workId), workId);
+  for (const file of REEL_FONT_FILES) {
+    await access(join(config.reelFontsDir, file)).catch(() => {
+      throw new Error(`reel font missing: ${join(config.reelFontsDir, file)} — refusing to render`);
+    });
+  }
 
   const tmp = await mkdtemp(join(tmpdir(), `aired-reel-${workId}-${plan.mode}-`));
   try {

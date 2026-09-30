@@ -336,49 +336,60 @@ function redLineEvents(shape, duration) {
 
 // The AIRED lockup, to brand/generate_social.py's ratios: tracking 0.12 cap,
 // the red square period 0.26 cap sitting on the baseline, the Red Line 0.6 of
-// the lockup's width, 0.42 cap below the baseline. libass geometry for Geist at
-// Fontsize F (measured): cap height 0.525F, cap top 0.28F below the \an7 point,
-// left bearing 0.02F, "AIRED" ink 2.21F wide before tracking.
-function lockupEvents(shape, duration, ink) {
+// the lockup's width, 0.42 cap below the baseline — set in the BRAND weight,
+// Geist 800. libass must be asked for it by its own family name, "Geist
+// ExtraBold": asking for "Geist" at \b800 silently draws the 700 cut (measured).
+// Geometry at Fontsize F (measured in libass): cap height 0.525F, cap top 0.28F
+// below the \an7 point, left bearing 0.02F, "AIRED" ink 2.25F wide before
+// tracking (the 700 cut is 2.21F — the square would sit on the D).
+export const MARK_FACE = "Geist ExtraBold";
+
+function lockupGeometry(shape) {
   const { x, capTop, cap } = shape.lockup;
   const F = cap / 0.525;
   const tracking = cap * 0.12;
-  const inkW = 2.21 * F + 4 * tracking;
+  const inkW = 2.25 * F + 4 * tracking;
   const baseline = capTop + cap;
   const sq = cap * 0.26;
   const gapDot = tracking * 1.15;
   const totalW = inkW + gapDot + sq;
   const lineW = totalW * 0.6;
   const lineH = Math.max(2, cap * 0.05);
-  const lineX = x + (totalW - lineW) / 2;
-  const lineY = baseline + cap * 0.42;
+  return {
+    x, capTop, F, tracking, inkW, baseline, sq, gapDot, totalW, lineW, lineH,
+    lineX: x + (totalW - lineW) / 2,
+    lineY: baseline + cap * 0.42,
+  };
+}
+
+function lockupEvents(shape, duration, ink) {
+  const g = lockupGeometry(shape);
   return [
     dialogue(
       6,
       0,
       duration,
       "Mark",
-      `{\\an7\\pos(${r1(x - 0.02 * F)},${r1(capTop - 0.28 * F)})\\fs${r1(F)}\\fsp${r1(tracking)}` +
+      `{\\an7\\pos(${r1(g.x - 0.02 * g.F)},${r1(g.capTop - 0.28 * g.F)})` +
+        `\\fn${MARK_FACE}\\b800\\fs${r1(g.F)}\\fsp${r1(g.tracking)}` +
         `\\c${ink ? INK : FG}}AIRED`,
     ),
-    dialogue(6, 0, duration, "Shape", rect(x + inkW + gapDot, baseline - sq, sq, sq, `\\c${RED}`)),
+    dialogue(6, 0, duration, "Shape", rect(g.x + g.inkW + g.gapDot, g.baseline - g.sq, g.sq, g.sq, `\\c${RED}`)),
     dialogue(
       6,
       0,
       duration,
       "Shape",
-      rect(lineX, lineY, lineW, lineH, `\\c${RED}\\3c${RED}\\bord${r1(lineH)}\\blur${r1(lineH * 2)}\\alpha&H66&`),
+      rect(g.lineX, g.lineY, g.lineW, g.lineH, `\\c${RED}\\3c${RED}\\bord${r1(g.lineH)}\\blur${r1(g.lineH * 2)}\\alpha&H66&`),
     ),
-    dialogue(7, 0, duration, "Shape", rect(lineX, lineY, lineW, lineH, `\\c${RED}`)),
+    dialogue(7, 0, duration, "Shape", rect(g.lineX, g.lineY, g.lineW, g.lineH, `\\c${RED}`)),
   ];
 }
 
 // The rectangle the lockup occupies (for the ink-vs-off-white luminance check).
 export function lockupBox(shape) {
-  const { x, capTop, cap } = shape.lockup;
-  const F = cap / 0.525;
-  const w = 2.21 * F + 4 * cap * 0.12 + cap * 0.12 * 1.15 + cap * 0.26;
-  return { x, y: capTop, w, h: cap * 1.47 + Math.max(2, cap * 0.05) };
+  const g = lockupGeometry(shape);
+  return { x: g.x, y: g.capTop, w: g.totalW, h: g.lineY + g.lineH - g.capTop };
 }
 
 // ── The script ────────────────────────────────────────────────────────────

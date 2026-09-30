@@ -193,7 +193,11 @@ What one render does:
    line per card, wrapped and sized per shape; a title card with the makers by
    name in the intro, long instrumental breaks and the outro; the persistent
    caption (AIRED-#### · "Title", the names, the address); the Red Line as the
-   progress bar; the AIRED lockup in the top-left corner, never over the lyrics.
+   progress bar; the AIRED lockup in the top-left corner, never over the lyrics,
+   in **Geist ExtraBold (800), the brand weight** — libass must name that face
+   by its own family ("Geist ExtraBold"; asking for "Geist" at weight 800 quietly
+   draws the 700), and a missing face fails the render instead of drawing the
+   wrong weight.
    Each script run gets its own face — **Geist** (Latin), **Tajawal** (Arabic),
    **Noto Sans CJK SC** (Chinese / Japanese / Korean) — and libass shapes it with
    HarfBuzz and orders it with FriBidi: Arabic joins and carries its diacritics,
