@@ -131,17 +131,17 @@ song's image. The keys are derived from `work_id`, so the purge needs no DB row
 { "ok": true, "workId": 23, "mastersDeleted": 1, "hlsDeleted": 57, "sourceDeleted": 1 }
 ```
 
-## Make a reel — the lyric video (`/reel`)
+## Air it — the lyric-video reel (`/reel`)
 
-The share sheet's **Make video** asks this endpoint (via the app route
+The share sheet's **Air it** asks this endpoint (via the app route
 `/share/song/<id>/reel`). A reel is the song as an MP4 with its **lyrics big on
 screen**, so it doubles as a lyric video:
 
 | option | values |
 | --- | --- |
-| `mode` | `snippet` — the owner's teaser window (≤ 50 s, same clamp as the clip below) · `full` — the whole song, hard cap **12:00** (longer songs stop at 12:00 with a fade) |
+| `mode` | `snippet` (shown as **Teaser**) — the owner's teaser window (≤ 50 s, same clamp as the clip below) · `full` (shown as **Whole song**) — the whole song, hard cap **12:00** (longer songs stop at 12:00 with a fade) |
 | `shape` | `vertical` 1080×1920 (Reels / TikTok / Shorts) · `square` 1080×1080 (feed) · `landscape` 1920×1080 (YouTube) — each with its own tuned type size, row budget and safe margins (`src/reel-layout.js`) |
-| `highlight` | `karaoke` — each word lights as it's sung · `line` — each line fades in whole |
+| `highlight` | `karaoke` (shown as **Word by word**) — each word lights as it's sung · `line` (**Line by line**) — each line fades in whole |
 
 ```bash
 curl -X POST "$WORKER_URL/reel" \
@@ -157,7 +157,7 @@ status, and enqueues the render if nothing is cached or running:
 { "ok": true, "state": "rendering", "progress": 0.37, "position": 0,
   "key": "work/1/share/reel-full-landscape-karaoke-3f2a….mp4",
   "lyrics": "synced", "seconds": 412, "truncated": false,
-  "filename": "AIRED-0001-full-16x9.mp4" }
+  "filename": "AIRED-0001-whole-16x9.mp4" }
 ```
 
 `state` is `queued` (with `position`) → `rendering` (with `progress` 0–1) →
@@ -206,7 +206,8 @@ What one render does:
 6. `ffmpeg` → the background drifting slowly sideways (a Ken-Burns pan) + the ASS
    layer burned in + the audio window → **H.264/AAC MP4** (yuv420p, faststart).
    Snippets: 30 fps, CRF 21. Full songs: 24 fps, CRF 23 capped at 3 Mb/s.
-7. Upload to `aired-hls` with a download filename (`AIRED-0001-full-16x9.mp4`).
+7. Upload to `aired-hls` with a download filename (`AIRED-0001-whole-16x9.mp4`,
+   `AIRED-0001-teaser-9x16.mp4` — Tee's names, not the mode identifiers).
 
 Word timing in karaoke mode is **interpolated** inside each line's window — the
 tap-sync editor records when a line starts, not each word. Words light in reading

@@ -11,8 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { canManageWork } from "@/lib/works/authority";
 import { getWorkById } from "@/lib/works/queries";
 
-// A song's REEL — the lyric-video generator behind the share sheet's "Make a
-// video" (the worker renders; R2 caches; this route asks and relays).
+// A song's REEL — the lyric-video generator behind the share sheet's "Air it"
+// (the worker renders; R2 caches; this route asks and relays).
 //
 //   GET /share/song/1/reel?mode=snippet&shape=vertical&highlight=karaoke
 //     → 200 { status: "queued" | "rendering" | "ready" | "failed" | "preparing",
@@ -72,7 +72,7 @@ export async function GET(
       .eq("id", workId)
       .maybeSingle();
     if (!canManageWork(placement, user?.id ?? null)) {
-      return json({ error: "The full-song video is made by the song's own hands." }, 403);
+      return json({ error: "The whole-song video is made by the song's own hands." }, 403);
     }
   }
 

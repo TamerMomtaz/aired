@@ -49,6 +49,10 @@ export const REEL_MODES = new Set(["snippet", "full"]);
 export const REEL_HIGHLIGHTS = new Set(["karaoke", "line"]);
 export { REEL_SHAPE_NAMES } from "./reel-layout.js";
 
+// The word a saved file carries for its length — Tee's names (Teaser / Whole
+// song), not the code's mode identifiers: AIRED-0001-teaser-9x16.mp4.
+const FILE_WORD = { snippet: "teaser", full: "whole" };
+
 // Bump when the LOOK changes, so every cached reel re-renders on next request.
 const REEL_RENDER_VERSION = 1;
 // FULL mode: the whole song, but never past 12:00 (a longer track is cut there,
@@ -169,7 +173,7 @@ async function planReel({ workId, mode, shapeName, highlight }) {
     masterKey: work.audio_master_key,
     hasLyrics,
     key: `${reelPrefix(workId, mode, shapeName, style)}${hash}.mp4`,
-    filename: `${text.catalogId}-${mode}-${shape.fileTag}.mp4`,
+    filename: `${text.catalogId}-${FILE_WORD[mode]}-${shape.fileTag}.mp4`,
   };
 }
 

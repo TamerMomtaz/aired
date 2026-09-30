@@ -8,6 +8,8 @@ import { buildStreamUrl } from "@/lib/stream-url";
 //              full    — the whole song, hard cap 12:00 (a YouTube-shaped video)
 //   shape      vertical 9:16 · square 1:1 · landscape 16:9
 //   highlight  karaoke (word by word) · line (clean line-by-line reveal)
+// People see Tee's names for these — Teaser / Whole song, Word by word / Line by
+// line (the share sheet's REEL_COPY); the identifiers above are the code's.
 //
 // The app never renders and never computes the cache key: it asks the worker
 // for the variant's status (ready · queued · rendering · failed), which also

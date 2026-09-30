@@ -376,7 +376,7 @@ export function ShareSheet({
                   )}
                 </div>
 
-                {/* Make a video — the only way a song PLAYS in-feed on Reels /
+                {/* Air it — the only way a song PLAYS in-feed on Reels /
                     TikTok / IG (links + images can't carry sound). Songs only. */}
                 {downloadKind === "song" ? (
                   <ReelMaker
@@ -397,48 +397,49 @@ export function ShareSheet({
 }
 
 // ── The reel maker ─────────────────────────────────────────────────────────
-// Pick a length, a shape and a highlight style, then "Make video". The worker
+// Pick a length, a shape and a highlight style, then "Air it". The worker
 // renders (a snippet in seconds, a full song in minutes) while this polls with
 // progress; the render keeps going if the sheet closes, and the finished MP4 is
 // cached, so the next ask is instant. Snippets come back as a file for the
 // phone's share sheet (or a plain download on a laptop); a full song is a
 // straight CDN download — a YouTube-shaped file, not an in-feed post.
 
-// ⚠ PLACEHOLDER NAMES. Every word the reel maker shows is here, and none of it
-// is final: Tee owns all naming on this platform, and these are the working
-// names until he picks. His choice lands in this one block — do not merge with
-// these as the shipped copy. (The worker's download filenames —
-// AIRED-0001-snippet-9x16.mp4 / -full- — carry the same naming question.)
+// Every word the reel maker shows. Naming on AIRED is Tee's: these are his
+// names (2026-09-30) — "Air it" is AIRED's own verb, and "Teaser" is what Manage
+// already calls that window. Change them only with his say-so. The code's own
+// identifiers stay as they were (mode snippet | full, highlight karaoke | line);
+// these are what a person sees. The worker's download filenames follow the same
+// names: AIRED-0001-teaser-9x16.mp4 / AIRED-0001-whole-16x9.mp4.
 const REEL_COPY = {
-  heading: "Make a video — plays with sound",
-  make: "Make video",
+  heading: "Air it — plays with sound",
+  make: "Air it",
   retry: "Try again",
   lengthLabel: "Length",
-  snippet: { label: "Snippet", hint: "up to 0:50" },
-  full: { label: "Full song", hint: "up to 12:00" },
+  snippet: { label: "Teaser", hint: "up to 0:50" },
+  full: { label: "Whole song", hint: "up to 12:00" },
   shapeLabel: "Shape",
   vertical: { label: "9:16", hint: "Reels · TikTok" },
   square: { label: "1:1", hint: "Feed" },
   landscape: { label: "16:9", hint: "YouTube" },
   lyricsLabel: "Lyrics",
-  karaoke: { label: "Karaoke", hint: "word by word" },
-  line: { label: "Line", hint: "line by line" },
+  karaoke: { label: "Word by word" },
+  line: { label: "Line by line" },
   preparing: "Getting ready…",
   nextInLine: "Next in line…",
   inLine: (n: number) => `In line — #${n}`,
   rendering: (percent: number) => `Rendering… ${percent}%`,
   progressLabel: "Video progress",
-  save: "Save video",
-  download: "Download MP4",
+  // One done state for both lengths — "Save" and "Download" said it twice.
+  save: "Save it",
   hintSnippet: "Your teaser window, lyrics big on screen. Post it with the link in bio.",
   hintFull: "The whole song as a lyric video, big words start to finish.",
-  hintFullWorking: "A full song takes a few minutes. You can close this — it keeps rendering.",
+  hintFullWorking: "A whole song takes a few minutes. You can close this — it keeps rendering.",
   readySnippet: "Saved? Post it to Reels / TikTok — it plays in‑feed with sound. Link in bio.",
   readyFull: "Your lyric video is ready. It stays ready — come back for it any time.",
   noLyrics:
     "No synced lyrics yet, so this one carries the title and the names. Sync the lyrics on the song page to make it a lyric video.",
   truncated: "This song runs past 12:00 — the video stops there.",
-  errFullGate: "The full-song video is made by the song's own hands.",
+  errFullGate: "The whole-song video is made by the song's own hands.",
   errNotFound: "This song can't be made into a video yet.",
   errFailed: "Couldn't make the video. Try again.",
   errFetch: "Couldn't fetch the video. Try again.",
@@ -452,16 +453,16 @@ type ReelUi =
   | { phase: "ready"; reel: ReelStatus; file: File | null }
   | { phase: "error"; message: string };
 
-const SHAPE_OPTIONS: { value: ReelShape; label: string; hint: string }[] = [
+const SHAPE_OPTIONS: { value: ReelShape; label: string; hint?: string }[] = [
   { value: "vertical", ...REEL_COPY.vertical },
   { value: "square", ...REEL_COPY.square },
   { value: "landscape", ...REEL_COPY.landscape },
 ];
-const HIGHLIGHT_OPTIONS: { value: ReelHighlight; label: string; hint: string }[] = [
+const HIGHLIGHT_OPTIONS: { value: ReelHighlight; label: string; hint?: string }[] = [
   { value: "karaoke", ...REEL_COPY.karaoke },
   { value: "line", ...REEL_COPY.line },
 ];
-const MODE_OPTIONS: { value: ReelMode; label: string; hint: string }[] = [
+const MODE_OPTIONS: { value: ReelMode; label: string; hint?: string }[] = [
   { value: "snippet", ...REEL_COPY.snippet },
   { value: "full", ...REEL_COPY.full },
 ];
@@ -526,7 +527,7 @@ function ReelMaker({
     const tappedAt = Date.now();
     // A snippet renders in seconds; a full song in minutes (a 12:00 song is
     // about five on the worker). Past the budget we stop asking — the render
-    // doesn't stop, and the next "Make video" collects it.
+    // doesn't stop, and the next "Air it" collects it.
     const deadline = tappedAt + (full ? 40 : 4) * 60_000;
     setUi({ phase: "working", reel: null });
     let ask = retry ? "&retry=1" : "";
@@ -554,7 +555,7 @@ function ReelMaker({
           });
           setUi({ phase: "ready", reel, file });
           // Hand it over straight away only while the tap is still fresh — a
-          // phone's share sheet needs a recent gesture. Otherwise: "Save video".
+          // phone's share sheet needs a recent gesture. Otherwise: "Save it".
           if (Date.now() - tappedAt < 4_000) await deliver(file);
           return;
         }
@@ -609,7 +610,7 @@ function ReelMaker({
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/40 bg-cert-red/[0.08] px-3 py-3 text-sm font-medium text-foreground transition hover:border-cert-red/60 hover:bg-cert-red/[0.12]"
           >
             <DownloadIcon />
-            {REEL_COPY.download}
+            {REEL_COPY.save}
             {formatMegabytes(ui.reel.bytes)}
           </a>
         ) : (
@@ -685,7 +686,7 @@ function ReelChoice<T extends string>({
   onChange,
 }: {
   label: string;
-  options: { value: T; label: string; hint: string }[];
+  options: { value: T; label: string; hint?: string }[];
   value: T;
   onChange: (v: T) => void;
 }) {
@@ -714,7 +715,7 @@ function ReelChoice<T extends string>({
               }`}
             >
               <span className="font-medium">{o.label}</span>
-              <span className="text-[10px] text-muted/70">{o.hint}</span>
+              {o.hint ? <span className="text-[10px] text-muted/70">{o.hint}</span> : null}
             </button>
           );
         })}
