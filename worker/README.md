@@ -68,6 +68,11 @@ never committed (CLAUDE.md §1.7).
 | `CLIP_DEFAULT_SECONDS` | no | `20` | SHARE VIDEO audio window |
 | `CLIP_MAX_SECONDS` | no | `30` | SHARE VIDEO window cap |
 | `CLIP_FPS` | no | `30` | SHARE VIDEO frame rate |
+| `REEL_SNIPPET_FPS` | no | `30` | REEL frame rate, snippet mode |
+| `REEL_FULL_FPS` | no | `24` | REEL frame rate, full-song mode |
+| `REEL_SNIPPET_CONCURRENCY` | no | `2` | snippet reels rendering at once |
+| `REEL_FULL_CONCURRENCY` | no | `1` | full-song reels rendering at once |
+| `REEL_FONTS_DIR` | no | `/app/fonts` | Geist + Tajawal for the reel typesetter |
 | `PORT` | no | `8080` | Railway injects this |
 
 > The two R2 buckets (`aired-masters`, `aired-hls`) must already exist in the R2
@@ -126,11 +131,108 @@ song's image. The keys are derived from `work_id`, so the purge needs no DB row
 { "ok": true, "workId": 23, "mastersDeleted": 1, "hlsDeleted": 57, "sourceDeleted": 1 }
 ```
 
-## Render a share video (Reels / TikTok / IG)
+## Air it — the lyric-video reel (`/reel`)
+
+The share sheet's **Air it** asks this endpoint (via the app route
+`/share/song/<id>/reel`). A reel is the song as an MP4 with its **lyrics big on
+screen**, so it doubles as a lyric video:
+
+| option | values |
+| --- | --- |
+| `mode` | `snippet` (shown as **Teaser**) — the owner's teaser window (≤ 50 s, same clamp as the clip below) · `full` (shown as **Whole song**) — the whole song, hard cap **12:00** (longer songs stop at 12:00 with a fade) |
+| `shape` | `vertical` 1080×1920 (Reels / TikTok / Shorts) · `square` 1080×1080 (feed) · `landscape` 1920×1080 (YouTube) — each with its own tuned type size, row budget and safe margins (`src/reel-layout.js`) |
+| `highlight` | `karaoke` (shown as **Word by word**) — each word lights as it's sung · `line` (**Line by line**) — each line fades in whole |
+
+```bash
+curl -X POST "$WORKER_URL/reel" \
+  -H "Authorization: Bearer $TRANSCODE_SHARED_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"work_id": 1, "mode": "full", "shape": "landscape", "highlight": "karaoke"}'
+```
+
+It **never renders inside the request** — it answers at once with the variant's
+status, and enqueues the render if nothing is cached or running:
+
+```json
+{ "ok": true, "state": "rendering", "progress": 0.37, "position": 0,
+  "key": "work/1/share/reel-full-landscape-karaoke-3f2a….mp4",
+  "lyrics": "synced", "seconds": 412, "truncated": false,
+  "filename": "AIRED-0001-whole-16x9.mp4" }
+```
+
+`state` is `queued` (with `position`) → `rendering` (with `progress` 0–1) →
+`ready` (with `bytes`), or `failed` (with `error`; send `"retry": true` to
+re-queue). Poll until `ready`; the MP4 is then on the CDN at `key`. A song that
+can't have a public reel (not live, taken down, no master yet) answers `404`.
+
+**The queue** (`src/jobs.js`) is in memory, with two lanes so a long render never
+stands in front of a teaser: snippets (2 at a time) and full songs (1 at a time).
+Renders run under `nice` so uploads' transcodes stay quick. A restart drops the
+queue; the app's next poll simply re-enqueues (a render is idempotent by key).
+
+**The key** carries a hash of everything that shapes the picture — the words,
+names, window, cover, style, and a render version — so an edited lyric or a new
+cover is a new key and a stale reel is never served. Older renders of the same
+variant are swept after each upload.
+
+What one render does:
+
+1. Read the `work` row and **guard it is live & not taken down** (again at render
+   time — it may have been pulled while queued).
+2. Fetch the **manifest** from the app —
+   `{APP_ORIGIN}/share/song/<id>/reel-manifest`: catalog id, title, the makers by
+   name (the SAME builder as the share cards), the address, and the synced
+   lyrics (timed LRC lines).
+3. Pull the master from `aired-masters` and the cover art (https only; any
+   failure falls back to the branded near-black field).
+4. **Background, once:** the cover scaled to cover a frame 8% wider than the
+   output, softly blurred, dimmed by a scrim that deepens behind the lyric and
+   caption zones. The corner's mean luma decides the lockup colour (off-white,
+   or ink on a bright cover).
+5. **Typeset** (`src/reel-text.js`, `src/reel-ass.js`) one ASS script: one lyric
+   line per card, wrapped and sized per shape; a title card with the makers by
+   name in the intro, long instrumental breaks and the outro; the persistent
+   caption (AIRED-#### · "Title", the names, the address); the Red Line as the
+   progress bar; the AIRED lockup in the top-left corner, never over the lyrics,
+   in **Geist ExtraBold (800), the brand weight** — libass must name that face
+   by its own family ("Geist ExtraBold"; asking for "Geist" at weight 800 quietly
+   draws the 700), and a missing face fails the render instead of drawing the
+   wrong weight.
+   Each script run gets its own face — **Geist** (Latin), **Tajawal** (Arabic),
+   **Noto Sans CJK SC** (Chinese / Japanese / Korean) — and libass shapes it with
+   HarfBuzz and orders it with FriBidi: Arabic joins and carries its diacritics,
+   an Arabic-first line reads right-to-left and hangs flush **right**. The
+   typesetter breaks rows itself (libass can't break CJK runs).
+6. `ffmpeg` → the background drifting slowly sideways (a Ken-Burns pan) + the ASS
+   layer burned in + the audio window → **H.264/AAC MP4** (yuv420p, faststart).
+   Snippets: 30 fps, CRF 21. Full songs: 24 fps, CRF 23 capped at 3 Mb/s.
+7. Upload to `aired-hls` with a download filename (`AIRED-0001-whole-16x9.mp4`,
+   `AIRED-0001-teaser-9x16.mp4` — Tee's names, not the mode identifiers).
+
+Word timing in karaoke mode is **interpolated** inside each line's window — the
+tap-sync editor records when a line starts, not each word. Words light in reading
+order; Latin and CJK words sweep, Arabic words light whole (libass sweeps
+left→right, which would run backwards through an Arabic word).
+
+**Render limits** (measured locally, 4 vCPU, the same ffmpeg/libass stack):
+
+| | resolution | render time | file | peak memory |
+| --- | --- | --- | --- | --- |
+| snippet, 30 s | 1080×1920 · 1080×1080 · 1920×1080, 30 fps | ~15–20 s | ~2–3 MB | — |
+| full, 12:00 (the cap) | same, 24 fps | ~4 min (236 s at 9:16, 252 s at 16:9) | ~52 MB with drifting cover art (31.5 MB on the plain field); the 3 Mb/s cap bounds the worst case at ~290 MB | ffmpeg ~440 MB + worker ~115 MB |
+
+Render time scales with the Railway service's vCPUs — on 2 vCPU expect roughly
+double. One full render at a time (the default lane) keeps that bounded.
+
+## Render a share video — the waveform clip (legacy)
+
+> Superseded in the share sheet by **`/reel`** above, which renders the same
+> teaser window with the lyrics on screen. Kept (with its app routes) until the
+> lyric reel is verified in production, then removable.
 
 Instagram & TikTok take no links and only **video** carries audio, so to share a
-song *with sound* we render a real MP4. The web app's share sheet ("Save video")
-dispatches this endpoint (`src/lib/share/video.ts`); the clip is rendered **once**
+song *with sound* we render a real MP4. The web app's share sheet used to
+dispatch this endpoint (`src/lib/share/video.ts`); the clip is rendered **once**
 and cached in R2, then served off the CDN. Same `Authorization: Bearer` guard.
 
 ```bash

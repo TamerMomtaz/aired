@@ -10,6 +10,13 @@ import { log, logErr } from "./logger.js";
 import { transcodeWork } from "./transcode.js";
 import { purgeWork } from "./purge.js";
 import { CLIP_ORIENTATIONS, renderShareVideo } from "./clip.js";
+import {
+  REEL_HIGHLIGHTS,
+  REEL_MODES,
+  REEL_SHAPE_NAMES,
+  ReelUnavailableError,
+  requestReel,
+} from "./reel.js";
 
 // Refuse to expose the endpoint without a secret to guard it.
 if (!config.sharedSecret) {
@@ -222,6 +229,64 @@ const server = createServer(async (req, res) => {
         });
       } finally {
         clipInFlight.delete(flightKey);
+      }
+    }
+
+    // REELS — the lyric-video generator (reel.js). Same Bearer-secret guard.
+    // Body: { work_id, mode, shape, highlight, retry? }. NEVER renders inline:
+    // answers at once with the variant's status — ready (cached in R2, with its
+    // key + size) · queued (position) · rendering (progress 0–1) · failed — and
+    // enqueues the render if it is neither cached nor in hand. The app polls
+    // this until "ready". A song that can't have a public reel answers 404.
+    if (req.method === "POST" && url.pathname === "/reel") {
+      if (!secretOk(extractSecret(req))) {
+        return sendJson(res, 401, { ok: false, error: "unauthorized" });
+      }
+
+      let parsed = {};
+      const raw = await readBody(req);
+      if (raw.trim()) {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return sendJson(res, 400, { ok: false, error: "invalid JSON body" });
+        }
+      }
+      const workId = Number(parsed.work_id);
+      const mode = String(parsed.mode ?? "snippet");
+      const shape = String(parsed.shape ?? "vertical");
+      const highlight = String(parsed.highlight ?? "karaoke");
+      if (!Number.isInteger(workId) || workId <= 0) {
+        return sendJson(res, 400, { ok: false, error: "work_id must be a positive integer" });
+      }
+      if (!REEL_MODES.has(mode) || !REEL_SHAPE_NAMES.has(shape) || !REEL_HIGHLIGHTS.has(highlight)) {
+        return sendJson(res, 400, {
+          ok: false,
+          error:
+            `mode ∈ {${[...REEL_MODES]}}, shape ∈ {${[...REEL_SHAPE_NAMES]}}, ` +
+            `highlight ∈ {${[...REEL_HIGHLIGHTS]}}`,
+        });
+      }
+
+      try {
+        const status = await requestReel({
+          workId,
+          mode,
+          shape,
+          highlight,
+          retry: parsed.retry === true,
+        });
+        return sendJson(res, 200, { ok: true, workId, mode, shape, highlight, ...status });
+      } catch (err) {
+        if (err instanceof ReelUnavailableError) {
+          return sendJson(res, 404, { ok: false, workId, error: err.message });
+        }
+        logErr(`work=${workId} reel ${mode}/${shape} request failed`, err);
+        return sendJson(res, 500, {
+          ok: false,
+          workId,
+          error: err?.message ?? "reel request failed",
+        });
       }
     }
 
