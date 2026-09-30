@@ -7,11 +7,17 @@
 FROM node:22-bookworm-slim
 
 # ffmpeg does the master → HLS transcode. ca-certificates lets us reach
-# Supabase + R2 over HTTPS.
+# Supabase + R2 over HTTPS. fonts-noto-cjk gives the REEL typesetter (libass)
+# Noto Sans CJK for the Chinese / Japanese / Korean in our lyrics; Geist and
+# Tajawal (Latin + Arabic) ship in ./fonts below. The build fails loudly if
+# ffmpeg lacks libass or the CJK face is missing — a reel must never silently
+# fall back to tofu boxes.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/* \
-  && ffmpeg -version
+  && ffmpeg -version \
+  && ffmpeg -hide_banner -filters | grep -q " ass " \
+  && test -f /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
 
 WORKDIR /app
 
@@ -20,8 +26,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev || npm install --omit=dev
 
-# Application source.
+# Application source + the reel fonts (Geist, Tajawal — OFL, licences alongside).
 COPY src ./src
+COPY fonts ./fonts
 
 ENV NODE_ENV=production
 # Railway injects PORT; default to 8080 for local `docker run`.

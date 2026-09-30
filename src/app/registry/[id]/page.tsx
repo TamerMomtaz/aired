@@ -485,6 +485,7 @@ export default async function WorkPage({
               ) : null}
               <ShareSheet
                 {...songShareProps(work.id, work.title, contributorNames)}
+                canMakeFullReel={canManage}
               />
               <SongQr workId={work.id} title={work.title} />
               {work.hls_playlist_key ? (
@@ -579,6 +580,7 @@ export default async function WorkPage({
             />
             <ShareSheet
               {...songShareProps(work.id, work.title, contributorNames)}
+              canMakeFullReel={canManage}
             />
             <SongQr workId={work.id} title={work.title} />
             <DownloadButton

@@ -75,8 +75,9 @@ function clipOrientationPrefix(workId, orientation) {
 //   length = clamp(clip_length_seconds, 20, 50)
 //   if (start + length > duration) length = duration - start   // end-trim wins
 // duration unknown (a row mid-transcode) → skip the end-relative parts and let
-// ffmpeg's -shortest backstop trim a window longer than the audio.
-function clampClipWindow(rawStart, rawLength, durationSeconds) {
+// ffmpeg's -shortest backstop trim a window longer than the audio. SNIPPET reels
+// (reel.js) use the same window, so a teaser is the same slice in either look.
+export function clampClipWindow(rawStart, rawLength, durationSeconds) {
   let length = Math.round(rawLength ?? DEFAULT_CLIP_LENGTH);
   if (!Number.isFinite(length)) length = DEFAULT_CLIP_LENGTH;
   length = Math.min(MAX_CLIP_LENGTH, Math.max(MIN_CLIP_LENGTH, length));

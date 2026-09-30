@@ -5,6 +5,10 @@ import { buildStreamUrl } from "@/lib/stream-url";
 // The heavy render runs on the Railway worker (ffmpeg) and is cached in R2; the
 // app only (1) dispatches a render and (2) locates / proxies the cached MP4 off
 // the public CDN. Mirrors the transcode trigger's Bearer-secret contract.
+//
+// LEGACY: the share sheet now makes REELS (./reel.ts — the same teaser window
+// with the lyrics big on screen, or the full song). This waveform clip and its
+// routes stay until the lyric reel is verified in production, then go.
 
 export type ClipOrientation = "vertical" | "square";
 export const CLIP_ORIENTATIONS: ClipOrientation[] = ["vertical", "square"];

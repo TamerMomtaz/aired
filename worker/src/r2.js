@@ -81,6 +81,19 @@ export async function objectExists({ bucket, key }) {
   }
 }
 
+// An object's size in bytes, or null when it doesn't exist. (HeadObject — a
+// finished reel reports its size so the app can say how big the download is.)
+export async function objectSize({ bucket, key }) {
+  try {
+    const res = await r2.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return Number(res.ContentLength ?? 0);
+  } catch (err) {
+    const status = err?.$metadata?.httpStatusCode;
+    if (status === 404 || err?.name === "NotFound") return null;
+    throw err;
+  }
+}
+
 // Delete every object under `prefix` in `bucket` (EDIT & TIDY — Discard). Lists
 // in pages and batch-deletes (DeleteObjects takes up to 1000 keys per call), so
 // a long track's many HLS segments are removed without a request per file. A

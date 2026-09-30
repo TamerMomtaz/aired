@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 // All configuration comes from the environment (CLAUDE.md §1.7 — no hardcoded
 // secrets). Non-secret reference values have baked-in defaults so a minimal
 // deploy only needs to set the three secrets + the shared secret.
@@ -54,4 +56,24 @@ export const config = {
   // the work row and clamped in clip.js (brief: start ∈ [0, duration-5], length ∈
   // [20, 50]), so there are no global window env knobs anymore.
   clipFps: Number(getOptional("CLIP_FPS", "30")),
+
+  // REELS (reel.js) — the lyric-video generator: SNIPPET (the owner's ≤50s
+  // teaser window) or FULL (the whole song, hard cap 12:00), in 9:16 / 1:1 /
+  // 16:9. The app serves the text (title, credits, synced lyrics) as a manifest
+  // at {APP_ORIGIN}/share/song/{id}/reel-manifest; the worker typesets it with
+  // libass, so these fonts must be on disk: Geist + Tajawal ship in ../fonts,
+  // Noto Sans CJK comes from the image (Dockerfile: fonts-noto-cjk).
+  reelFontsDir: getOptional(
+    "REEL_FONTS_DIR",
+    fileURLToPath(new URL("../fonts", import.meta.url)),
+  ),
+  // Snippets are social teasers (30fps); a full song is a YouTube-shaped video,
+  // and 24fps keeps a 12-minute render ~20% quicker at no visible cost to type
+  // that changes a few times a second.
+  reelSnippetFps: Number(getOptional("REEL_SNIPPET_FPS", "30")),
+  reelFullFps: Number(getOptional("REEL_FULL_FPS", "24")),
+  // Render lanes (jobs.js): how many of each may run at once. One full render at
+  // a time keeps a 12-minute job from starving the upload transcodes.
+  reelSnippetConcurrency: Number(getOptional("REEL_SNIPPET_CONCURRENCY", "2")),
+  reelFullConcurrency: Number(getOptional("REEL_FULL_CONCURRENCY", "1")),
 };

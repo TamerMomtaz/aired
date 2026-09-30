@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import type {
+  ReelHighlight,
+  ReelMode,
+  ReelShape,
+  ReelStatus,
+} from "@/lib/share/reel";
+
 // The share sheet — AIRED's viral lever (CLAUDE.md §3a: the growth mechanic is
 // people searching and following NAMES, so every share carries the makers).
 // Two paths in one modal, because the platforms split two ways:
@@ -12,6 +19,9 @@ import { createPortal } from "react-dom";
 //   • Image platforms (Instagram / TikTok) take no links — so we offer the
 //     downloadable square (IG feed) and story (IG/Reels/TikTok) PNGs, which the
 //     creator posts with the link in bio.
+//   • Songs also get the REEL maker: an MP4 with the lyrics big on screen, as a
+//     ≤50s snippet or (for the song's own hands) the whole song up to 12:00, in
+//     9:16 / 1:1 / 16:9 — the only way a song PLAYS in-feed on Reels / TikTok.
 //
 // All copy is built on the server and passed in, so this stays a pure UI shell.
 
@@ -30,6 +40,9 @@ type Props = {
   downloadId: string;
   // Base name for a saved PNG, e.g. "AIRED-0001" → "AIRED-0001-story.png".
   filenameBase: string;
+  // Offer the FULL-song reel (up to 12:00). Only the song's own hands — the
+  // artist or the human who carried it — may make one; the route enforces it.
+  canMakeFullReel?: boolean;
   // Trigger styling: compact is the round icon that overlays a card; otherwise a
   // labelled button for a page header.
   compact?: boolean;
@@ -90,6 +103,7 @@ export function ShareSheet({
   downloadKind,
   downloadId,
   filenameBase,
+  canMakeFullReel = false,
   compact = false,
   triggerClassName,
   triggerLabel = "Share",
@@ -99,8 +113,6 @@ export function ShareSheet({
   const [canNativeShare, setCanNativeShare] = useState(false);
   const [busy, setBusy] = useState<null | "square" | "story">(null);
   const [downloadError, setDownloadError] = useState(false);
-  const [videoBusy, setVideoBusy] = useState<null | "vertical" | "square">(null);
-  const [videoError, setVideoError] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // While the sheet is open: lock body scroll, close on Escape, focus the close
@@ -173,53 +185,6 @@ export function ShareSheet({
       setDownloadError(true);
     } finally {
       setBusy(null);
-    }
-  }
-
-  // SHARE VIDEO — the only thing that makes a song PLAY in-feed on Reels / TikTok
-  // / IG (links and images can't). The MP4 is rendered + cached on the worker, so
-  // the first save shows "preparing…" while we poll, then it's instant. We prefer
-  // the native share sheet WITH the file (hands it straight to TikTok / saves to
-  // the gallery); otherwise we fall back to a plain download.
-  async function fetchClip(orientation: "vertical" | "square"): Promise<File> {
-    const endpoint = `/share/song/${enc(downloadId)}/video/${orientation}`;
-    const filename = `${filenameBase}-${orientation}.mp4`;
-    const deadline = Date.now() + 100_000; // generous budget for a first render
-    while (Date.now() < deadline) {
-      // The first request kicks the render; while "preparing" we poll.
-      const res = await fetch(endpoint, { cache: "no-store" });
-      if (res.status === 202) {
-        await new Promise((r) => setTimeout(r, 2500));
-        continue;
-      }
-      if (!res.ok) throw new Error("render failed");
-      const blob = await res.blob();
-      return new File([blob], filename, { type: "video/mp4" });
-    }
-    throw new Error("timed out");
-  }
-
-  async function saveVideo(orientation: "vertical" | "square") {
-    if (videoBusy) return;
-    setVideoBusy(orientation);
-    setVideoError(false);
-    try {
-      const file = await fetchClip(orientation);
-      if (canShareFileNatively(file)) {
-        // Mobile: hand the MP4 to the native sheet (save to gallery / to TikTok).
-        try {
-          await navigator.share({ files: [file], title: shareTitle, text: shareText });
-        } catch {
-          // User dismissed the share sheet — nothing to do.
-        }
-      } else {
-        // Desktop / no file-share: download straight to Downloads, no share sheet.
-        downloadFile(file);
-      }
-    } catch {
-      setVideoError(true);
-    } finally {
-      setVideoBusy(null);
     }
   }
 
@@ -304,7 +269,7 @@ export function ShareSheet({
             >
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="flex w-full max-w-md flex-col gap-5 rounded-t-2xl border border-white/10 bg-[#0d0d0d] p-5 shadow-2xl sm:rounded-2xl"
+                className="flex max-h-[92dvh] w-full max-w-md flex-col gap-5 overflow-y-auto overscroll-contain rounded-t-2xl border border-white/10 bg-[#0d0d0d] p-5 shadow-2xl sm:rounded-2xl"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
@@ -411,48 +376,16 @@ export function ShareSheet({
                   )}
                 </div>
 
-                {/* Save video — the only way a song PLAYS in-feed on Reels /
+                {/* Make a video — the only way a song PLAYS in-feed on Reels /
                     TikTok / IG (links + images can't carry sound). Songs only. */}
                 {downloadKind === "song" ? (
-                  <div className="flex flex-col gap-2 border-t border-white/8 pt-4">
-                    <p className="text-xs uppercase tracking-[0.14em] text-muted/70">
-                      Save video — plays with sound
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => saveVideo("vertical")}
-                        disabled={videoBusy !== null}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/30 bg-cert-red/[0.06] px-3 py-3 text-sm text-foreground transition hover:border-cert-red/50 hover:bg-cert-red/10 disabled:opacity-50"
-                      >
-                        {videoBusy === "vertical" ? <Spinner /> : <VideoIcon />}
-                        {videoBusy === "vertical" ? "Preparing…" : "Reels / TikTok"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => saveVideo("square")}
-                        disabled={videoBusy !== null}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-foreground transition hover:border-white/25 hover:bg-white/[0.05] disabled:opacity-50"
-                      >
-                        {videoBusy === "square" ? <Spinner /> : <VideoIcon />}
-                        {videoBusy === "square" ? "Preparing…" : "Square (feed)"}
-                      </button>
-                    </div>
-                    {videoError ? (
-                      <p className="text-xs text-cert-red">
-                        Couldn&apos;t make the video. Try again.
-                      </p>
-                    ) : videoBusy ? (
-                      <p className="text-xs text-muted/70">
-                        Preparing your video… the first one takes a few seconds.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted/70">
-                        Save the video, then post to Reels / TikTok — it plays
-                        in‑feed with sound. Link in bio.
-                      </p>
-                    )}
-                  </div>
+                  <ReelMaker
+                    songId={downloadId}
+                    filenameBase={filenameBase}
+                    shareTitle={shareTitle}
+                    shareText={shareText}
+                    canMakeFull={canMakeFullReel}
+                  />
                 ) : null}
               </div>
             </div>,
@@ -460,6 +393,296 @@ export function ShareSheet({
           )
         : null}
     </>
+  );
+}
+
+// ── The reel maker ─────────────────────────────────────────────────────────
+// Pick a length, a shape and a highlight style, then "Make video". The worker
+// renders (a snippet in seconds, a full song in minutes) while this polls with
+// progress; the render keeps going if the sheet closes, and the finished MP4 is
+// cached, so the next ask is instant. Snippets come back as a file for the
+// phone's share sheet (or a plain download on a laptop); a full song is a
+// straight CDN download — a YouTube-shaped file, not an in-feed post.
+
+type ReelUi =
+  | { phase: "idle" }
+  | { phase: "working"; reel: ReelStatus | null }
+  | { phase: "ready"; reel: ReelStatus; file: File | null }
+  | { phase: "error"; message: string };
+
+const SHAPE_OPTIONS: { value: ReelShape; label: string; hint: string }[] = [
+  { value: "vertical", label: "9:16", hint: "Reels · TikTok" },
+  { value: "square", label: "1:1", hint: "Feed" },
+  { value: "landscape", label: "16:9", hint: "YouTube" },
+];
+const HIGHLIGHT_OPTIONS: { value: ReelHighlight; label: string; hint: string }[] = [
+  { value: "karaoke", label: "Karaoke", hint: "word by word" },
+  { value: "line", label: "Line", hint: "line by line" },
+];
+const MODE_OPTIONS: { value: ReelMode; label: string; hint: string }[] = [
+  { value: "snippet", label: "Snippet", hint: "up to 0:50" },
+  { value: "full", label: "Full song", hint: "up to 12:00" },
+];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function formatMegabytes(bytes: number | null): string {
+  if (!bytes) return "";
+  return ` · ${bytes >= 10e6 ? Math.round(bytes / 1e6) : (bytes / 1e6).toFixed(1)} MB`;
+}
+
+function ReelMaker({
+  songId,
+  filenameBase,
+  shareTitle,
+  shareText,
+  canMakeFull,
+}: {
+  songId: string;
+  filenameBase: string;
+  shareTitle: string;
+  shareText: string;
+  canMakeFull: boolean;
+}) {
+  const [mode, setMode] = useState<ReelMode>("snippet");
+  const [shape, setShape] = useState<ReelShape>("vertical");
+  const [highlight, setHighlight] = useState<ReelHighlight>("karaoke");
+  const [ui, setUi] = useState<ReelUi>({ phase: "idle" });
+  // Every run, option change and unmount bumps this; a poll loop that finds it
+  // moved on simply stops (the render itself carries on, on the worker).
+  const runRef = useRef(0);
+  useEffect(() => () => void runRef.current++, []);
+
+  const full = mode === "full";
+  const endpoint = (extra = "") =>
+    `/share/song/${enc(songId)}/reel?mode=${mode}&shape=${shape}&highlight=${highlight}${extra}`;
+
+  function pick<T>(set: (v: T) => void) {
+    return (v: T) => {
+      runRef.current++;
+      setUi({ phase: "idle" });
+      set(v);
+    };
+  }
+
+  // Mobile: the native share sheet with the file (save to gallery / TikTok).
+  // Desktop: straight to Downloads.
+  async function deliver(file: File) {
+    if (canShareFileNatively(file)) {
+      try {
+        await navigator.share({ files: [file], title: shareTitle, text: shareText });
+      } catch {
+        // User dismissed the share sheet — nothing to do.
+      }
+    } else {
+      downloadFile(file);
+    }
+  }
+
+  async function make(retry = false) {
+    const run = ++runRef.current;
+    const tappedAt = Date.now();
+    // A snippet renders in seconds; a full song in minutes (a 12:00 song is
+    // about five on the worker). Past the budget we stop asking — the render
+    // doesn't stop, and the next "Make video" collects it.
+    const deadline = tappedAt + (full ? 40 : 4) * 60_000;
+    setUi({ phase: "working", reel: null });
+    let ask = retry ? "&retry=1" : "";
+    try {
+      while (Date.now() < deadline) {
+        const res = await fetch(endpoint(ask), { cache: "no-store" });
+        ask = "";
+        if (run !== runRef.current) return;
+        if (res.status === 403) throw new Error("The full-song video is made by the song's own hands.");
+        if (res.status === 404) throw new Error("This song can't be made into a video yet.");
+        if (!res.ok) throw new Error("Couldn't make the video. Try again.");
+        const reel = (await res.json()) as ReelStatus;
+        if (reel.status === "failed") throw new Error("Couldn't make the video. Try again.");
+        if (reel.status === "ready") {
+          if (full) {
+            setUi({ phase: "ready", reel, file: null });
+            return;
+          }
+          const dl = await fetch(endpoint("&download=1"), { cache: "no-store" });
+          if (run !== runRef.current) return;
+          if (!dl.ok) throw new Error("Couldn't fetch the video. Try again.");
+          const blob = await dl.blob();
+          const file = new File([blob], reel.filename ?? `${filenameBase}.mp4`, {
+            type: "video/mp4",
+          });
+          setUi({ phase: "ready", reel, file });
+          // Hand it over straight away only while the tap is still fresh — a
+          // phone's share sheet needs a recent gesture. Otherwise: "Save video".
+          if (Date.now() - tappedAt < 4_000) await deliver(file);
+          return;
+        }
+        setUi({ phase: "working", reel });
+        await sleep(full ? 4_000 : 2_500);
+        if (run !== runRef.current) return;
+      }
+      throw new Error(
+        "Still rendering — it carries on without you. Tap Try again in a few minutes to collect it.",
+      );
+    } catch (err) {
+      if (run !== runRef.current) return;
+      setUi({
+        phase: "error",
+        message: err instanceof Error ? err.message : "Couldn't make the video. Try again.",
+      });
+    }
+  }
+
+  const reel = ui.phase === "working" || ui.phase === "ready" ? ui.reel : null;
+  const working = ui.phase === "working";
+  const progress = reel?.status === "rendering" ? reel.progress : ui.phase === "ready" ? 1 : 0;
+  const statusLine = !reel
+    ? "Getting ready…"
+    : reel.status === "queued"
+      ? reel.position > 1
+        ? `In line — #${reel.position}`
+        : "Next in line…"
+      : reel.status === "rendering"
+        ? `Rendering… ${Math.round(reel.progress * 100)}%`
+        : "Getting ready…";
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
+      <p className="text-xs uppercase tracking-[0.14em] text-muted/70">
+        Make a video — plays with sound
+      </p>
+
+      {canMakeFull ? (
+        <ReelChoice label="Length" options={MODE_OPTIONS} value={mode} onChange={pick(setMode)} />
+      ) : null}
+      <ReelChoice label="Shape" options={SHAPE_OPTIONS} value={shape} onChange={pick(setShape)} />
+      <ReelChoice
+        label="Lyrics"
+        options={HIGHLIGHT_OPTIONS}
+        value={highlight}
+        onChange={pick(setHighlight)}
+      />
+
+      {ui.phase === "ready" ? (
+        full ? (
+          <a
+            href={endpoint("&download=1")}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/40 bg-cert-red/[0.08] px-3 py-3 text-sm font-medium text-foreground transition hover:border-cert-red/60 hover:bg-cert-red/[0.12]"
+          >
+            <DownloadIcon />
+            Download MP4{formatMegabytes(ui.reel.bytes)}
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={() => ui.file && void deliver(ui.file)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/40 bg-cert-red/[0.08] px-3 py-3 text-sm font-medium text-foreground transition hover:border-cert-red/60 hover:bg-cert-red/[0.12]"
+          >
+            <DownloadIcon />
+            Save video{formatMegabytes(ui.reel.bytes)}
+          </button>
+        )
+      ) : (
+        <button
+          type="button"
+          onClick={() => void make(ui.phase === "error")}
+          disabled={working}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/30 bg-cert-red/[0.06] px-3 py-3 text-sm text-foreground transition hover:border-cert-red/50 hover:bg-cert-red/10 disabled:opacity-60"
+        >
+          {working ? <Spinner /> : <VideoIcon />}
+          {working ? statusLine : ui.phase === "error" ? "Try again" : "Make video"}
+        </button>
+      )}
+
+      {working || ui.phase === "ready" ? (
+        // The Red Line, doing its day job: how far along the render is.
+        <div
+          role="progressbar"
+          aria-label="Video progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          className="h-1 w-full overflow-hidden rounded-full bg-white/10"
+        >
+          <div
+            className="h-full rounded-full bg-cert-red shadow-[0_0_8px_rgba(255,45,45,0.7)] transition-[width] duration-700"
+            style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }}
+          />
+        </div>
+      ) : null}
+
+      {ui.phase === "error" ? (
+        <p className="text-xs text-cert-red">{ui.message}</p>
+      ) : (
+        <p className="text-xs text-muted/70">
+          {ui.phase === "ready"
+            ? full
+              ? "Your lyric video is ready. It stays ready — come back for it any time."
+              : "Saved? Post it to Reels / TikTok — it plays in‑feed with sound. Link in bio."
+            : full
+              ? working
+                ? "A full song takes a few minutes. You can close this — it keeps rendering."
+                : "The whole song as a lyric video, big words start to finish."
+              : "Your teaser window, lyrics big on screen. Post it with the link in bio."}
+        </p>
+      )}
+      {reel?.lyrics === "none" ? (
+        <p className="text-xs text-muted/70">
+          No synced lyrics yet, so this one carries the title and the names. Sync
+          the lyrics on the song page to make it a lyric video.
+        </p>
+      ) : null}
+      {reel?.truncated ? (
+        <p className="text-xs text-muted/70">
+          This song runs past 12:00 — the video stops there.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// A small segmented radio group — one row of choices under a label.
+function ReelChoice<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string; hint: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] text-muted/60">{label}</span>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      >
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.value)}
+              className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-sm transition ${
+                on
+                  ? "border-cert-red/50 bg-cert-red/[0.08] text-foreground"
+                  : "border-white/10 bg-white/[0.02] text-muted hover:border-white/25 hover:text-foreground"
+              }`}
+            >
+              <span className="font-medium">{o.label}</span>
+              <span className="text-[10px] text-muted/70">{o.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
