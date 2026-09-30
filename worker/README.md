@@ -214,7 +214,7 @@ left→right, which would run backwards through an Arabic word).
 | | resolution | render time | file | peak memory |
 | --- | --- | --- | --- | --- |
 | snippet, 30 s | 1080×1920 · 1080×1080 · 1920×1080, 30 fps | ~15–20 s | ~2–3 MB | — |
-| full, 12:00 (the cap) | same, 24 fps | ~4–5 min | 31.5 MB on the plain field; the 3 Mb/s cap bounds the worst case at ~290 MB | ffmpeg ~440 MB + worker ~115 MB |
+| full, 12:00 (the cap) | same, 24 fps | ~4 min (236 s at 9:16, 252 s at 16:9) | ~52 MB with drifting cover art (31.5 MB on the plain field); the 3 Mb/s cap bounds the worst case at ~290 MB | ffmpeg ~440 MB + worker ~115 MB |
 
 Render time scales with the Railway service's vCPUs — on 2 vCPU expect roughly
 double. One full render at a time (the default lane) keeps that bounded.
