@@ -404,6 +404,48 @@ export function ShareSheet({
 // phone's share sheet (or a plain download on a laptop); a full song is a
 // straight CDN download — a YouTube-shaped file, not an in-feed post.
 
+// ⚠ PLACEHOLDER NAMES. Every word the reel maker shows is here, and none of it
+// is final: Tee owns all naming on this platform, and these are the working
+// names until he picks. His choice lands in this one block — do not merge with
+// these as the shipped copy. (The worker's download filenames —
+// AIRED-0001-snippet-9x16.mp4 / -full- — carry the same naming question.)
+const REEL_COPY = {
+  heading: "Make a video — plays with sound",
+  make: "Make video",
+  retry: "Try again",
+  lengthLabel: "Length",
+  snippet: { label: "Snippet", hint: "up to 0:50" },
+  full: { label: "Full song", hint: "up to 12:00" },
+  shapeLabel: "Shape",
+  vertical: { label: "9:16", hint: "Reels · TikTok" },
+  square: { label: "1:1", hint: "Feed" },
+  landscape: { label: "16:9", hint: "YouTube" },
+  lyricsLabel: "Lyrics",
+  karaoke: { label: "Karaoke", hint: "word by word" },
+  line: { label: "Line", hint: "line by line" },
+  preparing: "Getting ready…",
+  nextInLine: "Next in line…",
+  inLine: (n: number) => `In line — #${n}`,
+  rendering: (percent: number) => `Rendering… ${percent}%`,
+  progressLabel: "Video progress",
+  save: "Save video",
+  download: "Download MP4",
+  hintSnippet: "Your teaser window, lyrics big on screen. Post it with the link in bio.",
+  hintFull: "The whole song as a lyric video, big words start to finish.",
+  hintFullWorking: "A full song takes a few minutes. You can close this — it keeps rendering.",
+  readySnippet: "Saved? Post it to Reels / TikTok — it plays in‑feed with sound. Link in bio.",
+  readyFull: "Your lyric video is ready. It stays ready — come back for it any time.",
+  noLyrics:
+    "No synced lyrics yet, so this one carries the title and the names. Sync the lyrics on the song page to make it a lyric video.",
+  truncated: "This song runs past 12:00 — the video stops there.",
+  errFullGate: "The full-song video is made by the song's own hands.",
+  errNotFound: "This song can't be made into a video yet.",
+  errFailed: "Couldn't make the video. Try again.",
+  errFetch: "Couldn't fetch the video. Try again.",
+  errTimeout:
+    "Still rendering — it carries on without you. Tap Try again in a few minutes to collect it.",
+};
+
 type ReelUi =
   | { phase: "idle" }
   | { phase: "working"; reel: ReelStatus | null }
@@ -411,17 +453,17 @@ type ReelUi =
   | { phase: "error"; message: string };
 
 const SHAPE_OPTIONS: { value: ReelShape; label: string; hint: string }[] = [
-  { value: "vertical", label: "9:16", hint: "Reels · TikTok" },
-  { value: "square", label: "1:1", hint: "Feed" },
-  { value: "landscape", label: "16:9", hint: "YouTube" },
+  { value: "vertical", ...REEL_COPY.vertical },
+  { value: "square", ...REEL_COPY.square },
+  { value: "landscape", ...REEL_COPY.landscape },
 ];
 const HIGHLIGHT_OPTIONS: { value: ReelHighlight; label: string; hint: string }[] = [
-  { value: "karaoke", label: "Karaoke", hint: "word by word" },
-  { value: "line", label: "Line", hint: "line by line" },
+  { value: "karaoke", ...REEL_COPY.karaoke },
+  { value: "line", ...REEL_COPY.line },
 ];
 const MODE_OPTIONS: { value: ReelMode; label: string; hint: string }[] = [
-  { value: "snippet", label: "Snippet", hint: "up to 0:50" },
-  { value: "full", label: "Full song", hint: "up to 12:00" },
+  { value: "snippet", ...REEL_COPY.snippet },
+  { value: "full", ...REEL_COPY.full },
 ];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -493,11 +535,11 @@ function ReelMaker({
         const res = await fetch(endpoint(ask), { cache: "no-store" });
         ask = "";
         if (run !== runRef.current) return;
-        if (res.status === 403) throw new Error("The full-song video is made by the song's own hands.");
-        if (res.status === 404) throw new Error("This song can't be made into a video yet.");
-        if (!res.ok) throw new Error("Couldn't make the video. Try again.");
+        if (res.status === 403) throw new Error(REEL_COPY.errFullGate);
+        if (res.status === 404) throw new Error(REEL_COPY.errNotFound);
+        if (!res.ok) throw new Error(REEL_COPY.errFailed);
         const reel = (await res.json()) as ReelStatus;
-        if (reel.status === "failed") throw new Error("Couldn't make the video. Try again.");
+        if (reel.status === "failed") throw new Error(REEL_COPY.errFailed);
         if (reel.status === "ready") {
           if (full) {
             setUi({ phase: "ready", reel, file: null });
@@ -505,7 +547,7 @@ function ReelMaker({
           }
           const dl = await fetch(endpoint("&download=1"), { cache: "no-store" });
           if (run !== runRef.current) return;
-          if (!dl.ok) throw new Error("Couldn't fetch the video. Try again.");
+          if (!dl.ok) throw new Error(REEL_COPY.errFetch);
           const blob = await dl.blob();
           const file = new File([blob], reel.filename ?? `${filenameBase}.mp4`, {
             type: "video/mp4",
@@ -520,14 +562,12 @@ function ReelMaker({
         await sleep(full ? 4_000 : 2_500);
         if (run !== runRef.current) return;
       }
-      throw new Error(
-        "Still rendering — it carries on without you. Tap Try again in a few minutes to collect it.",
-      );
+      throw new Error(REEL_COPY.errTimeout);
     } catch (err) {
       if (run !== runRef.current) return;
       setUi({
         phase: "error",
-        message: err instanceof Error ? err.message : "Couldn't make the video. Try again.",
+        message: err instanceof Error ? err.message : REEL_COPY.errFailed,
       });
     }
   }
@@ -536,27 +576,27 @@ function ReelMaker({
   const working = ui.phase === "working";
   const progress = reel?.status === "rendering" ? reel.progress : ui.phase === "ready" ? 1 : 0;
   const statusLine = !reel
-    ? "Getting ready…"
+    ? REEL_COPY.preparing
     : reel.status === "queued"
       ? reel.position > 1
-        ? `In line — #${reel.position}`
-        : "Next in line…"
+        ? REEL_COPY.inLine(reel.position)
+        : REEL_COPY.nextInLine
       : reel.status === "rendering"
-        ? `Rendering… ${Math.round(reel.progress * 100)}%`
-        : "Getting ready…";
+        ? REEL_COPY.rendering(Math.round(reel.progress * 100))
+        : REEL_COPY.preparing;
 
   return (
     <div className="flex flex-col gap-3 border-t border-white/8 pt-4">
       <p className="text-xs uppercase tracking-[0.14em] text-muted/70">
-        Make a video — plays with sound
+        {REEL_COPY.heading}
       </p>
 
       {canMakeFull ? (
-        <ReelChoice label="Length" options={MODE_OPTIONS} value={mode} onChange={pick(setMode)} />
+        <ReelChoice label={REEL_COPY.lengthLabel} options={MODE_OPTIONS} value={mode} onChange={pick(setMode)} />
       ) : null}
-      <ReelChoice label="Shape" options={SHAPE_OPTIONS} value={shape} onChange={pick(setShape)} />
+      <ReelChoice label={REEL_COPY.shapeLabel} options={SHAPE_OPTIONS} value={shape} onChange={pick(setShape)} />
       <ReelChoice
-        label="Lyrics"
+        label={REEL_COPY.lyricsLabel}
         options={HIGHLIGHT_OPTIONS}
         value={highlight}
         onChange={pick(setHighlight)}
@@ -569,7 +609,8 @@ function ReelMaker({
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/40 bg-cert-red/[0.08] px-3 py-3 text-sm font-medium text-foreground transition hover:border-cert-red/60 hover:bg-cert-red/[0.12]"
           >
             <DownloadIcon />
-            Download MP4{formatMegabytes(ui.reel.bytes)}
+            {REEL_COPY.download}
+            {formatMegabytes(ui.reel.bytes)}
           </a>
         ) : (
           <button
@@ -578,7 +619,8 @@ function ReelMaker({
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/40 bg-cert-red/[0.08] px-3 py-3 text-sm font-medium text-foreground transition hover:border-cert-red/60 hover:bg-cert-red/[0.12]"
           >
             <DownloadIcon />
-            Save video{formatMegabytes(ui.reel.bytes)}
+            {REEL_COPY.save}
+            {formatMegabytes(ui.reel.bytes)}
           </button>
         )
       ) : (
@@ -589,7 +631,7 @@ function ReelMaker({
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-cert-red/30 bg-cert-red/[0.06] px-3 py-3 text-sm text-foreground transition hover:border-cert-red/50 hover:bg-cert-red/10 disabled:opacity-60"
         >
           {working ? <Spinner /> : <VideoIcon />}
-          {working ? statusLine : ui.phase === "error" ? "Try again" : "Make video"}
+          {working ? statusLine : ui.phase === "error" ? REEL_COPY.retry : REEL_COPY.make}
         </button>
       )}
 
@@ -597,7 +639,7 @@ function ReelMaker({
         // The Red Line, doing its day job: how far along the render is.
         <div
           role="progressbar"
-          aria-label="Video progress"
+          aria-label={REEL_COPY.progressLabel}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress * 100)}
@@ -616,25 +658,20 @@ function ReelMaker({
         <p className="text-xs text-muted/70">
           {ui.phase === "ready"
             ? full
-              ? "Your lyric video is ready. It stays ready — come back for it any time."
-              : "Saved? Post it to Reels / TikTok — it plays in‑feed with sound. Link in bio."
+              ? REEL_COPY.readyFull
+              : REEL_COPY.readySnippet
             : full
               ? working
-                ? "A full song takes a few minutes. You can close this — it keeps rendering."
-                : "The whole song as a lyric video, big words start to finish."
-              : "Your teaser window, lyrics big on screen. Post it with the link in bio."}
+                ? REEL_COPY.hintFullWorking
+                : REEL_COPY.hintFull
+              : REEL_COPY.hintSnippet}
         </p>
       )}
       {reel?.lyrics === "none" ? (
-        <p className="text-xs text-muted/70">
-          No synced lyrics yet, so this one carries the title and the names. Sync
-          the lyrics on the song page to make it a lyric video.
-        </p>
+        <p className="text-xs text-muted/70">{REEL_COPY.noLyrics}</p>
       ) : null}
       {reel?.truncated ? (
-        <p className="text-xs text-muted/70">
-          This song runs past 12:00 — the video stops there.
-        </p>
+        <p className="text-xs text-muted/70">{REEL_COPY.truncated}</p>
       ) : null}
     </div>
   );
