@@ -7,13 +7,14 @@ import { SwRegister } from "@/components/install/sw-register";
 import { AdornedProvider } from "@/components/library/adorned-provider";
 import { OfflineInit } from "@/components/offline/offline-init";
 import { Onboarding } from "@/components/onboarding/onboarding";
+import { Host } from "@/components/host/host";
 import { NowPlayingBar } from "@/components/player/now-playing-bar";
 import { PlayerProvider } from "@/components/player/player-provider";
 import { VoiceSearch } from "@/components/voice/voice-search";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getAdornedWorkIds } from "@/lib/library/queries";
-import { getCurrentUser } from "@/lib/supabase/auth";
+import { getCurrentProfile, getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
@@ -83,6 +84,10 @@ export default async function RootLayout({
   const user = await getCurrentUser();
   const supabase = await createClient();
   const adornedIds = await getAdornedWorkIds(supabase, user?.id ?? null);
+  // The name the talking host greets the listener by ("Good morning, Tee!").
+  // Shares the header's cached profile read, so it costs no extra round trip.
+  const profile = user ? await getCurrentProfile() : null;
+  const hostName = firstName(profile?.display_name ?? profile?.handle ?? null);
 
   return (
     <html
@@ -102,6 +107,8 @@ export default async function RootLayout({
               <NowPlayingBar />
               {/* Ask AIRED: find and play a song by voice, from any page. */}
               <VoiceSearch />
+              {/* The talking host: greets by name, asks the mood, plays to it. */}
+              <Host name={hostName} />
             </div>
           </AdornedProvider>
         </PlayerProvider>
@@ -118,4 +125,10 @@ export default async function RootLayout({
       </body>
     </html>
   );
+}
+
+// "Tee / Kahotia" → "Tee"; "Rayne (RuRu)" → "Rayne". The host says one name.
+function firstName(display: string | null): string | null {
+  const name = display?.split(/[/(|·,]/)[0]?.trim();
+  return name ? name.slice(0, 40) : null;
 }
