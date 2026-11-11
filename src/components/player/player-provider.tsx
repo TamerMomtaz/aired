@@ -48,6 +48,33 @@ const RESUME_PROBE_MS = 1_500;
 // this long is a stall, even if no error was ever raised.
 const STALL_MS = 12_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
+// A tap on play (from the app, the lock screen or the CAR SCREEN) that lands on
+// an element which claims to be playing but whose clock hasn't moved for this
+// long is a tap on a stuck stream. It is treated as "make it play again", never
+// as "pause" — see resumeFromListener below.
+const STUCK_TAP_MS = 4_000;
+
+// ---- the forward buffer: how long a tunnel can be -------------------------
+// hls.js defaults to holding ~30s of audio ahead of the playhead. In a car that
+// is one tunnel, one dead cell, one slow tower handoff, and the music stops.
+// Audio is tiny (a 192 kbps track is ~1.4 MB a minute), so hold three minutes
+// ahead and let the player ride out the gap on what it already has.
+const HLS_CONFIG = {
+  maxBufferLength: 180,
+  maxMaxBufferLength: 600,
+  // Keep a little behind the playhead too, so a short rewind needs no network.
+  backBufferLength: 60,
+  // Be patient with a slow network rather than declaring the stream dead:
+  // more retries, longer timeouts, before hls.js raises a FATAL error.
+  fragLoadPolicy: {
+    default: {
+      maxTimeToFirstByteMs: 20_000,
+      maxLoadTimeMs: 120_000,
+      timeoutRetry: { maxNumRetry: 6, retryDelayMs: 1_000, maxRetryDelayMs: 8_000 },
+      errorRetry: { maxNumRetry: 10, retryDelayMs: 1_000, maxRetryDelayMs: 15_000 },
+    },
+  },
+} as const;
 
 // ---- the flight recorder's heartbeat --------------------------------------
 // A timer that asks for nothing and fixes nothing — it only says "I ran, and
@@ -214,11 +241,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const queueRef = useRef(queue);
   const indexRef = useRef(index);
   const repeatModeRef = useRef(repeatMode);
+  const loadErrorRef = useRef(loadError);
   useEffect(() => {
     queueRef.current = queue;
     indexRef.current = index;
     repeatModeRef.current = repeatMode;
-  }, [queue, index, repeatMode]);
+    loadErrorRef.current = loadError;
+  }, [queue, index, repeatMode, loadError]);
 
   // ---- play-count recording (real listens) --------------------------------
   // The anonymous listen session id (set once on mount, browser-only).
@@ -281,6 +310,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // A position waiting to be restored — from a reload, or from re-attaching a
   // native-HLS source that had to be reloaded whole.
   const restoreTimeRef = useRef<number | null>(null);
+  // When play() was last asked for, so a stream that is still warming up from
+  // that request is not mistaken for a stuck one.
+  const lastPlayRequestAtRef = useRef(0);
 
   const currentUrl = buildStreamUrl(current?.hlsPlaylistKey);
 
@@ -306,6 +338,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const attemptPlay = useCallback(
     (audio: HTMLAudioElement | null | undefined, reason: string) => {
       if (!audio) return;
+      lastPlayRequestAtRef.current = Date.now();
       diag("play-call", reason, snap());
       const p = audio.play() as Promise<void> | undefined;
       if (!p || typeof p.then !== "function") return;
@@ -331,19 +364,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     diag("pause()", "listener asked for silence", snap());
     audioRef.current?.pause();
   }, [snap]);
-
-  const toggle = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      wantsPlayRef.current = true;
-      attemptPlay(audio, "toggle→play");
-    } else {
-      wantsPlayRef.current = false;
-      diag("pause()", "toggle→pause", snap());
-      audio.pause();
-    }
-  }, [attemptPlay, snap]);
 
   // Spend one unit of the recovery budget. False means it's exhausted and the
   // failure has earned the right to surface. A stream that has behaved for a
@@ -523,6 +543,74 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     restoreTimeRef.current = at > 0 ? at : null;
     setAttempt((n) => n + 1);
   }, [snap]);
+
+  // ---- "it says playing, but there is no sound" ----------------------------
+  // THE DOUBLE-PRESS BUG. When a stream froze (a tunnel, a screen timeout) the
+  // element was still technically "playing" — not paused, just starved — so the
+  // media session kept telling the car "playing" and the car drew a PAUSE
+  // button. The listener's first tap therefore sent "pause" (silence → silence,
+  // nothing to hear) and only the second tap sent "play". Every time.
+  //
+  // So a tap is judged by what the listener can HEAR, not by what the element
+  // claims: an element that is unpaused but whose clock has not moved for a few
+  // seconds is silent, and any tap on it — play or pause — means "play".
+  const isSilentlyStuck = useCallback((audio: HTMLAudioElement) => {
+    if (audio.paused || audio.ended) return false;
+    const now = Date.now();
+    return (
+      now - lastProgressAtRef.current > STUCK_TAP_MS &&
+      now - lastPlayRequestAtRef.current > STUCK_TAP_MS
+    );
+  }, []);
+
+  // The listener asked for sound. Give it to them by whatever it takes: a
+  // re-attach if the element errored, a stream recovery if it is stuck, a plain
+  // play() otherwise. A deliberate tap also hands back the recovery budget.
+  const resumeFromListener = useCallback(
+    (reason: string) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      wantsPlayRef.current = true;
+      if (audio.error || loadErrorRef.current) {
+        diag("listener-resume", `${reason} · element errored → retry()`, snap());
+        retry();
+        return;
+      }
+      if (isSilentlyStuck(audio)) {
+        diag("listener-resume", `${reason} · stuck stream → recover`, snap());
+        recoveriesRef.current = 0;
+        recoverStream(`listener:${reason}`);
+        return;
+      }
+      attemptPlay(audio, reason);
+    },
+    [attemptPlay, isSilentlyStuck, recoverStream, retry, snap],
+  );
+
+  // The media-session "pause" (car screen, lock screen, headphones). Honoured
+  // only when there is actually sound to stop — otherwise it is the first of
+  // the two presses described above, and it means play.
+  const pauseFromRemote = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && wantsPlayRef.current && isSilentlyStuck(audio)) {
+      diag("remote-pause→play", "pause pressed on a silent stream", snap());
+      resumeFromListener("remote-pause-on-stuck");
+      return;
+    }
+    pause();
+  }, [isSilentlyStuck, pause, resumeFromListener, snap]);
+
+  const toggle = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused || isSilentlyStuck(audio)) {
+      resumeFromListener("toggle→play");
+    } else {
+      wantsPlayRef.current = false;
+      diag("pause()", "toggle→pause", snap());
+      audio.pause();
+    }
+  }, [isSilentlyStuck, resumeFromListener, snap]);
 
   const cycleRepeatMode = useCallback(() => {
     setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
@@ -759,7 +847,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
 
       if (Hls.isSupported()) {
-        const hls = new Hls();
+        const hls = new Hls(HLS_CONFIG);
         hlsRef.current = hls;
         hls.loadSource(currentUrl);
         hls.attachMedia(audio);
@@ -802,6 +890,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             snap(),
           );
           if (!data.fatal) return;
+
+          // NO SIGNAL IS NOT A BROKEN STREAM. A car in a dead zone fails every
+          // fetch, and each failure used to spend recovery budget — six of
+          // them inside a minute and the engine was destroyed, so the music
+          // stayed dead even after the signal came back. While the phone says
+          // it is offline, spend nothing and wait: the `online` listener below
+          // restarts loading the moment the network returns.
+          if (
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            typeof navigator !== "undefined" &&
+            navigator.onLine === false
+          ) {
+            diag("offline-wait", "network error while offline · waiting for signal", snap());
+            return;
+          }
 
           // THE BUG THIS FIXES: this branch used to call hls.destroy() and stop.
           // A backgrounded tab or a sleeping phone reliably produces a fatal
@@ -874,8 +977,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   //   • visibilitychange / pageshow — the page is in front again.
   //   • the probe — give the element a moment to prove it's actually moving
   //     before intervening, so healthy playback is left alone.
-  //   • the watchdog — catches a stall that happens while the page is open and
-  //     visible, which no page event would ever announce.
+  //   • the watchdog — catches a stall that no page event would ever announce,
+  //     whether the page is visible or the screen has gone dark.
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -912,11 +1015,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const onVisible = () => {
       if (document.visibilityState !== "visible") {
-        // The page LEAVING. From here until the matching return, the watchdog
-        // below is switched off by its own visibility gate — so if the timeline
-        // shows a failure after this line and no watchdog entry before the
-        // return, the recovery ladder was never given a chance to run.
-        diag("page-HIDDEN", "watchdog now blind", snap());
+        // The page LEAVING (in a car: the phone screen timing out). The
+        // watchdog keeps running while hidden, but only acts on a stream that
+        // should be playing and went silent — never on one the OS paused.
+        // Chrome may still slow its timers to once a minute here.
+        diag("page-HIDDEN", "watchdog keeps watching (stalls only)", snap());
         return;
       }
       diag("page-visible", "watchdog live again", snap());
@@ -967,11 +1070,46 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("freeze", onFreeze);
     document.addEventListener("resume", onResume);
 
+    // The watchdog used to switch itself off whenever the page was hidden —
+    // which, in a car, is nearly always: the phone screen times out and from
+    // then on a frozen stream was never noticed, so the music simply stopped.
+    // It now keeps watching while hidden, with one restraint: an element the
+    // OS deliberately PAUSED while hidden (a phone call, navigation speech,
+    // another app taking the audio) is left alone, so AIRED never fights the
+    // phone for the speaker. Only a stream that is supposed to be playing and
+    // has gone silent gets recovered in the background.
     const watchdog = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
       const audio = audioRef.current;
-      if (audio && isStalled(audio)) nudge();
+      if (!audio || !isStalled(audio)) return;
+      if (document.visibilityState !== "visible") {
+        if (audio.paused) return;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+        diag("watchdog-STALL-hidden", `no progress for >${STALL_MS}ms`, snap());
+        if (audio.error) retry();
+        else if (spendRecovery()) recoverStream("watchdog-hidden");
+        else setLoadError(true);
+        return;
+      }
+      nudge();
     }, WATCHDOG_INTERVAL_MS);
+
+    // Signal is back (out of the tunnel, past the dead zone): if the listener
+    // still wants sound, reopen the stream straight away rather than waiting
+    // for the watchdog's next look. A fresh connection earns a fresh budget.
+    const onOnline = () => {
+      diag("evt:online", undefined, snap());
+      const audio = audioRef.current;
+      if (!audio || !wantsPlayRef.current) return;
+      recoveriesRef.current = 0;
+      if (audio.error || loadErrorRef.current) {
+        retry();
+        return;
+      }
+      recoverStream("back-online");
+    };
+    const onOffline = () => diag("evt:offline", undefined, snap());
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
 
     // ---- the heartbeat ------------------------------------------------------
     // Measures the one thing no other instrument can: whether this page is
@@ -1015,6 +1153,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("freeze", onFreeze);
       document.removeEventListener("resume", onResume);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
       window.clearInterval(watchdog);
       window.clearInterval(heartbeat);
     };
@@ -1029,21 +1169,46 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const ms = navigator.mediaSession;
-    ms.setActionHandler("play", () => play());
-    ms.setActionHandler("pause", () => pause());
-    ms.setActionHandler("previoustrack", () => prev());
-    ms.setActionHandler("nexttrack", () => next());
-    ms.setActionHandler("seekto", (e) => {
+    // Every handler is logged: a car's taps are invisible otherwise, and "the
+    // car sent pause, then play" is exactly the evidence the double-press
+    // needed.
+    const bind = (action: MediaSessionAction, fn: MediaSessionActionHandler) => {
+      try {
+        ms.setActionHandler(action, (details) => {
+          diag("remote", action, snap());
+          fn(details);
+        });
+      } catch {
+        // An action this browser doesn't know (older WebViews) — skip it.
+      }
+    };
+    bind("play", () => resumeFromListener("remote-play"));
+    bind("pause", () => pauseFromRemote());
+    // Some head units send "stop" rather than "pause"; unhandled, the session
+    // just looks broken to them.
+    bind("stop", () => pause());
+    bind("previoustrack", () => prev());
+    bind("nexttrack", () => next());
+    bind("seekto", (e) => {
       if (typeof e.seekTime === "number") seekToTime(e.seekTime);
     });
     return () => {
-      ms.setActionHandler("play", null);
-      ms.setActionHandler("pause", null);
-      ms.setActionHandler("previoustrack", null);
-      ms.setActionHandler("nexttrack", null);
-      ms.setActionHandler("seekto", null);
+      for (const a of [
+        "play",
+        "pause",
+        "stop",
+        "previoustrack",
+        "nexttrack",
+        "seekto",
+      ] as MediaSessionAction[]) {
+        try {
+          ms.setActionHandler(a, null);
+        } catch {
+          // see above
+        }
+      }
     };
-  }, [play, pause, prev, next, seekToTime]);
+  }, [resumeFromListener, pauseFromRemote, pause, prev, next, seekToTime, snap]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
@@ -1087,7 +1252,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         window.matchMedia?.("(display-mode: standalone)").matches
           ? "standalone PWA"
           : "browser tab"
-      } · watchdog=${WATCHDOG_INTERVAL_MS}ms(visible-only) · stall=${STALL_MS}ms · heartbeat=${HEARTBEAT_MS}ms`,
+      } · watchdog=${WATCHDOG_INTERVAL_MS}ms(also while hidden) · stall=${STALL_MS}ms · heartbeat=${HEARTBEAT_MS}ms`,
       snap(),
     );
     const saved = readPersistedState();
