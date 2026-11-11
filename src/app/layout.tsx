@@ -9,6 +9,7 @@ import { OfflineInit } from "@/components/offline/offline-init";
 import { Onboarding } from "@/components/onboarding/onboarding";
 import { NowPlayingBar } from "@/components/player/now-playing-bar";
 import { PlayerProvider } from "@/components/player/player-provider";
+import { VoiceSearch } from "@/components/voice/voice-search";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getAdornedWorkIds } from "@/lib/library/queries";
@@ -99,6 +100,8 @@ export default async function RootLayout({
               {children}
               <SiteFooter />
               <NowPlayingBar />
+              {/* Ask AIRED: find and play a song by voice, from any page. */}
+              <VoiceSearch />
             </div>
           </AdornedProvider>
         </PlayerProvider>
