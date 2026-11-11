@@ -30,6 +30,8 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_URL` | public | aired-platform API URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | publishable key, guarded by RLS |
 | `AIRED_VOLLEY_ENC_KEY` | **server-only** | AES-256-GCM key (base64, 32 bytes) that seals private volleys. Generate with `openssl rand -base64 32`. Required from Phase 2 on. |
+| `ANTHROPIC_API_KEY` | **server-only** | Optional. Turns on "understand what I meant" for Ask AIRED (voice song search): Arabic/English/Franco word widening and picking the song by meaning. Without it, voice search still works by keyword (titles, makers, lyrics). |
+| `AIRED_VOICE_MODEL` | server-only | Optional. The Claude model for voice search. Defaults to `claude-opus-5-5`; set `claude-haiku-5-5` for the cheapest option. |
 
 The public client config also ships a committed fallback in
 `src/lib/supabase/config.ts`, so the deploy is connected out of the box; env vars
