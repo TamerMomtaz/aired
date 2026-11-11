@@ -55,6 +55,7 @@ export async function SiteHeader() {
   // rather than locked (see app/settings/diagnostics/page.tsx).
   const moreItems: MoreItem[] = user
     ? [
+        { href: "/mix", label: "Mix" },
         { href: "/downloads", label: "Downloads" },
         ...(profile?.is_admin
           ? [
@@ -65,6 +66,7 @@ export async function SiteHeader() {
         { href: "/manage", label: "Manage" },
       ]
     : [
+        { href: "/mix", label: "Mix" },
         { href: "/downloads", label: "Downloads" },
         { href: "/login", label: "Log in" },
       ];
@@ -115,6 +117,7 @@ export async function SiteHeader() {
             ) : null}
 
             <div className="hidden sm:contents">
+              <NavLink href="/mix">Mix</NavLink>
               <NavLink href="/downloads">Downloads</NavLink>
 
               {profile?.is_admin ? (
