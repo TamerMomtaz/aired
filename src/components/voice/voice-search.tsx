@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 
+import { HOST_OPEN_EVENT } from "@/components/host/host";
 import { usePlayer } from "@/components/player/player-provider";
 import type { Track } from "@/components/player/track";
 import { formatCatalogId } from "@/lib/catalog";
+import {
+  getRecognizerCtor,
+  initialLang,
+  saveLang,
+  type Lang,
+  type Recognizer,
+} from "@/lib/voice/speech";
 
 // Ask AIRED: find (and play) a song by saying what you remember of it.
 //
@@ -34,35 +42,7 @@ type Result = {
   confidence: number;
 };
 
-type Lang = "ar-EG" | "en-US";
-const LANG_KEY = "aired.voice.lang";
 const AUTOPLAY_CONFIDENCE = 0.6;
-
-// Minimal Web Speech API typings (not in TypeScript's DOM lib).
-type SpeechAlt = { transcript: string };
-type SpeechResultList = ArrayLike<ArrayLike<SpeechAlt> & { isFinal: boolean }>;
-type Recognizer = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  maxAlternatives: number;
-  onresult: ((e: { resultIndex: number; results: SpeechResultList }) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-};
-type RecognizerCtor = new () => Recognizer;
-
-function getRecognizerCtor(): RecognizerCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: RecognizerCtor;
-    webkitSpeechRecognition?: RecognizerCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
 
 function toTrack(r: Result): Track {
   return {
@@ -73,17 +53,6 @@ function toTrack(r: Result): Track {
     durationSeconds: r.durationSeconds,
     contributors: r.contributors,
   };
-}
-
-function initialLang(): Lang {
-  if (typeof window === "undefined") return "ar-EG";
-  try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (saved === "ar-EG" || saved === "en-US") return saved;
-  } catch {
-    // storage blocked: fall through
-  }
-  return navigator.language.toLowerCase().startsWith("ar") ? "ar-EG" : "en-US";
 }
 
 type Phase = "idle" | "listening" | "searching" | "done" | "error";
@@ -259,11 +228,7 @@ export function VoiceSearch() {
 
   function chooseLang(next: Lang) {
     setLang(next);
-    try {
-      localStorage.setItem(LANG_KEY, next);
-    } catch {
-      // ignore
-    }
+    saveLang(next);
   }
 
   function playResult(index: number) {
@@ -396,6 +361,19 @@ export function VoiceSearch() {
                 {ar ? "دوّر" : "Find"}
               </button>
             </form>
+
+            <button
+              type="button"
+              onClick={() => {
+                closeSheet();
+                // Synchronous, so the host opens inside this same tap and may
+                // speak right away.
+                window.dispatchEvent(new Event(HOST_OPEN_EVENT));
+              }}
+              className="self-start text-xs text-muted underline-offset-4 transition hover:text-foreground hover:underline"
+            >
+              {ar ? "مش عارف تسمع إيه؟ اتكلم مع AIRED عن مودك" : "Not sure what you want? Talk to AIRED about your mood"}
+            </button>
 
             {message ? (
               <p dir="auto" className="text-sm text-muted" role="status">
