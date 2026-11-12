@@ -5,18 +5,21 @@ import type { Hit } from "./score";
 
 // The "understand what I meant" half of voice search, powered by Claude.
 //
-// Two small calls, both optional:
-//   1. expandQuery  — turn what the listener said (Egyptian Arabic, English, or
-//      both mixed) into the words a lyric or title would actually contain:
-//      Arabic script AND Franco/Latin spellings AND English, plus synonyms.
-//   2. pickSongs    — given the few songs keyword search found (with the lines
-//      that matched), decide which one the listener meant, and say why in a few
-//      words in the listener's own language.
+// One call per search. Claude sees a short card for EVERY live song (title,
+// makers, sound, opening lines and the most repeated lines, which are usually
+// the chorus) plus the songs whose words matched what the listener said, and
+// picks the song they meant: by a lyric, by what the song is about, by its
+// mood, or by who made it. Matching words are a hint, never the answer, so a
+// song that only SOUNDS like the query does not win over one that fits it.
 //
-// When ANTHROPIC_API_KEY is not set, or a call fails, search falls back to plain
-// keyword matching and still works. Nothing here is stored: the spoken query is
-// used for this one request and dropped. Only public song text (title, lyrics,
-// makers, descriptors) is sent — the same text anyone can read on the song page.
+// The catalog cards sit in the system prompt behind a cache breakpoint and are
+// built in a fixed order, so repeated searches read them from the prompt cache
+// instead of paying for them each time.
+//
+// When ANTHROPIC_API_KEY is not set, or the call fails, search falls back to
+// plain keyword matching. Nothing here is stored: the spoken query is used for
+// this one request and dropped. Only public song text is sent, the same text
+// anyone can read on the song page.
 
 const MODEL = process.env.AIRED_VOICE_MODEL || "claude-opus-5-5";
 
@@ -25,7 +28,7 @@ export function voiceAiEnabled(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
 }
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ timeout: 15_000, maxRetries: 1 });
+  if (!client) client = new Anthropic({ timeout: 20_000, maxRetries: 1 });
   return client;
 }
 
@@ -37,96 +40,26 @@ function fallbackParams(): { betas?: string[]; fallbacks?: "default" } {
     : {};
 }
 
-async function askJson<T>(
-  system: string,
-  user: string,
-  schema: Record<string, unknown>,
-  maxTokens: number,
-): Promise<T | null> {
-  const response = await getClient().beta.messages.create({
-    model: MODEL,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: "user", content: user }],
-    output_config: {
-      effort: "low",
-      format: { type: "json_schema", schema },
-    },
-    ...fallbackParams(),
-  });
-  if (response.stop_reason === "refusal") return null;
-  const text = response.content
-    .map((b) => (b.type === "text" ? b.text : ""))
-    .join("");
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
+const INSTRUCTIONS = `You are the song finder inside AIRED, a music app. A listener asks for a song by voice, in Egyptian Arabic, English, or a mix. Speech-to-text may have misheard them.
 
-export type Expansion = {
-  intent: "play" | "find";
-  keywords: string[];
-  phrases: string[];
-  catalogNumber: number | null;
-};
+They may describe the song in any way:
+- a lyric or a word they remember (the catalog's lyrics are often Egyptian Arabic written in Latin letters, like "ehna el farafeesh", while the listener's words may be in Arabic script, or the other way round);
+- what the song is about, its story, or who it is for;
+- its mood or feel ("something calm", "the angry one", "حاجة تفرّح");
+- its title, its number (AIRED-0012), or who made it.
 
-const EXPAND_SYSTEM = `You help a music app understand a listener who is looking for a song by voice.
-The listener may speak Egyptian Arabic, English, or a mix, and speech-to-text may have misheard words.
-They may describe the song by a lyric they remember, a word or name sung in it, its title, who made it, its mood, or what it is about.
+Pick by MEANING. Words that merely sound alike are weak evidence: a song that only shares a sound with the request must not beat a song that fits what they described. If nothing fits, return no picks.
 
 Return:
-- intent: "play" if they want it played now ("play", "شغل", "اسمع", "حط"), otherwise "find".
-- keywords: 6 to 20 single words that would likely appear in the song's title or lyrics. Include each idea in Arabic script (Egyptian spelling), in Latin/Franco-Arabic spelling (e.g. "habibi", "7abibi"), and in English when it has an English form. Include likely correct forms of words that sound misheard. Leave out filler words like "song", "play", "اغنية", "شغل".
-- phrases: up to 3 short multi-word lyric fragments the listener seems to be quoting, in the script they would be written in. Empty if none.
-- catalogNumber: the number if they said a catalog id like "AIRED 12" or "song number 12", else null.`;
+- intent: "play" if they want it played now ("play", "شغل", "اسمع", "حط", "put on"), otherwise "find". A bare description with no verb counts as "play".
+- picks: at most 5 songs, best first. For each: its id, a confidence from 0 to 1 that it is the song they meant, and a reason of at most 12 words in the listener's language that says why it fits (the theme, the line, or the mood), never just "the words match".
 
-const EXPAND_SCHEMA = {
-  type: "object",
-  properties: {
-    intent: { type: "string", enum: ["play", "find"] },
-    keywords: { type: "array", items: { type: "string" } },
-    phrases: { type: "array", items: { type: "string" } },
-    catalogNumber: { type: ["integer", "null"] },
-  },
-  required: ["intent", "keywords", "phrases", "catalogNumber"],
-  additionalProperties: false,
-};
-
-export async function expandQuery(query: string): Promise<Expansion | null> {
-  const out = await askJson<Expansion>(
-    EXPAND_SYSTEM,
-    `The listener said: ${JSON.stringify(query)}`,
-    EXPAND_SCHEMA,
-    1024,
-  );
-  if (!out || !Array.isArray(out.keywords)) return null;
-  return {
-    intent: out.intent === "play" ? "play" : "find",
-    keywords: out.keywords.filter((k) => typeof k === "string").slice(0, 30),
-    phrases: (out.phrases ?? [])
-      .filter((p) => typeof p === "string")
-      .slice(0, 3),
-    catalogNumber:
-      typeof out.catalogNumber === "number" && out.catalogNumber > 0
-        ? out.catalogNumber
-        : null,
-  };
-}
-
-export type Pick = { id: number; confidence: number; reason: string };
-
-const PICK_SYSTEM = `You help a music app pick the song a listener asked for by voice.
-You get what they said and a numbered list of candidate songs from the catalog, each with its title, makers, descriptors, opening lines, and the lyric lines that matched their words.
-Choose the songs that fit what they described — by meaning, not just shared words. Speech-to-text may have misheard them, and they may describe a song in one language whose lyrics are in another.
-
-Return picks: the best matches first, at most 5, only songs that plausibly fit (an empty list is fine).
-For each: the song id, a confidence from 0 to 1 that this is the song they meant, and a reason of at most 12 words, written in the same language the listener used.`;
+The full catalog follows. Each card shows the song's id, title, makers, sound, opening lines and its most repeated lines.`;
 
 const PICK_SCHEMA = {
   type: "object",
   properties: {
+    intent: { type: "string", enum: ["play", "find"] },
     picks: {
       type: "array",
       items: {
@@ -141,55 +74,135 @@ const PICK_SCHEMA = {
       },
     },
   },
-  required: ["picks"],
+  required: ["intent", "picks"],
   additionalProperties: false,
 };
 
-function describe(song: CatalogSong, matched: string[]): string {
-  const parts = [
-    `id: ${song.id}`,
-    `title: ${song.title}`,
+const LINE_CHARS = 90;
+const clip = (s: string) =>
+  s.length > LINE_CHARS ? `${s.slice(0, LINE_CHARS - 1)}…` : s;
+
+// The lines a song repeats most are usually its chorus, the part people
+// remember and the part that says what the song is about.
+function mostRepeated(lines: string[], n: number): string[] {
+  const counts = new Map<string, { line: string; count: number; first: number }>();
+  lines.forEach((line, i) => {
+    const key = line.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
+    if (key.length < 6) return;
+    const entry = counts.get(key);
+    if (entry) entry.count++;
+    else counts.set(key, { line, count: 1, first: i });
+  });
+  return Array.from(counts.values())
+    .filter((e) => e.count >= 2)
+    .sort((a, b) => b.count - a.count || a.first - b.first)
+    .slice(0, n)
+    .map((e) => e.line);
+}
+
+function card(song: CatalogSong): string {
+  const opening = Array.from(new Set(song.lines.slice(0, 8).map(clip))).slice(0, 5);
+  const chorus = mostRepeated(song.lines, 3)
+    .map(clip)
+    .filter((l) => !opening.includes(l));
+  return [
+    `#${song.id} ${song.title}`,
     song.contributors.length
       ? `made by: ${song.contributors.map((c) => c.name).join(", ")}`
       : "",
     song.artist ? `artist: ${song.artist}` : "",
     song.album ? `album: ${song.album}` : "",
     song.descriptors.length ? `sound: ${song.descriptors.join(", ")}` : "",
-    song.lines.length ? `opens with: ${song.lines.slice(0, 4).join(" / ")}` : "",
-    matched.length ? `matched lines: ${matched.join(" / ")}` : "",
-  ];
-  return parts.filter(Boolean).join("\n");
+    opening.length ? `opens: ${opening.join(" / ")}` : "",
+    chorus.length ? `repeats: ${chorus.join(" / ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-// When keyword search finds little, the AI looks at a short card for every song
-// instead, so a purely descriptive ask ("the sad one about the sea") can still
-// land. Cards are title + makers + descriptors + the first lines only.
-export function cardsForWholeCatalog(songs: CatalogSong[]): Hit[] {
-  return songs.map((song) => ({ song, score: 0, matchedLines: [] }));
+// The cards text is memoized per catalog array (the catalog module hands back
+// the same array until its cache refreshes), and is built in id order, so the
+// cached prompt prefix stays byte-identical between searches.
+const cardsCache = new WeakMap<CatalogSong[], string>();
+export function catalogCards(songs: CatalogSong[]): string {
+  let text = cardsCache.get(songs);
+  if (!text) {
+    text = [...songs]
+      .sort((a, b) => a.id - b.id)
+      .map(card)
+      .join("\n\n");
+    cardsCache.set(songs, text);
+  }
+  return text;
 }
 
-export async function pickSongs(
+export type Pick = { id: number; confidence: number; reason: string };
+export type Understanding = { intent: "play" | "find"; picks: Pick[] };
+
+export async function understandAndPick(
   query: string,
-  candidates: Hit[],
-): Promise<Pick[] | null> {
-  if (candidates.length === 0) return [];
-  const list = candidates
-    .map((h, i) => `[${i + 1}]\n${describe(h.song, h.matchedLines)}`)
-    .join("\n\n");
-  const out = await askJson<{ picks: Pick[] }>(
-    PICK_SYSTEM,
-    `Candidate songs:\n\n${list}\n\nThe listener said: ${JSON.stringify(query)}`,
-    PICK_SCHEMA,
-    2048,
-  );
-  if (!out || !Array.isArray(out.picks)) return null;
-  const allowed = new Set(candidates.map((c) => c.song.id));
-  return out.picks
-    .filter((p) => allowed.has(p.id))
-    .map((p) => ({
-      id: p.id,
-      confidence: Math.max(0, Math.min(1, Number(p.confidence) || 0)),
-      reason: String(p.reason ?? "").slice(0, 160),
-    }))
-    .slice(0, 5);
+  songs: CatalogSong[],
+  wordHits: Hit[],
+): Promise<Understanding | null> {
+  const hints = wordHits.length
+    ? wordHits
+        .slice(0, 8)
+        .map(
+          (h) =>
+            `#${h.song.id} ${h.song.title}${
+              h.matchedLines.length
+                ? `: ${h.matchedLines.slice(0, 3).map(clip).join(" / ")}`
+                : ""
+            }`,
+        )
+        .join("\n")
+    : "(none)";
+
+  const response = await getClient().beta.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: [
+      { type: "text", text: INSTRUCTIONS },
+      {
+        type: "text",
+        text: catalogCards(songs),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content: `Songs whose words overlap with what the listener said (a hint only, may be sound-alikes):\n${hints}\n\nThe listener said: ${JSON.stringify(query)}`,
+      },
+    ],
+    output_config: {
+      effort: "low",
+      format: { type: "json_schema", schema: PICK_SCHEMA },
+    },
+    ...fallbackParams(),
+  });
+  if (response.stop_reason === "refusal") return null;
+
+  const text = response.content
+    .map((b) => (b.type === "text" ? b.text : ""))
+    .join("");
+  let out: { intent?: string; picks?: Pick[] };
+  try {
+    out = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(out.picks)) return null;
+  const allowed = new Set(songs.map((s) => s.id));
+  return {
+    intent: out.intent === "find" ? "find" : "play",
+    picks: out.picks
+      .filter((p) => allowed.has(p.id))
+      .map((p) => ({
+        id: p.id,
+        confidence: Math.max(0, Math.min(1, Number(p.confidence) || 0)),
+        reason: String(p.reason ?? "").slice(0, 160),
+      }))
+      .slice(0, 5),
+  };
 }

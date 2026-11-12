@@ -68,6 +68,9 @@ export function VoiceSearch() {
   const [typed, setTyped] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  // True when the server answered by word matching alone (no AI key set), so
+  // the sheet can say why a description didn't land.
+  const [wordsOnly, setWordsOnly] = useState(false);
   const [playingId, setPlayingId] = useState<number | null>(null);
   const [supported, setSupported] = useState(() => !!getRecognizerCtor());
 
@@ -103,10 +106,12 @@ export function VoiceSearch() {
         });
         const data = (await res.json()) as {
           intent?: "play" | "find";
+          ai?: boolean;
           results?: Result[];
           error?: string;
         };
         if (!res.ok) throw new Error(data.error || "Search failed.");
+        setWordsOnly(data.ai === false);
         const found = (data.results ?? []).filter((r) => r.hlsPlaylistKey);
         setResults(found);
         setPhase("done");
@@ -378,6 +383,14 @@ export function VoiceSearch() {
             {message ? (
               <p dir="auto" className="text-sm text-muted" role="status">
                 {message}
+              </p>
+            ) : null}
+
+            {wordsOnly && phase === "done" ? (
+              <p dir="auto" className="text-xs text-muted/70">
+                {lang === "ar-EG"
+                  ? "البحث بالمعنى مش شغّال لسه، فبدوّر بالكلام بس."
+                  : "Meaning search isn't switched on yet, so this matched words only."}
               </p>
             ) : null}
 
