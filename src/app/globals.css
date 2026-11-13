@@ -271,9 +271,8 @@ li:nth-child(2n) .surface-edge::after {
 }
 
 /* Let the art glow -------------------------------------------------------------
-   Covers cast light in their own colours (src/components/art/art-glow.tsx),
-   and the song playing washes the top of the page (now-playing-halo.tsx). The
-   warmth comes from the music's own artwork, so black and red stay as they are. */
+   Covers cast light in their own colours (src/components/art/art-glow.tsx).
+   The warmth comes from the music's own artwork, so black and red stay. */
 .art-glow {
   position: absolute;
   inset: 2% -4% -10%;
@@ -292,73 +291,29 @@ li:nth-child(2n) .surface-edge::after {
   opacity: 1;
 }
 
-.now-playing-halo {
-  position: fixed;
-  top: -22vh;
-  left: -15vw;
-  right: -15vw;
-  height: 80vh;
-  z-index: -1;
-  pointer-events: none;
-  background-size: cover;
-  background-position: center;
-  filter: blur(70px) saturate(1.5);
-  opacity: 0.4;
-  -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 95%);
-  mask-image: linear-gradient(180deg, #000 25%, transparent 95%);
-  will-change: opacity, transform;
-  animation:
-    aired-halo-in 1.6s ease-out both,
-    aired-halo-breathe 11s ease-in-out 1.6s infinite;
-}
-
-@keyframes aired-halo-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 0.4;
-  }
-}
-
-@keyframes aired-halo-breathe {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.28;
-    transform: scale(1.06);
-  }
-}
-
 /* Osama Osama's album "البوم في اي بي" and its song (AIRED-0079): the upload
    carries a long code scrawled across the lower part of the photo. At Tee's
    request AIRED shows only the top of his picture (face and headphones), so
-   the code never appears, and lets it drift slowly into an abstract blur and
-   back. His files are untouched; delete this block to undo. Matched on the
-   two cover files, so it applies on every card, page and the player. */
+   the code never appears. His files are untouched; delete this block to undo.
+   Matched on the two cover files, so it applies on every card, page and the
+   player. object-view-box crops the picture inside its own box (Chrome, Edge,
+   Brave); elsewhere a zoom is used, but only where the frame clips it. */
 img:is(
     [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
     [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
   ) {
   object-fit: cover;
-  transform-origin: 80% 6%;
-  animation: aired-osama-dream 14s ease-in-out infinite;
+  object-view-box: inset(3% 8% 40% 32%);
 }
 
-@keyframes aired-osama-dream {
-  0%,
-  30%,
-  100% {
-    transform: scale(1.7);
-    filter: none;
-  }
-  55%,
-  70% {
-    transform: scale(1.85);
-    filter: blur(7px) saturate(1.7) contrast(1.1) hue-rotate(-12deg);
+@supports not (object-view-box: inset(0)) {
+  :is(a, .overflow-hidden)
+    > img:is(
+      [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
+      [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
+    ) {
+    transform: scale(1.7) !important;
+    transform-origin: 80% 6%;
   }
 }
 
@@ -373,17 +328,7 @@ img:is(
     --neon-angle: 140deg;
   }
 
-  .now-playing-halo {
-    animation: none;
-  }
 
-  img:is(
-      [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
-      [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
-    ) {
-    animation: none;
-    transform: scale(1.7);
-  }
 }
 
 ::selection {
