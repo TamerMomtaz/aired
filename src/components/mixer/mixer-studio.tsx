@@ -93,6 +93,9 @@ type Stage =
       set: MixSource[];
       dj: string | null;
       saved: boolean;
+      // Why the Mixer's own rules planned it, when the DJ brain was asked but
+      // didn't answer.
+      brainMiss: string | null;
     }
   | { kind: "error"; message: string };
 
@@ -115,6 +118,28 @@ function layerLabel(l: Layer, set: MixSource[]): string {
 function names(s: MixSource): string {
   return s.contributors.map((c) => c.name).join(", ") || "AIRED";
 }
+
+const MISS_TEXT: Record<string, string> = {
+  off: "The DJ brain isn't switched on for AIRED yet, so the Mixer's own rules planned this one and your vibe wasn't used.",
+  busy: "The DJ brain was busy with too many plans in a minute, so the Mixer's own rules planned this one. Try again in a minute.",
+  slow: "The DJ brain took too long to answer, so the Mixer's own rules planned this one and your vibe wasn't used. Try Mix again.",
+  error: "The DJ brain couldn't be reached, so the Mixer's own rules planned this one and your vibe wasn't used. Try Mix again.",
+};
+
+// Ideas for the vibe box. Tapping one writes it in; the brain follows it.
+const REMIX_IDEAS = [
+  "Extended club version: long intro, slow build, one huge drop",
+  "Dub version: stripped to the beat, the voice thrown into echoes",
+  "Chop the hook and keep bringing it back",
+  "Start in a breakdown, end in the full chorus",
+  "Late night, dark and hypnotic, few words",
+];
+const SET_IDEAS = [
+  "Sunset: start soft, climb slowly, euphoric peak at the end",
+  "Keep the strongest hook running through every song",
+  "Lots of call and response between the songs",
+  "Hypnotic and deep, long blends, no big drops",
+];
 
 const tick = () => new Promise((r) => setTimeout(r, 20)); // let the label paint
 
@@ -224,10 +249,13 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
 
       // 2. Plan the set: the DJ brain if it's reachable, else the built-in rules.
       let script: SetScript | null = null;
+      let brainMiss: string | null = null;
       if (useBrain) {
-        show("The DJ brain is planning your set", 0.62);
-        script = await askBrain(tracks, analyses, briefs, energy, minutes, vibe, ac.signal);
+        show(vibe.trim() ? "The DJ brain is planning your set from your vibe" : "The DJ brain is planning your set", 0.62);
+        const asked = await askBrain(tracks, analyses, briefs, energy, minutes, vibe, ac.signal);
         if (ac.signal.aborted) return;
+        script = asked.script;
+        brainMiss = asked.script ? null : MISS_TEXT[asked.reason] ?? MISS_TEXT.error;
       }
       script = fixScript(script ?? rulesScript(briefs, energy, minutes), briefs, energy, minutes);
 
@@ -285,6 +313,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         set: tracks,
         dj,
         saved,
+        brainMiss,
       });
     } catch (err) {
       if (ac.signal.aborted) return;
@@ -348,8 +377,26 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         </label>
         <p className="text-xs text-muted">
           It picks the order, the parts, the moves and the big moments, mixing in key, and tells you
-          why. If it can&apos;t be reached, the Mixer plans the set itself.
+          why. It reads the box below and follows it, in English or Arabic: the mood, the pace, the
+          line you love, how it should end. If it can&apos;t be reached, the Mixer plans the set
+          itself and tells you so.
         </p>
+        {useBrain ? (
+          <div className="flex flex-wrap gap-1.5">
+            {(set.length > 0 && set.every((s) => s.id === set[0].id) ? REMIX_IDEAS : SET_IDEAS).map((idea) => (
+              <button
+                key={idea}
+                type="button"
+                onClick={() => setVibe(idea)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  vibe === idea ? "border-white/40 text-foreground" : "border-white/10 text-muted hover:border-white/25 hover:text-foreground"
+                }`}
+              >
+                {idea}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {useBrain ? (
           <input
             type="text"
@@ -446,7 +493,7 @@ async function askBrain(
   minutes: MixMinutes,
   vibe: string,
   signal: AbortSignal,
-): Promise<SetScript | null> {
+): Promise<{ script: SetScript | null; reason: string }> {
   try {
     const res = await fetch("/api/mix/plan", {
       method: "POST",
@@ -468,11 +515,13 @@ async function askBrain(
         })),
       }),
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { ai?: boolean; script?: SetScript };
-    return data.ai && data.script ? data.script : null;
+    const data = (await res.json().catch(() => ({}))) as { ai?: boolean; script?: SetScript; reason?: string };
+    if (res.status === 429) return { script: null, reason: "busy" };
+    if (res.status >= 500) return { script: null, reason: "slow" };
+    if (data.ai && data.script) return { script: data.script, reason: "ok" };
+    return { script: null, reason: data.reason ?? "error" };
   } catch {
-    return null;
+    return { script: null, reason: "error" };
   }
 }
 
@@ -495,6 +544,7 @@ function MixResult({
           {plan.by === "brain" ? "planned by the DJ brain" : "planned by the Mixer's own rules"}
         </p>
         {plan.story ? <p className="mt-1 text-sm text-foreground/90">{plan.story}</p> : null}
+        {stage.brainMiss ? <p className="mt-1 text-xs text-muted">{stage.brainMiss}</p> : null}
       </div>
 
       {/* Its own element, scoped to this page. Pressing play here pauses the
