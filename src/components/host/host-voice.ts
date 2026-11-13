@@ -18,6 +18,10 @@ const SILENT_WAV =
 
 export type VoiceLang = "ar" | "en";
 
+// Told how far into the text the voice has got (in characters), so the words
+// on screen and Kahotia's mouth can keep pace with what is heard.
+export type OnProgress = (chars: number) => void;
+
 function scoreVoice(v: SpeechSynthesisVoice, lang: VoiceLang): number {
   const l = v.lang.toLowerCase();
   if (!l.startsWith(lang)) return -1;
@@ -77,17 +81,22 @@ export class HostVoice {
   }
 
   // Resolves when the host has finished speaking (or was stopped).
-  async say(text: string, lang: VoiceLang, muted = false): Promise<void> {
+  async say(
+    text: string,
+    lang: VoiceLang,
+    muted = false,
+    onProgress?: OnProgress,
+  ): Promise<void> {
     this.stop();
     if (muted || !text.trim()) return;
     if (this.human !== false && this.audio) {
-      const ok = await this.sayHuman(text);
+      const ok = await this.sayHuman(text, onProgress);
       if (ok) return;
     }
-    await this.sayDevice(text, lang);
+    await this.sayDevice(text, lang, onProgress);
   }
 
-  private async sayHuman(text: string): Promise<boolean> {
+  private async sayHuman(text: string, onProgress?: OnProgress): Promise<boolean> {
     let stopped = false;
     const controller = new AbortController();
     this.cancel = () => {
@@ -121,6 +130,7 @@ export class HostVoice {
       const done = (ok: boolean) => {
         audio.onended = null;
         audio.onerror = null;
+        audio.ontimeupdate = null;
         URL.revokeObjectURL(url);
         resolve(ok);
       };
@@ -130,12 +140,17 @@ export class HostVoice {
       };
       audio.onended = () => done(true);
       audio.onerror = () => done(false);
+      audio.ontimeupdate = () => {
+        if (audio.duration > 0 && Number.isFinite(audio.duration)) {
+          onProgress?.(Math.round((text.length * audio.currentTime) / audio.duration));
+        }
+      };
       audio.src = url;
       audio.play().catch(() => done(false));
     });
   }
 
-  private sayDevice(text: string, lang: VoiceLang): Promise<void> {
+  private sayDevice(text: string, lang: VoiceLang, onProgress?: OnProgress): Promise<void> {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       return Promise.resolve();
     }
@@ -156,6 +171,8 @@ export class HostVoice {
         window.clearTimeout(guard);
         resolve();
       }
+      // Most phones report each word as it is spoken.
+      u.onboundary = (e) => onProgress?.(e.charIndex + (e.charLength || 0));
       u.onend = finish;
       u.onerror = finish;
       this.cancel = () => {

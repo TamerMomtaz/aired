@@ -23,6 +23,7 @@ import {
   type Recognizer,
 } from "@/lib/voice/speech";
 import { HostVoice } from "./host-voice";
+import { KahotiaStage } from "./kahotia-stage";
 
 // Kahotia, AIRED's host: AIRED's mascot (half stitched burlap doll, half blue
 // man, braids in fire and sea) says good morning to you by name, asks how you
@@ -92,6 +93,9 @@ export function Host({ name }: { name: string | null }) {
   const [playingId, setPlayingId] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  // How far into his current line Kahotia's voice has got, in characters.
+  const [spoken, setSpoken] = useState(0);
+  const [showChat, setShowChat] = useState(false);
 
   const voiceRef = useRef<HostVoice | null>(null);
   const recRef = useRef<Recognizer | null>(null);
@@ -110,7 +114,7 @@ export function Host({ name }: { name: string | null }) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [turns, phase, songs]);
+  }, [turns, showChat]);
 
   const resumeIfPaused = useCallback(() => {
     if (pausedRef.current) {
@@ -129,8 +133,9 @@ export function Host({ name }: { name: string | null }) {
   // Host speaks, then (unless music is starting) listens for the answer.
   const speakThenListen = useCallback(
     async (text: string, l: HostLang, listenAfter: boolean) => {
+      setSpoken(0);
       setPhase("speaking");
-      await voice().say(text, l, muted);
+      await voice().say(text, l, muted, setSpoken);
       if (!openRef.current) return;
       if (listenAfter && getRecognizerCtor()) listenRef.current();
       else setPhase("idle");
@@ -311,6 +316,8 @@ export function Host({ name }: { name: string | null }) {
     ? "bottom-[calc(env(safe-area-inset-bottom)+11rem)]"
     : "bottom-[calc(env(safe-area-inset-bottom)+5.75rem)]";
   const canListen = !!getRecognizerCtor();
+  const lastHostLine =
+    [...turns].reverse().find((t) => t.role === "host")?.text ?? hello;
 
   return (
     <>
@@ -358,12 +365,11 @@ export function Host({ name }: { name: string | null }) {
             role="dialog"
             aria-modal="true"
             aria-label="Talk with Kahotia"
-            className="flex max-h-[88dvh] w-full max-w-lg flex-col gap-3 rounded-t-2xl border border-white/10 bg-background p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:rounded-2xl"
+            className="flex max-h-[92dvh] w-full max-w-lg flex-col gap-3 overflow-y-auto rounded-t-2xl border border-white/10 bg-background p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <HostAvatar className="size-10" active={phase === "speaking"} />
                 <div className="flex flex-col leading-tight">
                   <h2 className="text-base font-semibold text-foreground">Kahotia</h2>
                   <span className="text-[11px] text-muted">{ar ? "مضيف AIRED" : "your AIRED host"}</span>
@@ -416,35 +422,17 @@ export function Host({ name }: { name: string | null }) {
               </div>
             </div>
 
-            <div ref={scrollRef} className="-mx-1 flex min-h-24 flex-col gap-2 overflow-y-auto px-1">
-              {turns.map((t, i) => (
-                <p
-                  key={i}
-                  dir="auto"
-                  className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                    t.role === "host"
-                      ? "self-start rounded-bl-sm bg-white/[0.07] text-foreground"
-                      : "self-end rounded-br-sm bg-foreground text-background"
-                  }`}
-                >
-                  {t.text}
-                </p>
-              ))}
-              {phase === "listening" && heard ? (
-                <p dir="auto" className="max-w-[85%] self-end rounded-2xl rounded-br-sm bg-foreground/60 px-3.5 py-2 text-sm text-background">
-                  {heard}
-                </p>
-              ) : null}
-              {phase === "thinking" ? (
-                <p className="self-start rounded-2xl rounded-bl-sm bg-white/[0.07] px-3.5 py-2 text-sm text-muted">
-                  <span className="inline-flex gap-1">
-                    <Dot delay="0ms" />
-                    <Dot delay="150ms" />
-                    <Dot delay="300ms" />
-                  </span>
-                </p>
-              ) : null}
+            <KahotiaStage
+              line={lastHostLine}
+              speaking={phase === "speaking" && !muted}
+              spoken={spoken}
+              listening={phase === "listening"}
+              thinking={phase === "thinking"}
+              heard={heard}
+              ar={ar}
+            />
 
+            <div className="flex flex-col gap-2">
               {songs.length > 0 ? (
                 <ul className="mt-1 flex flex-col gap-1">
                   {songs.map((s, i) => (
@@ -486,6 +474,38 @@ export function Host({ name }: { name: string | null }) {
                 </ul>
               ) : null}
             </div>
+
+            {turns.length > 1 ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowChat((v) => !v)}
+                  aria-expanded={showChat}
+                  className="self-center text-xs text-muted underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  {showChat
+                    ? ar ? "اخفي الكلام" : "Hide what we said"
+                    : ar ? "اعرض الكلام كله" : "Show what we said"}
+                </button>
+                {showChat ? (
+                  <div ref={scrollRef} className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+                    {turns.map((t, i) => (
+                      <p
+                        key={i}
+                        dir="auto"
+                        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                          t.role === "host"
+                            ? "self-start rounded-bl-sm bg-white/[0.07] text-foreground"
+                            : "self-end rounded-br-sm bg-foreground text-background"
+                        }`}
+                      >
+                        {t.text}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {note ? (
               <p dir="auto" className="text-sm text-muted" role="status">
@@ -561,15 +581,6 @@ export function Host({ name }: { name: string | null }) {
         </div>
       ) : null}
     </>
-  );
-}
-
-function Dot({ delay }: { delay: string }) {
-  return (
-    <span
-      className="size-1.5 animate-bounce rounded-full bg-current motion-reduce:animate-none"
-      style={{ animationDelay: delay }}
-    />
   );
 }
 
