@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdornButton } from "@/components/library/adorn-button";
+import { MixLink } from "@/components/mixer/mix-link";
 import { usePlayer } from "@/components/player/player-provider";
 import type { Track } from "@/components/player/track";
 import { formatCatalogId } from "@/lib/catalog";
@@ -163,6 +164,7 @@ export function MoodSongList({
               ) : null}
 
               <AdornButton workId={track.id} title={track.title} size="sm" />
+              {track.hlsPlaylistKey ? <MixLink workId={track.id} title={track.title} size="sm" /> : null}
 
               <div className="flex shrink-0 items-center">
                 <button

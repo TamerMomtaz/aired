@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { AdornButton } from "@/components/library/adorn-button";
+import { MixLink } from "@/components/mixer/mix-link";
 import { DownloadButton } from "@/components/offline/download-button";
 import { usePlayer, usePlayerClock } from "@/components/player/player-provider";
 import { formatCatalogId } from "@/lib/catalog";
@@ -177,6 +178,11 @@ export function NowPlayingBar() {
             {/* Keep the song you're hearing, without leaving the page you're on
                 — the most natural moment to adorn something is while it plays. */}
             {isMix ? null : <AdornButton workId={current.id} title={current.title} size="sm" />}
+            {isMix || !current.hlsPlaylistKey ? null : (
+              <span className="hidden sm:inline-flex">
+                <MixLink workId={current.id} title={current.title} size="sm" />
+              </span>
+            )}
             {current.hlsPlaylistKey && !isMix ? (
               <DownloadButton
                 variant="compact"

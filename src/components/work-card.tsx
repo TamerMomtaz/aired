@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { AdornButton } from "@/components/library/adorn-button";
+import { MixLink } from "@/components/mixer/mix-link";
 import { CardPlayButton } from "@/components/player/card-play-button";
 import type { Track } from "@/components/player/track";
 import { PlayCount } from "@/components/play-count";
@@ -85,6 +86,13 @@ export function WorkCard({
           title={work.title}
           className="absolute bottom-2 left-2 z-10 border border-white/15 bg-background/70 backdrop-blur hover:border-white/30 hover:bg-background/85"
         />
+        {work.hls_playlist_key ? (
+          <MixLink
+            workId={work.id}
+            title={work.title}
+            className="absolute bottom-2 left-12 z-10 border border-white/15 bg-background/70 text-foreground backdrop-blur hover:border-white/30 hover:bg-background/85"
+          />
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

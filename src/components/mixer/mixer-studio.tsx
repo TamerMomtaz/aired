@@ -143,8 +143,9 @@ const SET_IDEAS = [
 
 const tick = () => new Promise((r) => setTimeout(r, 20)); // let the label paint
 
-export function MixerStudio({ sources }: { sources: MixSource[] }) {
-  const [setIds, setSetIds] = useState<number[]>(sources.slice(0, 2).map((s) => s.id));
+export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; initialIds?: number[] }) {
+  // A song's "Mix it" button opens the Mixer with that song in the set.
+  const [setIds, setSetIds] = useState<number[]>(initialIds ?? sources.slice(0, 2).map((s) => s.id));
   const [energy, setEnergy] = useState<Energy>("club");
   const [minutes, setMinutes] = useState<MixMinutes>(5);
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
