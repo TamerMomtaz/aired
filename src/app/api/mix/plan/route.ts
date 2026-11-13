@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { mixBrainEnabled, planWithBrain } from "@/lib/mixer/brain";
+import { BRAIN_DEADLINE_MS, mixBrainEnabled, planWithBrain } from "@/lib/mixer/brain";
 import { keyFromTonic } from "@/lib/mixer/key";
 import type { Energy, MixMinutes, SongBrief } from "@/lib/mixer/script";
 import type { PhraseLabel } from "@/lib/mixer/structure";
@@ -39,7 +39,7 @@ const num = (x: unknown, lo: number, hi: number, d: number) =>
   typeof x === "number" && Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d;
 
 export async function POST(req: Request) {
-  if (!mixBrainEnabled()) return NextResponse.json({ ai: false });
+  if (!mixBrainEnabled()) return NextResponse.json({ ai: false, reason: "off" });
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
   if (!allow(ip)) return NextResponse.json({ ai: false, reason: "busy" }, { status: 429 });
 
@@ -83,11 +83,24 @@ export async function POST(req: Request) {
     });
   }
 
+  // One line per plan, with no song or vibe text, so the logs show whether the
+  // brain is answering and how fast.
+  const started = Date.now();
+  const log = (outcome: string) =>
+    console.log(
+      `mix-plan ${outcome} in ${Date.now() - started}ms · ${songs.length} song(s) · ${energy} · ${minutes} min · vibe ${vibe ? "yes" : "no"}`,
+    );
   try {
     const script = await planWithBrain({ songs, energy, minutes, vibe });
-    if (!script) return NextResponse.json({ ai: false });
+    if (!script) {
+      log("unreadable");
+      return NextResponse.json({ ai: false, reason: "error" });
+    }
+    log(`ok ${script.visits.length} parts`);
     return NextResponse.json({ ai: true, script });
-  } catch {
-    return NextResponse.json({ ai: false });
+  } catch (e) {
+    const slow = Date.now() - started >= BRAIN_DEADLINE_MS - 500;
+    log(slow ? "too slow" : `failed (${e instanceof Error ? e.name : "error"})`);
+    return NextResponse.json({ ai: false, reason: slow ? "slow" : "error" });
   }
 }
