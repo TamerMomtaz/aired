@@ -5,7 +5,7 @@
 // credits inside the WAV (RIFF INFO) are carried over as ID3 tags, so every
 // maker of every source song still travels with the file.
 
-type Tags = { title: string; artist: string; comment: string; software: string };
+type Tags = { title: string; artist: string; comment: string; software: string; setList: string };
 
 const KBPS = 192;
 const BLOCK = 1152 * 40; // samples per encode step; yield to the page between
@@ -17,7 +17,7 @@ function readWav(buf: ArrayBuffer): { channels: number; sampleRate: number; pcm:
   let channels = 2;
   let sampleRate = 44100;
   let pcm: Int16Array | null = null;
-  const tags: Tags = { title: "", artist: "", comment: "", software: "" };
+  const tags: Tags = { title: "", artist: "", comment: "", software: "", setList: "" };
   const dec = new TextDecoder();
   for (let o = 12; o + 8 <= buf.byteLength; ) {
     const cid = id(o);
@@ -39,6 +39,7 @@ function readWav(buf: ArrayBuffer): { channels: number; sampleRate: number; pcm:
         if (fid === "IART") tags.artist = text;
         if (fid === "ICMT") tags.comment = text;
         if (fid === "ISFT") tags.software = text;
+        if (fid === "ISBJ") tags.setList = text;
         p += 8 + flen + (flen % 2);
       }
     }
@@ -48,8 +49,8 @@ function readWav(buf: ArrayBuffer): { channels: number; sampleRate: number; pcm:
   return { channels, sampleRate, pcm, tags };
 }
 
-// A minimal ID3v2.3 tag: title, artist, comment (the credits) and encoder,
-// all as UTF-16 text so Arabic names come through intact.
+// A minimal ID3v2.3 tag: title, artist, comment (the credits), the set list
+// and encoder, all as UTF-16 text so Arabic names come through intact.
 function id3(tags: Tags): Uint8Array {
   const utf16 = (s: string) => {
     const out = new Uint8Array(2 + s.length * 2);
@@ -86,10 +87,21 @@ function id3(tags: Tags): Uint8Array {
     p.set(t, 4 + desc.length + 2);
     return p;
   };
+  // User text frame: a description ("AIRED set list") and the text.
+  const txxx = (descText: string, s: string) => {
+    const d = utf16(descText);
+    const t = utf16(s);
+    const p = new Uint8Array(1 + d.length + 2 + t.length + 2);
+    p[0] = 1;
+    p.set(d, 1);
+    p.set(t, 1 + d.length + 2);
+    return p;
+  };
   const frames = [
     tags.title && frame("TIT2", text(tags.title)),
     tags.artist && frame("TPE1", text(tags.artist)),
     tags.comment && frame("COMM", comment(tags.comment)),
+    tags.setList && frame("TXXX", txxx("AIRED set list", tags.setList)),
     frame("TSSE", text(tags.software || "AIRED Mixer")),
   ].filter((f): f is Uint8Array<ArrayBuffer> => !!f);
   const size = frames.reduce((n, f) => n + f.length, 0);

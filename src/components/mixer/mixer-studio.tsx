@@ -283,6 +283,12 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
           tracks.map((t) => `${formatWorkLabel(t.id, t.title)} by ${names(t)}`).join("; ") +
           `. ${dj ? `Mixed by ${dj}. ` : ""}${plan.by === "brain" ? "Planned by the AIRED DJ brain (Claude, Anthropic)" : "Planned by the AIRED Mixer"}; beat-matched and mixed by the AIRED Mixer. ai-red.io`,
         software: "AIRED Mixer",
+        setList: plan.visits
+          .map(
+            (v) =>
+              `${formatDuration(Math.round(v.at))} ${tracks[v.song]?.title ?? "?"} (from ${formatDuration(Math.round(v.sourceStart))}, ${v.bars} bars) · ${MOVE_LABEL[v.move]}${fxLabel(v.fx)}${v.layers.length ? ` · ${v.layers.length} line${v.layers.length > 1 ? "s" : ""}` : ""}`,
+          )
+          .join("\n"),
       });
       // Keep it in MixaTee, on this device, with every credit.
       const saved = await saveMix(
