@@ -2,14 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getVoiceCatalog, type CatalogSong } from "@/lib/voice/catalog";
 import { queryTerms } from "@/lib/voice/normalize";
-import { scoreCatalog, type Hit } from "@/lib/voice/score";
-import {
-  cardsForWholeCatalog,
-  expandQuery,
-  pickSongs,
-  voiceAiEnabled,
-  type Expansion,
-} from "@/lib/voice/understand";
+import { scoreCatalog } from "@/lib/voice/score";
+import { understandAndPick, voiceAiEnabled } from "@/lib/voice/understand";
 import { parseCatalogQuery } from "@/lib/works/queries";
 
 // POST /api/voice-search — "play the song where she says…"
@@ -17,9 +11,10 @@ import { parseCatalogQuery } from "@/lib/works/queries";
 // Body: { q: string }  (what the listener said or typed, any language)
 // Reply: { intent, ai, results: [{ id, title, …, reason, snippet, confidence }] }
 //
-// Flow: (AI, optional) widen the words → keyword-score the live catalog →
-// (AI, optional) pick the song meant and say why. With no ANTHROPIC_API_KEY it
-// is keyword search alone, which still handles a remembered lyric or title.
+// Flow: keyword-score the live catalog → (AI, optional) Claude reads a card for
+// every song plus those word matches and picks the song meant, by lyric, theme,
+// mood or maker, and says why. With no ANTHROPIC_API_KEY it is keyword search
+// alone, which handles a remembered lyric or title but not a description.
 //
 // Public data only (see lib/voice/catalog). The query is never stored or logged.
 
@@ -108,45 +103,32 @@ export async function POST(request: Request) {
   const byId = new Map(songs.map((s) => [s.id, s]));
 
   const ai = voiceAiEnabled();
-  let expansion: Expansion | null = null;
-  if (ai) {
-    try {
-      expansion = await expandQuery(q);
-    } catch {
-      expansion = null; // keyword search carries on without it
-    }
-  }
+  let intent: "play" | "find" = PLAY_WORDS.test(q) ? "play" : "find";
 
-  const intent: "play" | "find" =
-    expansion?.intent ?? (PLAY_WORDS.test(q) ? "play" : "find");
-
-  // A spoken catalog number ("AIRED twelve" → 12) goes straight to that song.
-  const num = expansion?.catalogNumber ?? parseCatalogQuery(q);
+  // A spoken catalog number ("AIRED 12") goes straight to that song.
+  const num = parseCatalogQuery(q);
   if (num !== null && byId.has(num)) {
     return NextResponse.json({
       intent,
-      ai: !!expansion,
+      ai,
       results: [toResult(byId.get(num)!, { confidence: 1 })],
     });
   }
 
-  const terms = [...queryTerms(q), ...(expansion?.keywords ?? [])];
-  const phrases = [q, ...(expansion?.phrases ?? [])];
-  const hits = scoreCatalog(songs, terms, phrases, 12);
+  const hits = scoreCatalog(songs, queryTerms(q), [q], 12);
 
   if (ai) {
-    // Few or weak keyword hits → let the AI look over short cards for the
-    // whole catalog, so "the calm one about the sea" can still land.
-    const candidates: Hit[] =
-      hits.length >= 3 ? hits.slice(0, 10) : [...hits, ...cardsForWholeCatalog(songs).filter((c) => !hits.some((h) => h.song.id === c.song.id))];
+    // Claude sees every song's card plus these word matches as a hint, and
+    // picks by meaning (see lib/voice/understand).
     try {
-      const picks = await pickSongs(q, candidates);
-      if (picks) {
+      const understood = await understandAndPick(q, songs, hits);
+      if (understood) {
+        intent = understood.intent;
         const matched = new Map(hits.map((h) => [h.song.id, h.matchedLines]));
         return NextResponse.json({
           intent,
           ai: true,
-          results: picks.map((p) =>
+          results: understood.picks.map((p) =>
             toResult(byId.get(p.id)!, {
               reason: p.reason,
               snippet: matched.get(p.id)?.[0] ?? null,
@@ -155,8 +137,12 @@ export async function POST(request: Request) {
           ),
         });
       }
-    } catch {
-      // fall through to keyword ranking
+    } catch (err) {
+      // Never log the query itself; the error class is enough to diagnose.
+      console.error(
+        "voice-search: AI step failed, using word matching",
+        err instanceof Error ? err.name : "unknown",
+      );
     }
   }
 
