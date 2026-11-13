@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 
 import { BRAIN_DEADLINE_MS, mixBrainEnabled, planWithBrain } from "@/lib/mixer/brain";
 import { keyFromTonic } from "@/lib/mixer/key";
+import { moodById } from "@/lib/mixer/moods";
 import type { Energy, MixMinutes, SongBrief } from "@/lib/mixer/script";
 import type { PhraseLabel } from "@/lib/mixer/structure";
 import { getVoiceCatalog } from "@/lib/voice/catalog";
 
 // POST /api/mix/plan — ask the DJ brain for a set script.
 //
-// Body: { vibe?, energy, minutes, songs: [{ id, bpm, tonic, minor, keyConfidence,
+// Body: { vibe?, mood?, energy, minutes, songs: [{ id, bpm, tonic, minor, keyConfidence,
 //         duration, phrases: [{ start, label, energy, bass, vocal, lines }] }] }
 // Reply: { ai: true, script } or { ai: false } (the browser then plans with its
 //         built-in rules, so the Mixer always works).
@@ -49,7 +50,13 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ai: false }, { status: 400 });
   }
-  const energy: Energy = body.energy === "lounge" || body.energy === "peak" ? body.energy : "club";
+  // A mood carries its own energy; the plain energy field stays for old clients.
+  const mood = typeof body.mood === "string" ? moodById(body.mood) : null;
+  const energy: Energy = mood
+    ? mood.energy
+    : body.energy === "lounge" || body.energy === "peak"
+      ? body.energy
+      : "club";
   const minutes: MixMinutes = body.minutes === 7 || body.minutes === 10 ? body.minutes : 5;
   const vibe = typeof body.vibe === "string" ? body.vibe.slice(0, 300) : "";
   const rawSongs = Array.isArray(body.songs) ? body.songs.slice(0, 6) : [];
@@ -89,10 +96,10 @@ export async function POST(req: Request) {
   const started = Date.now();
   const log = (outcome: string) =>
     console.log(
-      `mix-plan ${outcome} in ${Date.now() - started}ms · ${songs.length} song(s) · ${energy} · ${minutes} min · vibe ${vibe ? "yes" : "no"}`,
+      `mix-plan ${outcome} in ${Date.now() - started}ms · ${songs.length} song(s) · ${mood?.id ?? energy} · ${minutes} min · vibe ${vibe ? "yes" : "no"}`,
     );
   try {
-    const script = await planWithBrain({ songs, energy, minutes, vibe });
+    const script = await planWithBrain({ songs, energy, minutes, vibe, mood: mood ?? undefined });
     if (!script) {
       log("unreadable");
       return NextResponse.json({ ai: false, reason: "error" });

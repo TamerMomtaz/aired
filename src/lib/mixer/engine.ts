@@ -48,6 +48,7 @@ import {
   type Move,
   type SetScript,
 } from "./script";
+import { classicMood, type Groove, type Mood } from "./moods";
 import { refineStart, type Structure } from "./structure";
 import type { Tempo } from "./tempo";
 
@@ -483,6 +484,7 @@ export async function renderSet(
   plan: MixPlan,
   energy: Energy,
   tag?: AudioBuffer | null,
+  mood: Mood = classicMood(energy),
 ): Promise<AudioBuffer> {
   const total = plan.end + TAIL_SECONDS;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * MIX_SAMPLE_RATE), MIX_SAMPLE_RATE);
@@ -512,7 +514,23 @@ export async function renderSet(
   const warmth = ctx.createBiquadFilter();
   warmth.type = "lowpass";
   warmth.frequency.value = energy === "lounge" ? 9000 : 20000;
-  master.connect(masterHp).connect(warmth).connect(comp);
+  // The mood's tone: Deep House warm and round, Strings Lift bright, Oud
+  // Spotlight with the melody range forward.
+  const tone = mood.tone ?? { low: 0, mid: 0, high: 0 };
+  const toneLow = ctx.createBiquadFilter();
+  toneLow.type = "lowshelf";
+  toneLow.frequency.value = 150;
+  toneLow.gain.value = tone.low;
+  const toneMid = ctx.createBiquadFilter();
+  toneMid.type = "peaking";
+  toneMid.frequency.value = 1800;
+  toneMid.Q.value = 0.7;
+  toneMid.gain.value = tone.mid;
+  const toneHigh = ctx.createBiquadFilter();
+  toneHigh.type = "highshelf";
+  toneHigh.frequency.value = 7000;
+  toneHigh.gain.value = tone.high;
+  master.connect(masterHp).connect(warmth).connect(toneLow).connect(toneMid).connect(toneHigh).connect(comp);
   // The outro: over the last 8 bars the low end thins and the level eases
   // down, then the music fades out through the tail under the echo, the way a
   // DJ rides the fader down on a last record.
@@ -536,13 +554,13 @@ export async function renderSet(
   delay.delayTime.value = beat * 0.75;
   const fb = ctx.createGain();
   fb.gain.value = 0.42;
-  const tone = ctx.createBiquadFilter();
-  tone.type = "bandpass";
-  tone.frequency.value = 1500;
-  tone.Q.value = 0.6;
+  const echoTone = ctx.createBiquadFilter();
+  echoTone.type = "bandpass";
+  echoTone.frequency.value = 1500;
+  echoTone.Q.value = 0.6;
   echoSend.connect(delay);
-  delay.connect(tone).connect(fb).connect(delay);
-  tone.connect(master);
+  delay.connect(echoTone).connect(fb).connect(delay);
+  echoTone.connect(master);
   echoSend.gain.setValueAtTime(0, outroFrom);
   echoSend.gain.linearRampToValueAtTime(0.6, plan.end);
 
@@ -722,6 +740,23 @@ export async function renderSet(
 
     // -- inside the part --
     const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
+    // A drum solo instead of the stutter build: the music is thrown into
+    // its echo and falls away, and the darbuka plays alone into the drop.
+    const solo = v.fx.loopBuild && mood.signature === "drumSolo" && !!mood.groove && !!next;
+    if (solo) {
+      gain.gain.setValueAtTime(g, loopFrom - 0.04);
+      gain.gain.linearRampToValueAtTime(0, loopFrom + 0.01);
+      send.gain.setValueAtTime(0, loopFrom - beat);
+      send.gain.linearRampToValueAtTime(0.8, loopFrom - 0.02);
+      send.gain.linearRampToValueAtTime(0, loopFrom + 0.01);
+    }
+    // A taqsim: in a breakdown the melody plays alone into a long echo.
+    if (v.fx.breakdown && mood.signature === "taqsim" && next) {
+      send.gain.setValueAtTime(0, T);
+      send.gain.linearRampToValueAtTime(0.32, T + bar);
+      send.gain.setValueAtTime(0.32, Math.max(T + bar, loopFrom - 2 * bar));
+      send.gain.linearRampToValueAtTime(0, Math.max(T + bar + 0.01, loopFrom - 2 * beat));
+    }
     if (v.fx.breakdown && covered(T + beat, loopFrom - bar)) {
       // On stems: the beat and the bass fall away, leaving the voice and the
       // music; the drums build back over the last bar, the bass lands after.
@@ -800,8 +835,8 @@ export async function renderSet(
     }
 
     // -- the audio itself --
-    play(startAt, Math.min(stopAt, v.fx.loopBuild ? loopFrom : stopAt), clipAt(startAt));
-    if (v.fx.loopBuild) {
+    play(startAt, Math.min(stopAt, v.fx.loopBuild ? loopFrom + (solo ? 0.02 : 0) : stopAt), clipAt(startAt));
+    if (v.fx.loopBuild && !solo) {
       // The stutter build: the bar before the loop, repeated, tighter and
       // tighter: 1 bar, 1 bar, ½, ½, then four ¼-bar hits.
       const src0 = clipAt(loopFrom - bar);
@@ -922,15 +957,34 @@ export async function renderSet(
   const pump = pumpBuf.getChannelData(0);
   pump.fill(1);
 
-  const kick = (t: number, lvl: number) => {
+  // A soft kick (deep house, oud electro) is rounder: a lower start and a
+  // slower sweep, so it thumps instead of clicking.
+  const kick = (t: number, lvl: number, soft = false) => {
     const s0 = Math.round(t * sr);
     const n = Math.round(0.4 * sr);
+    const f0 = soft ? 95 : 150;
+    const sweep = soft ? 0.08 : 0.12;
     let phase = 0;
     for (let i = 0; i < n && s0 + i < dr.length; i++) {
       const x = i / sr;
-      const f = x < 0.12 ? 150 * Math.pow(45 / 150, x / 0.12) : 45;
+      const f = x < sweep ? f0 * Math.pow(45 / f0, x / sweep) : 45;
       phase += (2 * Math.PI * f) / sr;
-      dr[s0 + i] += lvl * Math.exp(-x * 19.7) * Math.sin(phase);
+      dr[s0 + i] += lvl * Math.exp(-x * (soft ? 16 : 19.7)) * Math.sin(phase);
+    }
+  };
+  // A tuned membrane: a sine gliding from f0 to f1 over `glide` seconds,
+  // dying away at `decay` per second.
+  const membrane = (t: number, lvl: number, f0: number, f1: number, glide: number, decay: number, len: number) => {
+    const s0 = Math.round(t * sr);
+    const n = Math.round(len * sr);
+    let phase = 0;
+    for (let i = 0; i < n && s0 + i < dr.length; i++) {
+      const x = i / sr;
+      const f = x < glide ? f0 * Math.pow(f1 / f0, x / glide) : f1;
+      phase += (2 * Math.PI * f) / sr;
+      // A 2 ms attack so the hit never clicks.
+      const a = Math.min(1, x / 0.002);
+      dr[s0 + i] += lvl * a * Math.exp(-x * decay) * Math.sin(phase);
     }
   };
   // Filtered noise with an exponential tail, through a one-off biquad.
@@ -970,6 +1024,85 @@ export async function renderSet(
     noiseHit(t, lvl, "bp", 1400, 0.9, 0.012);
     noiseHit(t + 0.012, lvl * 0.8, "bp", 1400, 0.9, 0.012);
     noiseHit(t + 0.024, lvl, "bp", 1400, 0.9, 0.2);
+  };
+  const openHat = (t: number, lvl: number) => noiseHit(t, lvl, "hp", 7500, 0.7, 0.24);
+  const shaker = (t: number, lvl: number) => noiseHit(t, lvl, "hp", 6500, 0.7, 0.035);
+  // The hand drums. A darbuka's doum is a tuned low thump with a slap of skin
+  // on top; its tek is the bright crack of the rim. The dabke tabl is bigger
+  // and deeper, struck with a stick. Congas sit in between.
+  const doum = (t: number, lvl: number, drum: Groove["drum"]) => {
+    if (drum === "tabl") {
+      membrane(t, lvl, 92, 54, 0.07, 7, 0.6);
+      noiseHit(t, lvl * 0.25, "bp", 500, 1, 0.03);
+    } else {
+      membrane(t, lvl * 0.9, 120, 82, 0.05, 10, 0.45);
+      noiseHit(t, lvl * 0.18, "bp", 700, 1, 0.02);
+    }
+  };
+  const tek = (t: number, lvl: number, drum: Groove["drum"], soft = false) => {
+    const l = soft ? lvl * 0.5 : lvl;
+    if (drum === "tabl") {
+      noiseHit(t, l * 0.9, "bp", 2400, 1, 0.06);
+      membrane(t, l * 0.3, 720, 680, 0.02, 45, 0.08);
+    } else {
+      noiseHit(t, l, "bp", soft ? 3000 : 3800, 1.4, 0.045);
+      membrane(t, l * 0.35, 1250, 1180, 0.01, 60, 0.06);
+    }
+  };
+  const conga = (t: number, lvl: number, high: boolean) => {
+    const f = high ? 330 : 215;
+    membrane(t, lvl, f * 1.06, f, 0.03, 14, 0.3);
+    noiseHit(t, lvl * 0.15, "bp", 2000, 1, 0.01);
+  };
+  const strike = (ch: string, t: number, lvl: number, drum: Groove["drum"]) => {
+    if (ch === "D") doum(t, lvl * 0.55, drum);
+    else if (ch === "T") tek(t, lvl * 0.32, drum);
+    else if (ch === "k") tek(t, lvl * 0.32, drum, true);
+    else if (ch === "c") conga(t, lvl * 0.3, true);
+    else if (ch === "C") conga(t, lvl * 0.34, false);
+    else if (ch === "s") shaker(t, lvl * 0.06);
+  };
+  // The groove from `from` to `to`, locked to the set's bar grid (so the
+  // pattern never restarts mid-bar at a part change), with its fill on the
+  // last bar of every eight.
+  const setStart = visits[0]?.at ?? 0;
+  const sixteenth = beat / 4;
+  const playGroove = (gr: Groove, from: number, to: number, lvl: number) => {
+    const first = Math.ceil((from - setStart) / sixteenth - 1e-6);
+    for (let k = first; ; k++) {
+      const t = setStart + k * sixteenth;
+      if (t >= to - 1e-3) break;
+      const barNo = Math.floor(k / 16);
+      const step = ((k % 16) + 16) % 16;
+      const fillBar = gr.fill && barNo % 8 === 7;
+      const ch = fillBar ? gr.fill![step] : gr.steps[(k % gr.steps.length + gr.steps.length) % gr.steps.length];
+      if (ch && ch !== ".") strike(ch, t, lvl, gr.drum);
+    }
+  };
+  // The drum solo: four bars that climb. Two bars of fills, a bar of doum and
+  // tek trading every sixteenth, then a roll of the rim in thirty-seconds
+  // swelling into the drop.
+  // It plays alone, so it plays up: about as loud as the music it replaced.
+  const drumSolo = (gr: Groove, from: number, to: number, level: number) => {
+    const lvl = level * 1.7;
+    const fill = gr.fill ?? "D.TkTkD.TkTkTkTk";
+    for (let b = 0; b < 2; b++) {
+      for (let st = 0; st < 16; st++) {
+        const ch = fill[st];
+        if (ch !== ".") strike(ch, from + b * bar + st * sixteenth, lvl * (b === 0 ? 0.9 : 1.05), gr.drum);
+      }
+    }
+    for (let st = 0; st < 16; st++) {
+      const t = from + 2 * bar + st * sixteenth;
+      strike(st % 4 === 0 ? "D" : st % 2 === 0 ? "T" : "k", t, lvl * (0.85 + (0.3 * st) / 16), gr.drum);
+    }
+    const rollFrom = from + 3 * bar;
+    for (let st = 0; st < 32; st++) {
+      const t = rollFrom + st * (sixteenth / 2);
+      if (t >= to - 1e-3) break;
+      if (st % 8 === 0) strike("D", t, lvl * (0.9 + (0.4 * st) / 32), gr.drum);
+      strike(st % 2 === 0 ? "T" : "k", t, lvl * (0.7 + (0.6 * st) / 32), gr.drum);
+    }
   };
   const pumpAt = (t: number, depth: number) => {
     const s0 = Math.round(t * PUMP_RATE);
@@ -1024,23 +1157,52 @@ export async function renderSet(
       for (let b = T; b < Tend - 1e-3; b += beat) pumpAt(b, depth);
     }
     if (song.synced) {
-      const kLvl = (fx.claps ? 0.65 : 0.5) * level;
+      const kit = mood.kit;
+      const kLvl = (fx.claps ? 0.65 : 0.5) * level * (kit.kick === "soft" ? 0.7 : 1);
       // During a loop build the kick doubles up with the stutter.
       const loopFrom = fx.loopBuild ? Tend - 4 * bar : Tend;
-      if (fx.kick) {
-        for (let b = T; b < loopFrom - 1e-3; b += beat) kick(b, kLvl);
-        if (fx.loopBuild) {
+      const solo = fx.loopBuild && mood.signature === "drumSolo" && !!mood.groove && !!next;
+      const drumsTo = solo ? loopFrom : Tend;
+      if (fx.kick && kit.kick !== "none") {
+        for (let b = T; b < loopFrom - 1e-3; b += beat) kick(b, kLvl, kit.kick === "soft");
+        if (fx.loopBuild && !solo) {
           for (let b = loopFrom; b < Tend - 2 * bar - 1e-3; b += beat) kick(b, kLvl);
           for (let b = Tend - 2 * bar; b < Tend - bar - 1e-3; b += beat / 2) kick(b, kLvl * 0.9);
           for (let b = Tend - bar; b < Tend - 1e-3; b += beat / 4) kick(b, kLvl * 0.8);
         }
       }
-      if (fx.hats) for (let b = T + beat / 2; b < Tend; b += beat) hat(b, 0.13 * level);
-      if (fx.claps) for (let b = T + beat; b < Tend; b += 2 * beat) clap(b, 0.3 * level);
+      if (fx.hats) {
+        if (kit.hats === "off") for (let b = T + beat / 2; b < drumsTo; b += beat) hat(b, 0.13 * level);
+        else if (kit.hats === "open") for (let b = T + beat / 2; b < drumsTo; b += beat) openHat(b, 0.11 * level);
+        else if (kit.hats === "sixteenths") {
+          for (let k = 0, b = T; b < drumsTo - 1e-3; k++, b = T + (k * beat) / 4) {
+            hat(b, (k % 4 === 2 ? 0.13 : 0.06) * level);
+          }
+        }
+      }
+      if (fx.claps && kit.claps) for (let b = T + beat; b < drumsTo; b += 2 * beat) clap(b, 0.3 * level);
+      const drumsOn = fx.kick || fx.hats || fx.claps;
+      if (kit.shaker && (drumsOn || mood.grooveIn === "always") && !fx.breakdown) {
+        for (let k = 0, b = T; b < drumsTo - 1e-3; k++, b = T + (k * beat) / 4) {
+          shaker(b, (k % 2 === 1 ? 0.07 : 0.04) * level);
+        }
+      }
+      // The mood's own groove: darbuka, tabl or hand percussion.
+      const gr = mood.groove;
+      const where = mood.grooveIn ?? "drums";
+      const grooveOn =
+        !!gr && (where === "always" ? !fx.breakdown : where === "breaks" ? fx.breakdown : drumsOn);
+      if (gr && grooveOn) {
+        const lvl = gr.level * level * (where === "always" && !drumsOn ? 0.65 : 1);
+        playGroove(gr, T, drumsTo, lvl);
+      }
+      if (gr && solo) drumSolo(gr, loopFrom, Tend, level);
     }
     if (next && (fx.riser || fx.loopBuild)) {
       const len = (fx.loopBuild ? 4 : Math.min(8, v.bars / 2)) * bar;
-      riser(Tend - len, Tend, 0.22 * level + 0.05);
+      // Under a drum solo the riser stays low, so the drum leads.
+      const soloing = fx.loopBuild && mood.signature === "drumSolo" && !!mood.groove;
+      riser(Tend - len, Tend, (0.22 * level + 0.05) * (soloing ? 0.45 : 1));
     }
     if (next && (fx.drop || fx.loopBuild)) drop(Tend, level);
   });
