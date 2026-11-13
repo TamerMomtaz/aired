@@ -2,6 +2,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { NowPlayingHalo } from "@/components/art/now-playing-halo";
 import { CircuitBackdrop } from "@/components/backdrop/circuit-backdrop";
 import { InstallCoach } from "@/components/install/install-coach";
 import { SwRegister } from "@/components/install/sw-register";
@@ -104,6 +105,8 @@ export default async function RootLayout({
         <PlayerProvider>
           <AdornedProvider initialIds={adornedIds} signedIn={!!user}>
             <div className="flex min-h-dvh flex-col">
+              {/* Let the art glow: the playing song lights the top of the page. */}
+              <NowPlayingHalo />
               <SiteHeader />
               {children}
               <SiteFooter />

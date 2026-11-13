@@ -20,7 +20,7 @@
      glowing underline in the lockup. It is the scarcest thing on the platform
      and nothing outside certification may spend it. */
   --cert-red: #ff2d2d;
-  --muted: #8e9097;
+  --muted: #a2a4ab;
   /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer. */
   --matrix-blue: #2f6bff;
   /* The listener's keep-mark: the ankh on an adorned song. Deliberately NOT
@@ -209,10 +209,9 @@ body::before {
 
 .surface-edge {
   position: relative;
-  border-color: rgba(71, 168, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow:
     inset 0 1px 0 var(--steel-catch),
-    0 0 16px -6px rgba(71, 168, 255, 0.45),
     0 12px 28px -16px rgba(0, 0, 0, 0.9);
 }
 
@@ -271,6 +270,98 @@ li:nth-child(2n) .surface-edge::after {
   border-color: rgba(71, 168, 255, 0.7);
 }
 
+/* Let the art glow -------------------------------------------------------------
+   Covers cast light in their own colours (src/components/art/art-glow.tsx),
+   and the song playing washes the top of the page (now-playing-halo.tsx). The
+   warmth comes from the music's own artwork, so black and red stay as they are. */
+.art-glow {
+  position: absolute;
+  inset: 2% -4% -10%;
+  z-index: -1;
+  border-radius: 16px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(26px) saturate(1.8) brightness(1.15);
+  opacity: 0.9;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.group:hover .art-glow {
+  opacity: 1;
+}
+
+.now-playing-halo {
+  position: fixed;
+  top: -22vh;
+  left: -15vw;
+  right: -15vw;
+  height: 80vh;
+  z-index: -1;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center;
+  filter: blur(70px) saturate(1.5);
+  opacity: 0.4;
+  -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 95%);
+  mask-image: linear-gradient(180deg, #000 25%, transparent 95%);
+  will-change: opacity, transform;
+  animation:
+    aired-halo-in 1.6s ease-out both,
+    aired-halo-breathe 11s ease-in-out 1.6s infinite;
+}
+
+@keyframes aired-halo-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.4;
+  }
+}
+
+@keyframes aired-halo-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.28;
+    transform: scale(1.06);
+  }
+}
+
+/* Osama Osama's album "البوم في اي بي" and its song (AIRED-0079): the upload
+   carries a long code scrawled across the lower part of the photo. At Tee's
+   request AIRED shows only the top of his picture (face and headphones), so
+   the code never appears, and lets it drift slowly into an abstract blur and
+   back. His files are untouched; delete this block to undo. Matched on the
+   two cover files, so it applies on every card, page and the player. */
+img:is(
+    [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
+    [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
+  ) {
+  object-fit: cover;
+  transform-origin: 80% 6%;
+  animation: aired-osama-dream 14s ease-in-out infinite;
+}
+
+@keyframes aired-osama-dream {
+  0%,
+  30%,
+  100% {
+    transform: scale(1.7);
+    filter: none;
+  }
+  55%,
+  70% {
+    transform: scale(1.85);
+    filter: blur(7px) saturate(1.7) contrast(1.1) hue-rotate(-12deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :is(button, a).bg-cert-red,
   :is(button, a)[class*="border-white/"] {
@@ -280,6 +371,18 @@ li:nth-child(2n) .surface-edge::after {
   .surface-edge::after {
     animation: none;
     --neon-angle: 140deg;
+  }
+
+  .now-playing-halo {
+    animation: none;
+  }
+
+  img:is(
+      [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
+      [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
+    ) {
+    animation: none;
+    transform: scale(1.7);
   }
 }
 
