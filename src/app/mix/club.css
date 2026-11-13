@@ -662,3 +662,42 @@
 .club-choice > div > button:hover:not([aria-pressed="true"]) {
   transform: translateY(-1px);
 }
+
+/* The finished mix's player: big, bright and readable, so a time can be noted. */
+.club-player {
+  border: 1px solid rgba(34, 228, 255, 0.45);
+  background: rgba(10, 6, 24, 0.85);
+  box-shadow: 0 0 24px -6px rgba(34, 228, 255, 0.5);
+}
+.club-player-btn {
+  color: #120a24;
+  background: linear-gradient(135deg, var(--club-pink), var(--club-cyan));
+  box-shadow: 0 0 22px rgba(255, 43, 214, 0.55);
+}
+.club-player-btn:active {
+  transform: scale(0.96);
+}
+.club-player-clock {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(34, 228, 255, 0.6);
+}
+.club-player-total {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: none;
+}
+.club-player-bar {
+  height: 28px;
+  accent-color: var(--club-cyan);
+}
+.club-player-skip {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #fff;
+}

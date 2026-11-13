@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlayer } from "@/components/player/player-provider";
 import { ClubDecks } from "@/components/mixer/club-decks";
 import { MixaTeeShelf } from "@/components/mixer/mixatee-shelf";
+import { MixPlayer } from "@/components/mixer/mix-player";
 import { Mp3Button } from "@/components/mixer/mp3-button";
 import { TagPanel } from "@/components/mixer/tag-panel";
 import { formatCatalogId, formatWorkLabel } from "@/lib/catalog";
@@ -558,9 +559,15 @@ function MixResult({
         {stage.brainMiss ? <p className="mt-1 text-xs text-muted">{stage.brainMiss}</p> : null}
       </div>
 
-      {/* Its own element, scoped to this page. Pressing play here pauses the
-          global player so two things never sound at once. */}
-      <audio controls src={stage.url} onPlay={onPlay} className="w-full" />
+      <MixPlayer
+        url={stage.url}
+        seconds={stage.seconds}
+        onPlay={onPlay}
+        parts={plan.visits.map((v) => ({
+          at: v.at,
+          label: `${set[v.song]?.title ?? "?"} · ${MOVE_LABEL[v.move]}`,
+        }))}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <a
