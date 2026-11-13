@@ -7,11 +7,11 @@
    on their top edge like machined aluminium. The red is unchanged and no more
    of it is spent; the finish lives entirely in the blacks and the hairlines. */
 :root {
-  --background: #0b0b0c;
+  --background: #1c1d24;
   --foreground: #ececee;
   /* Graphite surfaces, lit from above. */
-  --graphite-hi: #1a1a1d;
-  --graphite-lo: #0f0f11;
+  --graphite-hi: #2a2b33;
+  --graphite-lo: #1f2027;
   /* The top-edge catch-light every raised surface gets. */
   --steel-catch: rgba(236, 240, 248, 0.075);
   /* Brushed-metal grain: stretched fractal noise, drawn once as a tile. */
@@ -20,7 +20,7 @@
      glowing underline in the lockup. It is the scarcest thing on the platform
      and nothing outside certification may spend it. */
   --cert-red: #ff2d2d;
-  --muted: #a2a4ab;
+  --muted: #b8bac2;
   /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer. */
   --matrix-blue: #2f6bff;
   /* The listener's keep-mark: the ankh on an adorned song. Deliberately NOT
@@ -47,9 +47,10 @@ html {
 
 body {
   background:
-    radial-gradient(120% 55% at 50% -12%, rgba(255, 255, 255, 0.055), transparent 62%)
-      fixed,
-    var(--background);
+    radial-gradient(120% 55% at 50% -12%, rgba(255, 255, 255, 0.13), transparent 62%) fixed,
+    radial-gradient(60% 50% at 0% 100%, rgba(255, 150, 70, 0.14), transparent 70%) fixed,
+    radial-gradient(55% 45% at 100% 30%, rgba(71, 140, 255, 0.13), transparent 70%) fixed,
+    linear-gradient(180deg, #25262e, var(--background) 55%) fixed;
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -131,8 +132,8 @@ body::before {
   height: max(100lvh, 100vh);
   z-index: -1;
   pointer-events: none;
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.45), #000 85%);
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.45), #000 85%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.75), #000 85%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.75), #000 85%);
 }
 
 /* 3D buttons ------------------------------------------------------------------
@@ -291,93 +292,155 @@ li:nth-child(2n) .surface-edge::after {
   opacity: 1;
 }
 
-/* Living portraits (Tee: "like Harry Potter haunted frames") ----------------
-   Every cover moves slowly inside its frame: a gentle push-in and drift, as if
-   the picture were breathing. Four paths and staggered starts so a shelf never
-   moves in step. Transform only, so it stays smooth and cheap. */
+/* Cards sit on a lit graphite plate, a clear step up from the page. */
+article.group:has(.aspect-square) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+}
+
+/* Haunted frames (Tee: "like Harry Potter haunted frames") --------------------
+   Every cover is alive inside its frame, and visibly so: it leans in, drifts,
+   turns its head a little, and now and then a candle-light passes across the
+   glass. Four paths with staggered starts so a shelf never moves in step.
+   Transform and opacity only, so it stays smooth and cheap on phones. */
+.aspect-square.overflow-hidden {
+  position: relative;
+}
+
 .aspect-square.overflow-hidden > img {
-  animation: aired-portrait-a 22s ease-in-out infinite alternate;
+  animation: aired-haunt-a 11s ease-in-out infinite;
   will-change: transform;
 }
 
 li:nth-child(4n + 2) .aspect-square.overflow-hidden > img {
-  animation-name: aired-portrait-b;
-  animation-duration: 26s;
-  animation-delay: -7s;
-}
-
-li:nth-child(4n + 3) .aspect-square.overflow-hidden > img {
-  animation-name: aired-portrait-c;
-  animation-duration: 24s;
-  animation-delay: -13s;
-}
-
-li:nth-child(4n + 4) .aspect-square.overflow-hidden > img {
-  animation-name: aired-portrait-d;
-  animation-duration: 28s;
+  animation-name: aired-haunt-b;
+  animation-duration: 13s;
   animation-delay: -4s;
 }
 
-@keyframes aired-portrait-a {
-  from {
-    transform: scale(1.04) translate(0, 0);
+li:nth-child(4n + 3) .aspect-square.overflow-hidden > img {
+  animation-name: aired-haunt-c;
+  animation-duration: 12s;
+  animation-delay: -8s;
+}
+
+li:nth-child(4n + 4) .aspect-square.overflow-hidden > img {
+  animation-name: aired-haunt-d;
+  animation-duration: 14s;
+  animation-delay: -2s;
+}
+
+/* The light that passes over the glass. */
+.aspect-square.overflow-hidden::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(255, 236, 200, 0.22) 48%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 236, 200, 0.22) 52%,
+    transparent 60%
+  );
+  transform: translateX(-70%);
+  animation: aired-glass 9s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+li:nth-child(3n + 2) .aspect-square.overflow-hidden::before {
+  animation-delay: -3s;
+  animation-duration: 11s;
+}
+
+li:nth-child(3n + 3) .aspect-square.overflow-hidden::before {
+  animation-delay: -6s;
+  animation-duration: 10s;
+}
+
+@keyframes aired-glass {
+  0%,
+  62% {
+    transform: translateX(-70%);
   }
-  to {
-    transform: scale(1.14) translate(-3%, -2%);
+  85%,
+  100% {
+    transform: translateX(70%);
   }
 }
 
-@keyframes aired-portrait-b {
-  from {
-    transform: scale(1.12) translate(2%, -2%);
+@keyframes aired-haunt-a {
+  0%,
+  100% {
+    transform: scale(1.08) translate(0, 0) rotate(0deg);
   }
-  to {
-    transform: scale(1.04) translate(-1%, 1%);
+  30% {
+    transform: scale(1.22) translate(-5%, -4%) rotate(-1.5deg);
   }
-}
-
-@keyframes aired-portrait-c {
-  from {
-    transform: scale(1.05) translate(-2%, 2%) rotate(-0.6deg);
-  }
-  to {
-    transform: scale(1.15) translate(2%, -1%) rotate(0.6deg);
+  60% {
+    transform: scale(1.16) translate(4%, -2%) rotate(1.2deg);
   }
 }
 
-@keyframes aired-portrait-d {
-  from {
-    transform: scale(1.1) translate(0, 3%);
+@keyframes aired-haunt-b {
+  0%,
+  100% {
+    transform: scale(1.2) translate(4%, -3%) rotate(1deg);
   }
-  to {
-    transform: scale(1.05) translate(0, -2%);
+  45% {
+    transform: scale(1.08) translate(-3%, 3%) rotate(-1.4deg);
+  }
+  75% {
+    transform: scale(1.15) translate(-5%, -2%) rotate(0.4deg);
   }
 }
 
-/* Osama Osama's album "البوم في اي بي" and its song (AIRED-0079): the upload
-   carries a long code scrawled across the lower part of the photo. At Tee's
-   request AIRED shows only the top of his picture (face and headphones), so
-   the code never appears. His files are untouched; delete this block to undo.
-   Matched on the two cover files, so it applies on every card, page and the
-   player. object-view-box crops the picture inside its own box (Chrome, Edge,
-   Brave); elsewhere a zoom is used, but only where the frame clips it. */
+@keyframes aired-haunt-c {
+  0%,
+  100% {
+    transform: scale(1.1) translate(-4%, 3%) rotate(-1deg);
+  }
+  40% {
+    transform: scale(1.24) translate(3%, -4%) rotate(1.6deg);
+  }
+  70% {
+    transform: scale(1.12) translate(5%, 2%) rotate(0deg);
+  }
+}
+
+@keyframes aired-haunt-d {
+  0%,
+  100% {
+    transform: scale(1.18) translate(0, 4%) rotate(0.8deg);
+  }
+  35% {
+    transform: scale(1.08) translate(4%, -3%) rotate(-1deg);
+  }
+  65% {
+    transform: scale(1.22) translate(-4%, -4%) rotate(1.3deg);
+  }
+}
+
+/* Osama Osama's album "البوم في اي بي" and its song (AIRED-0079). At Tee's
+   request AIRED shows its own cover (public/covers/osama-aired.svg: silver
+   headphones, breathing sound rings) in place of his photo, which carried a
+   long code across it. His song and his files are untouched; delete this block
+   to bring his photo back. Matched on his two cover files, so it applies on
+   every card, page and the player. */
 img:is(
     [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
     [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
   ) {
+  content: url("/covers/osama-aired.svg");
   object-fit: cover;
-  object-view-box: inset(3% 8% 40% 32%);
 }
 
-@supports not (object-view-box: inset(0)) {
-  :is(a, .overflow-hidden)
-    > img:is(
-      [src*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
-      [src*="9453c21b-ad65-438a-aba1-2779190cecca"]
-    ) {
-    transform: scale(1.7) !important;
-    transform-origin: 80% 6%;
-  }
+.art-glow:is(
+    [style*="183b7b20-15b4-47a9-94c9-03c1875c336b"],
+    [style*="9453c21b-ad65-438a-aba1-2779190cecca"]
+  ) {
+  background-image: url("/covers/osama-aired.svg") !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -391,8 +454,13 @@ img:is(
     --neon-angle: 140deg;
   }
 
-  .aspect-square.overflow-hidden > img {
+  .aspect-square.overflow-hidden > img,
+  .aspect-square.overflow-hidden::before {
     animation: none;
+  }
+
+  .aspect-square.overflow-hidden::before {
+    display: none;
   }
 
 
