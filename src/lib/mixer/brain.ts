@@ -11,6 +11,7 @@ import {
   type SetScript,
   type SongBrief,
 } from "./script";
+import type { Mood } from "./moods";
 
 // The DJ brain: Claude plans the set the way a headline DJ plans a show.
 //
@@ -76,6 +77,8 @@ STEMS: songs marked ON STEMS are split into vocals, drums, bass and music, and t
   "peak" = the set runs 4% faster; short 8-bar parts; trades every bar, cuts, chopped hooks repeated, a loop build and drop every 32 bars or so, kick, claps and pump almost throughout.
 - Reach at least the requested length (sum of bars × seconds per bar). The set's BPM and seconds per bar are given in the request.
 
+A MOOD may be named (Baladi Bounce, Nawari Stomp, Deep House, Euro 90s Rave, Oriental House...). The Mixer plays the mood's own groove (a darbuka, a dabke tabl, a house kit, hand percussion) under the parts where you put drums, so plan the set's shape for that mood as described; the mood outranks the energy defaults.
+
 THE LISTENER'S VIBE IS YOUR BRIEF. When they wrote one, it outranks every default above: if they ask for slow, dark, dubby, stripped, a long build, lots of chops, the hook all the time, an Arabic-night feel, a sunrise ending, plan exactly that and let the energy setting only set the tempo. Read the vibe for mood, pace, density, which song or line they love, and how it should end. Your story must say how you followed it.
 
 How you answer (keep it compact: the set must reach the browser in seconds):
@@ -127,8 +130,8 @@ function parseLine(x: unknown): Layer | null {
   return { song, phrase, bar, len, at, times, style: m[7] as Layer["style"] } as Layer;
 }
 
-function briefText(songs: SongBrief[], opener: number, energy: Energy): string {
-  const master = masterBpm(songs, opener, energy);
+function briefText(songs: SongBrief[], opener: number, energy: Energy, window?: [number, number]): string {
+  const master = masterBpm(songs, opener, energy, window);
   return songs
     .map((s, i) => {
       const lock = (() => {
@@ -165,20 +168,28 @@ export async function planWithBrain(input: {
   energy: Energy;
   minutes: MixMinutes;
   vibe: string;
+  mood?: Mood;
 }): Promise<SetScript | null> {
-  const { songs, energy, minutes, vibe } = input;
+  const { songs, energy, minutes, vibe, mood } = input;
+  const window = mood?.bpm;
+  const bpm0 = masterBpm(songs, 0, energy, window);
   const user = [
     `Energy setting: ${energy}. Minimum length: ${minutes} minutes.`,
-    `If song 0 opens, the set runs at ${masterBpm(songs, 0, energy).toFixed(1)} BPM, so one bar is ${(240 / masterBpm(songs, 0, energy)).toFixed(2)} s (set from the opener's tempo${STYLE[energy].push === 1 ? "" : ` ${STYLE[energy].push > 1 ? "+" : "-"}4%`}, moved toward the other songs when they are far from it, so they all lock).`,
+    mood && mood.family !== "classic"
+      ? `Mood: ${mood.label}. ${mood.brain}${window ? ` The set leans toward ${window[0]}–${window[1]} BPM as far as the songs allow.` : ""}`
+      : null,
+    `If song 0 opens, the set runs at ${bpm0.toFixed(1)} BPM, so one bar is ${(240 / bpm0).toFixed(2)} s (set from the opener's tempo${STYLE[energy].push === 1 ? "" : ` ${STYLE[energy].push > 1 ? "+" : "-"}4%`}${window ? ", pulled toward the mood's tempo" : ""}, moved toward the other songs when they are far from it, so they all lock).`,
     songs.length === 1
       ? `This is a REMIX of one song: rebuild it in the ${energy} mood from its own parts, the way a remixer would, not a DJ playing it through. Rearrange its phrases into a new arc (not its original order). Pick one remix idea that fits the vibe (or the mood if no vibe) and commit to it: an extended club version (long intro of beat and bass, the hook teased in echo, a long build, one huge drop); a dub version (stripped parts, breakdowns, lines thrown into echo, long spaces); a hook-chop version (the hook chopped and repeated over the other parts, again and again, under risers); a breakdown-first version (open on the calmest part, the full chorus only at the end); or call and response (its verse traded against its chorus bar by bar). Drop its own best lines over its other parts, and use breakdowns, loop builds and drops. Never play two copies of the same phrase on top of each other. Say in the story which idea you chose.`
       : `Song 0 is the suggested opener, chosen because its key and tempo flow best into the others; you may choose another opener if it makes a better set (it then sets the tempo). Songs whose keys are 3 or more steps apart on the Camelot wheel must never overlap: go between them with a "cut" (echo out, slam in).`,
     vibe ? `The listener's vibe for this set: "${vibe}"` : "The listener gave no vibe; make the best club journey these songs allow.",
     "",
-    briefText(songs, 0, energy),
+    briefText(songs, 0, energy, window),
     "",
     "Plan the set.",
-  ].join("\n");
+  ]
+    .filter((x) => x !== null)
+    .join("\n");
 
   const stream = getClient().beta.messages.stream({
     model: MODEL,

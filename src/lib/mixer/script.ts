@@ -9,6 +9,7 @@
 // numbers about the songs plus their public titles, makers and descriptors.
 
 import { camelotDistance, type MusicalKey } from "./key";
+import type { Mood } from "./moods";
 import type { PhraseLabel } from "./structure";
 
 export type Energy = "lounge" | "club" | "peak";
@@ -134,8 +135,22 @@ export const POST_BARS = 8; // audio kept after a part, for trades and fades
 // set moves toward the others, the way a DJ meets a slower record halfway: a
 // 107 and a 122 BPM song both lock at about 114 instead of the 107 one being
 // cut in cold.
-export function masterBpm(songs: { bpm: number }[], opener: number, energy: Energy): number {
-  const base = songs[opener].bpm * STYLE[energy].push;
+//
+// A mood with a tempo window (Deep House 118–125, Dabka Techno 124–130) pulls
+// that starting point into its window; the search below then settles as close
+// to it as the songs allow without losing their lock.
+export function masterBpm(
+  songs: { bpm: number }[],
+  opener: number,
+  energy: Energy,
+  window?: [number, number],
+): number {
+  let base = songs[opener].bpm * STYLE[energy].push;
+  if (window) {
+    // Half or double time counts as in the window (a 62 BPM ballad plays as 124).
+    const fit = [base, base * 2, base / 2].find((b) => b >= window[0] && b <= window[1]);
+    base = fit ?? Math.max(window[0], Math.min(window[1], base));
+  }
   let best = base;
   let bestCost = Infinity;
   for (let k = -60; k <= 60; k++) {
@@ -190,11 +205,12 @@ export function fixScript(
   songs: SongBrief[],
   energy: Energy,
   minutes: MixMinutes,
+  mood?: Mood,
 ): SetScript {
   if (script.visits.length === 0 || !songs[script.visits[0]?.song]) {
-    return rulesScript(songs, energy, minutes);
+    return rulesScript(songs, energy, minutes, 0, mood);
   }
-  const master = masterBpm(songs, script.visits[0].song, energy);
+  const master = masterBpm(songs, script.visits[0].song, energy, mood?.bpm);
   const mBar = barSeconds(master);
   const rates = songs.map((s) => chooseRate(master, s.bpm));
   const out: ScriptVisit[] = [];
@@ -280,11 +296,11 @@ export function fixScript(
     out.push(v);
     total += bars * mBar;
   }
-  if (out.length === 0) return rulesScript(songs, energy, minutes);
+  if (out.length === 0) return rulesScript(songs, energy, minutes, 0, mood);
 
   // Top up a short script with more parts in the same spirit.
   if (total < minutes * 60) {
-    const extra = rulesScript(songs, energy, minutes, out[0].song).visits;
+    const extra = rulesScript(songs, energy, minutes, out[0].song, mood).visits;
     const used = new Set(out.map((v) => `${v.song}:${v.phrase}`));
     for (const v of extra) {
       if (total >= minutes * 60) break;
@@ -398,11 +414,11 @@ function harmonicOrder(songs: SongBrief[], opener: number, master: number): numb
 // the best key flow from it, plus how far the others must be sped up or
 // slowed down to lock (6% of stretch weighs about as much as a two-step key
 // jump), since big stretches are heard as a pitch change.
-export function bestOpener(songs: SongBrief[], energy: Energy): number {
+export function bestOpener(songs: SongBrief[], energy: Energy, window?: [number, number]): number {
   let best = 0;
   let bestCost = Infinity;
   songs.forEach((_, i) => {
-    const master = masterBpm(songs, i, energy);
+    const master = masterBpm(songs, i, energy, window);
     const order = harmonicOrder(songs, i, master);
     let cost = orderCost(songs, order, master);
     for (const t of songs) {
@@ -441,9 +457,10 @@ export function rulesScript(
   energy: Energy,
   minutes: MixMinutes,
   opener = 0,
+  mood?: Mood,
 ): SetScript {
-  const st = STYLE[energy];
-  const master = masterBpm(songs, opener, energy);
+  const st = { ...STYLE[energy], layerBias: mood?.layerBias ?? STYLE[energy].layerBias };
+  const master = masterBpm(songs, opener, energy, mood?.bpm);
   const order = harmonicOrder(songs, opener, master);
   const mBar = barSeconds(master);
   const rate = (i: number) => chooseRate(master, songs[i].bpm);
@@ -626,7 +643,10 @@ export function rulesScript(
         }
       }
       // The thread: the set's hook comes back over other songs.
-      if (thread && (thread.song !== song || (single && thread.phrase !== phrase)) && v % 3 === 1 && room >= 8) {
+      // A mood whose signature is the returning hook (eurodance, a wedding
+      // chant, soulful house) brings it back every other part, not every third.
+      const every = mood?.signature === "hookReturn" ? 2 : 3;
+      if (thread && (thread.song !== song || (single && thread.phrase !== phrase)) && v % every === 1 && room >= 8) {
         const len = energy === "peak" ? 1 : 2;
         const times = energy === "peak" ? 4 : 2;
         const at = energy === "lounge" ? 4 : 2;
@@ -651,15 +671,16 @@ export function rulesScript(
     club: "Songs trade bars in call and response, lines from the next song arrive before it does, and the strongest hook keeps coming back.",
     peak: "Pushed faster and harder: short parts traded bar by bar, chopped vocal hooks, loop builds and drops.",
   }[energy];
+  const moodLine = mood && mood.family !== "classic" ? ` ${mood.label}: ${mood.note}` : "";
   return {
     title: single ? songs[0].title : order.map((i) => songs[i].title).join(" × "),
-    story: single
+    story: (single
       ? {
           lounge: `A Lounge remix of "${songs[0].title}": slower and warm, its parts rearranged into long, melting stretches, its own lines floating back in echo.`,
           club: `A Club remix of "${songs[0].title}": its parts rearranged and traded in call and response, its hook coming back over the other parts, built for the floor.`,
           peak: `A Peak remix of "${songs[0].title}": pushed faster and harder, its parts chopped short, its hook stuttered into loop builds and drops.`,
         }[energy]
-      : story,
+      : story) + moodLine,
     visits,
     by: "rules",
   };

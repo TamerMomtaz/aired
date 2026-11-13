@@ -25,6 +25,7 @@ import {
 import { detectKey } from "@/lib/mixer/key";
 import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
 import { loadDeck, loadStemSource, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
+import { FAMILIES, MOODS, moodById, type Mood, type MoodFamily } from "@/lib/mixer/moods";
 import {
   bestOpener,
   fixScript,
@@ -151,7 +152,9 @@ const tick = () => new Promise((r) => setTimeout(r, 20)); // let the label paint
 export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; initialIds?: number[] }) {
   // A song's "Mix it" button opens the Mixer with that song in the set.
   const [setIds, setSetIds] = useState<number[]>(initialIds ?? sources.slice(0, 2).map((s) => s.id));
-  const [energy, setEnergy] = useState<Energy>("club");
+  const [moodId, setMoodId] = useState("club");
+  const mood = moodById(moodId);
+  const energy: Energy = mood.energy;
   const [minutes, setMinutes] = useState<MixMinutes>(5);
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [vibe, setVibe] = useState("");
@@ -255,7 +258,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       // Let the Mixer pick the opener whose key and tempo flow best into the
       // others; the planners then find the smoothest order from it.
       if (autoOrder && tracks.length > 1) {
-        const o = bestOpener(briefs, energy);
+        const o = bestOpener(briefs, energy, mood.bpm);
         const front = <T,>(xs: T[]) => [xs[o], ...xs.filter((_, i) => i !== o)];
         tracks = front(tracks);
         plays = front(plays);
@@ -263,19 +266,22 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         briefs = front(briefs);
       }
       const remix = tracks.length === 1;
+      // Saved mixes keep the plain energy (Lounge, Club, Peak); the mood's name
+      // goes in the title.
       const energyLabel = ENERGIES.find((e) => e.value === energy)?.label ?? energy;
+      const moodName = mood.family === "classic" ? null : mood.label;
 
       // 2. Plan the set: the DJ brain if it's reachable, else the built-in rules.
       let script: SetScript | null = null;
       let brainMiss: string | null = null;
       if (useBrain) {
         show(vibe.trim() ? "The DJ brain is planning your set from your vibe" : "The DJ brain is planning your set", 0.62);
-        const asked = await askBrain(tracks, analyses, briefs, energy, minutes, vibe, ac.signal);
+        const asked = await askBrain(tracks, analyses, briefs, mood, minutes, vibe, ac.signal);
         if (ac.signal.aborted) return;
         script = asked.script;
         brainMiss = asked.script ? null : MISS_TEXT[asked.reason] ?? MISS_TEXT.error;
       }
-      script = fixScript(script ?? rulesScript(briefs, energy, minutes), briefs, energy, minutes);
+      script = fixScript(script ?? rulesScript(briefs, energy, minutes, 0, mood), briefs, energy, minutes, mood);
 
       // 3. Decode only the parts the plan uses, then mix.
       show("Cueing up the parts", 0.7);
@@ -292,13 +298,15 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       }
       const signed = useTag && tag ? await decodeTag(tag.audio, MIX_SAMPLE_RATE) : null;
       const dj = useTag && tag?.name ? tag.name : null;
-      const buffer = await renderSet(prepared, plan, energy, signed);
+      const buffer = await renderSet(prepared, plan, energy, signed, mood);
       if (ac.signal.aborted) return;
 
       show("Packing the file", 0.96);
       await tick();
       const blob = encodeWav(buffer, {
-        title: remix ? `${plan.title} (AIRED ${energyLabel} Remix)` : `${plan.title} (AIRED Mix)`,
+        title: remix
+          ? `${plan.title} (AIRED ${moodName ?? energyLabel} Remix)`
+          : `${plan.title} (AIRED ${moodName ? `${moodName} ` : ""}Mix)`,
         artist: tracks.map(names).join(" × "),
         comment:
           `AIRED Mix. Built from ` +
@@ -316,7 +324,11 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       const saved = await saveMix(
         {
           id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          title: remix ? `${plan.title} · ${energyLabel} remix` : plan.title,
+          title: remix
+            ? `${plan.title} · ${moodName ?? energyLabel} remix`
+            : moodName
+              ? `${plan.title} · ${moodName}`
+              : plan.title,
           createdAt: Date.now(),
           seconds: buffer.duration,
           bpm: plan.bpm,
@@ -392,7 +404,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         disabled={busy}
       />
 
-      <Choice legend="Energy" options={ENERGIES} value={energy} onChange={setEnergy} disabled={busy} />
+      <MoodPicker value={mood} onChange={setMoodId} disabled={busy} />
       <Choice legend="Length" options={MINUTES} value={minutes} onChange={setMinutes} disabled={busy} />
 
       <fieldset className="flex flex-col gap-2" disabled={busy}>
@@ -520,7 +532,7 @@ async function askBrain(
   tracks: MixSource[],
   analyses: SongAnalysis[],
   briefs: SongBrief[],
-  energy: Energy,
+  mood: Mood,
   minutes: MixMinutes,
   vibe: string,
   signal: AbortSignal,
@@ -532,7 +544,8 @@ async function askBrain(
       signal,
       body: JSON.stringify({
         vibe: vibe.trim(),
-        energy,
+        mood: mood.id,
+        energy: mood.energy,
         minutes,
         songs: tracks.map((t, i) => ({
           id: t.id,
@@ -823,6 +836,68 @@ function SongPicker({
         })}
         {list.length === 0 ? <li className="px-2 py-2 text-xs text-muted">No match.</li> : null}
       </ul>
+    </fieldset>
+  );
+}
+
+// The mood: first the family (Classic, Belly-dance, Dabka, House...), then the
+// mood inside it, with a line on what it does.
+function MoodPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Mood;
+  onChange: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [family, setFamily] = useState<MoodFamily>(value.family);
+  const moods = MOODS.filter((m) => m.family === family);
+  const pill = (on: boolean) =>
+    `rounded-full border px-4 py-1.5 text-sm transition ${
+      on ? "border-foreground bg-foreground text-background" : "border-white/15 text-muted hover:text-foreground"
+    }`;
+  return (
+    <fieldset className="club-choice flex flex-col gap-2" disabled={disabled}>
+      <legend className="mb-1 text-sm font-semibold text-foreground">Mood</legend>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mood family">
+        {FAMILIES.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            aria-pressed={f.value === family}
+            onClick={() => {
+              setFamily(f.value);
+              // Picking a family picks its first mood, so what you hear always
+              // matches what's lit.
+              const first = MOODS.find((m) => m.family === f.value);
+              if (first && value.family !== f.value) onChange(first.id);
+            }}
+            className={`rounded-md border px-2.5 py-1 text-xs transition ${
+              f.value === family ? "border-white/40 text-foreground" : "border-white/10 text-muted hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {moods.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            aria-pressed={m.id === value.id}
+            onClick={() => onChange(m.id)}
+            className={pill(m.id === value.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted">
+        {value.note}
+        {value.bpm ? ` Leans toward ${value.bpm[0]}–${value.bpm[1]} BPM as far as your songs allow.` : ""}
+      </p>
     </fieldset>
   );
 }
