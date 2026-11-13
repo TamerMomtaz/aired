@@ -54,7 +54,8 @@ export const MAX_REPEATS = 3; // times one song may be added to a set
 export const LOAD_SECONDS = 480;
 
 const PRE_BARS = 8; // audio kept before a part, for blends (8 bars at Lounge)
-const TAIL_SECONDS = 4;
+const TAIL_SECONDS = 8;
+const SEAM = 0.006; // half the crossfade where a song flows on into its next part
 
 // What the Mixer keeps of a song after its first listen: the analysis and the
 // compressed audio. The decoded PCM is let go straight away.
@@ -85,6 +86,7 @@ export type PreparedSong = {
 export type PlannedVisit = {
   song: number;
   phrase: number;
+  skip?: number;
   bars: number;
   at: number; // output seconds
   dur: number;
@@ -105,7 +107,7 @@ export type MixPlan = {
   songs: { title: string; bpm: number; rate: number; synced: boolean; key: MusicalKey }[];
 };
 
-const partKey = (phrase: number, bars: number) => `${phrase}:${bars}`;
+const partKey = (phrase: number, bars: number, skip = 0) => `${phrase}:${bars}:${skip}`;
 const lineKey = (l: Pick<Layer, "phrase" | "bar" | "len">) => `${l.phrase}:${l.bar}:${l.len}`;
 
 // The set's tempo: fixScript stores it; older scripts fall back to the opener.
@@ -178,7 +180,7 @@ export async function prepareSongs(
       lines: new Map(),
     };
   });
-  const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars)}`, v])).values()];
+  const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars, v.skip)}`, v])).values()];
   const lineJobs = [
     ...new Map(
       script.visits.flatMap((v) => v.layers ?? []).map((l) => [`${l.song}:${lineKey(l)}`, l]),
@@ -192,10 +194,10 @@ export async function prepareSongs(
     const srcBar = mBar * p.rate;
     const ph = s.structure.phrases[v.phrase];
     const pre = PRE_BARS * srcBar;
-    const raw = await cutClip(s, ph.start, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
+    const raw = await cutClip(s, ph.start + (v.skip ?? 0) * srcBar, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
     if (!raw) continue;
     const { clip, scale } = lockKey(raw, p.rate);
-    p.parts.set(partKey(v.phrase, v.bars), {
+    p.parts.set(partKey(v.phrase, v.bars, v.skip), {
       clip,
       start: pre * scale,
       rms: loudness(clip, pre * scale, (pre + v.bars * srcBar) * scale),
@@ -240,14 +242,14 @@ export function planTimes(script: SetScript, songs: SongAnalysis[], prepared: Pr
   let at = 0;
   const visits: PlannedVisit[] = [];
   for (const v of script.visits) {
-    if (!prepared[v.song].parts.has(partKey(v.phrase, v.bars))) continue;
+    if (!prepared[v.song].parts.has(partKey(v.phrase, v.bars, v.skip))) continue;
     const dur = v.bars * mBar;
     visits.push({
       ...v,
       layers: (v.layers ?? []).filter((l) => prepared[l.song].lines.has(lineKey(l))),
       at,
       dur,
-      sourceStart: songs[v.song].structure.phrases[v.phrase].start,
+      sourceStart: songs[v.song].structure.phrases[v.phrase].start + (v.skip ?? 0) * mBar * prepared[v.song].rate,
     });
     at += dur;
   }
@@ -304,11 +306,16 @@ export async function renderSet(
   warmth.type = "lowpass";
   warmth.frequency.value = energy === "lounge" ? 9000 : 20000;
   master.connect(masterHp).connect(warmth).connect(comp);
-  const outroFrom = plan.end - 4 * bar;
-  masterHp.frequency.setValueAtTime(20, outroFrom);
-  masterHp.frequency.exponentialRampToValueAtTime(900, plan.end);
+  // The outro: over the last 8 bars the low end thins and the level eases
+  // down, then the music fades out through the tail under the echo, the way a
+  // DJ rides the fader down on a last record.
+  const outroFrom = Math.max(0, plan.end - 8 * bar);
+  masterHp.frequency.setValueAtTime(20, plan.end - 4 * bar);
+  masterHp.frequency.exponentialRampToValueAtTime(400, plan.end + TAIL_SECONDS * 0.5);
   master.gain.setValueAtTime(0.85, outroFrom);
-  master.gain.linearRampToValueAtTime(0.0001, plan.end + TAIL_SECONDS);
+  master.gain.linearRampToValueAtTime(0.5, plan.end);
+  master.gain.exponentialRampToValueAtTime(0.03, plan.end + TAIL_SECONDS * 0.75);
+  master.gain.exponentialRampToValueAtTime(0.0001, plan.end + TAIL_SECONDS);
 
   const music = ctx.createGain();
   music.connect(master);
@@ -333,7 +340,7 @@ export async function renderSet(
   echoSend.gain.linearRampToValueAtTime(0.6, plan.end);
 
   // Balance songs to a common loudness.
-  const partOf = (v: PlannedVisit) => prepared[v.song].parts.get(partKey(v.phrase, v.bars))!;
+  const partOf = (v: PlannedVisit) => prepared[v.song].parts.get(partKey(v.phrase, v.bars, v.skip))!;
   const rmsAll = visits.map((v) => partOf(v).rms).sort((a, b) => a - b);
   const target = rmsAll[Math.floor(rmsAll.length / 2)] || 0.1;
 
@@ -429,7 +436,12 @@ export async function renderSet(
     // for long, so those blends are kept short.
     const prevSong = idx > 0 ? prepared[visits[idx - 1].song] : null;
     const clash = !!prevSong && prevSong !== song && camelotDistance(prevSong.key, song.key) >= 3;
-    if (v.move === "blend") {
+    if (v.move === "flow") {
+      // The same song carrying on: a 12 ms seam, nothing a listener hears.
+      startAt = T - SEAM;
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(g, T + SEAM);
+    } else if (v.move === "blend") {
       startAt = T - (clash ? 2 : st.blendBars) * bar;
       gain.gain.setValueAtTime(0, startAt);
       gain.gain.linearRampToValueAtTime(g * 0.8, T);
@@ -479,10 +491,16 @@ export async function renderSet(
     // -- how it goes out (decided by the next part's move) --
     let stopAt = Tend + 0.05;
     if (!next) {
-      stopAt = Tend + 0.2;
+      // The last song keeps playing under the fade instead of stopping dead
+      // at the last bar line.
+      stopAt = Tend + TAIL_SECONDS;
       gain.gain.setValueAtTime(g, Tend - 4 * bar);
       send.gain.setValueAtTime(0, Tend - 4 * bar);
       send.gain.linearRampToValueAtTime(0.7, Tend);
+    } else if (next.move === "flow") {
+      gain.gain.setValueAtTime(g, Tend - SEAM);
+      gain.gain.linearRampToValueAtTime(0, Tend + SEAM);
+      stopAt = Tend + SEAM + 0.01;
     } else if (next.move === "blend") {
       shelf.gain.setValueAtTime(0, Tend - 0.01);
       shelf.gain.linearRampToValueAtTime(-30, Tend);

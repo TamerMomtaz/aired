@@ -19,7 +19,10 @@ export type MixMinutes = 5 | 7 | 10;
 // trade  — call and response: the two songs swap every 2 bars (1 at Peak)
 //          for 8 bars before the new one takes over
 // cut    — echo out, slam in
-export type Move = "open" | "blend" | "mashup" | "trade" | "cut";
+// flow   — the same song playing straight on from where its last part ended
+//          (set by fixScript, never by the planners: a song's back-to-back
+//          parts are one stretch of it, not a jump or a mix into itself)
+export type Move = "open" | "blend" | "mashup" | "trade" | "cut" | "flow";
 export type Bars = 8 | 16 | 32;
 
 export type Fx = {
@@ -54,6 +57,7 @@ export type Layer = {
 export type ScriptVisit = {
   song: number; // index into the songs
   phrase: number; // the phrase it starts on
+  skip?: number; // source bars into that phrase where it starts (for "flow")
   bars: Bars;
   move: Move; // how it comes in
   fx: Fx;
@@ -297,6 +301,33 @@ export function fixScript(
       total += v.bars * mBar;
     }
   }
+  // A song's back-to-back parts play straight through. Jumping to another
+  // spot in the same song on a cut, or blending a song into a copy of itself
+  // that overlaps what just played, was most of the bumps Tee marked in a
+  // three-song Peak set (0063 x 0119 x 0035). A remix (one song) is exempt:
+  // there, rearranging the song's own parts is the point.
+  if (songs.length > 1) {
+    for (let i = 1; i < out.length; i++) {
+      const prev = out[i - 1];
+      const v = out[i];
+      // After a loop build or a drop too: the build releases back into the
+      // same song, like a DJ's loop roll.
+      if (v.song !== prev.song) continue;
+      const s = songs[v.song];
+      const srcBar = mBar * rates[v.song].rate;
+      const skip = (prev.skip ?? 0) + prev.bars;
+      let bars = v.bars;
+      while (bars > 8 && !fits(s, prev.phrase, skip + bars, srcBar)) bars = (bars / 2) as Bars;
+      if (fits(s, prev.phrase, skip + bars, srcBar)) {
+        out[i] = { ...v, phrase: prev.phrase, skip, bars, move: "flow" };
+        out[i].layers = fixLayers(v.layers, out[i]);
+      } else {
+        // The song has run out: start it again elsewhere, cleanly.
+        out[i] = { ...v, move: "cut" };
+      }
+    }
+  }
+
   // The last part never builds into nothing.
   const last = out[out.length - 1];
   last.fx = { ...last.fx, loopBuild: false, riser: false, drop: false };
@@ -435,7 +466,13 @@ export function rulesScript(
     for (let v = 0; v < n; v++) {
       const prev = seq[v - 1];
       let pick: number;
+      // A song too far from the set's tempo to lock can only come and go on
+      // cuts, so it plays in long runs (its share in two halves), not in and
+      // out every part.
+      let run = 0;
+      for (let k = v - 1; k >= 0 && seq[k] === prev; k--) run++;
       if (v === 0) pick = 0;
+      else if (!rate(order[prev]).synced && left[prev] > 0 && run < Math.ceil(per[prev] / 2)) pick = prev;
       else if (energy === "peak" && v % 2 === 1 && left[prev] > 0) pick = prev;
       else {
         const open = order.map((_, i) => i).filter((i) => left[i] > 0);
