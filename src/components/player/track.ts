@@ -17,6 +17,9 @@ export type Track = {
   // A MixaTee (a mix saved on this device) plays from a local file URL instead
   // of an R2 stream. Its id is negative, so it is never a catalog work.
   localUrl?: string | null;
+  // A mix kept on an AIRED account streams from R2 like a song; this is its
+  // id, for the link back to its page. Its player id is negative too.
+  mixId?: string | null;
 };
 
 // Map a feed/search card row to a player Track so the whole feed is one tap away

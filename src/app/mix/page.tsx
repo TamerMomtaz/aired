@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { MixerStudio, type MixSource } from "@/components/mixer/mixer-studio";
 import { createClient } from "@/lib/supabase/server";
@@ -37,6 +38,9 @@ export default async function MixPage() {
           five minutes or more. Every maker of every song stays credited on
           the mix.
         </p>
+        <Link href="/mixes" className="mt-1 self-start text-sm text-foreground underline underline-offset-4">
+          My mixes on AIRED
+        </Link>
       </header>
       <MixerStudio sources={sources} />
     </main>
