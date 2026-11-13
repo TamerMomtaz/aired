@@ -111,7 +111,7 @@ export function NowPlayingBar() {
 
       <aside
         aria-label="Now playing"
-        className="fixed inset-x-0 bottom-0 z-30 flex flex-col border-t border-white/10 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-30 flex flex-col surface-dock border-t border-white/10 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
         {/* The Red Line: a thin scrub bar across the top of the now-playing bar. */}
         <div

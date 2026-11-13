@@ -1,14 +1,26 @@
 @import "tailwindcss";
 
-/* AIRED palette — cert-red accent on near-black (CLAUDE.md §3). */
+/* AIRED palette — cert-red accent on near-black (CLAUDE.md §3).
+   Finish: BRUSHED ONYX (Tee's facelift, Nov 2026). The near-black is a brushed
+   graphite: a faint horizontal metal grain over the whole app, a soft light
+   falling from the top of the screen, and surfaces that catch a 1px highlight
+   on their top edge like machined aluminium. The red is unchanged and no more
+   of it is spent; the finish lives entirely in the blacks and the hairlines. */
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #0b0b0c;
+  --foreground: #ececee;
+  /* Graphite surfaces, lit from above. */
+  --graphite-hi: #1a1a1d;
+  --graphite-lo: #0f0f11;
+  /* The top-edge catch-light every raised surface gets. */
+  --steel-catch: rgba(236, 240, 248, 0.075);
+  /* Brushed-metal grain: stretched fractal noise, drawn once as a tile. */
+  --brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)'/%3E%3C/svg%3E");
   /* RESERVED. cert-red is the Red Line — the certificate, the single 🔴, the
      glowing underline in the lockup. It is the scarcest thing on the platform
      and nothing outside certification may spend it. */
   --cert-red: #ff2d2d;
-  --muted: #8a8a8a;
+  --muted: #8e9097;
   /* The "blue pill" — used only by the first-visit onboarding's Matrix shimmer. */
   --matrix-blue: #2f6bff;
   /* The listener's keep-mark: the ankh on an adorned song. Deliberately NOT
@@ -34,10 +46,89 @@ html {
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(255, 255, 255, 0.055), transparent 62%)
+      fixed,
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Brushed Onyx --------------------------------------------------------------
+   The grain sits on a fixed layer behind everything, so it never scrolls,
+   never repaints with the content, and never catches a tap. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--brush);
+  background-size: 480px 480px;
+  opacity: 0.045;
+}
+
+/* The AIRED lockup: polished-silver letters with the Red Line glowing beneath
+   (the one place outside certification the red underline has always lived). */
+.aired-lockup {
+  position: relative;
+  background: linear-gradient(180deg, #fbfbfc 0%, #b8bbc3 55%, #e8e9ed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.aired-lockup::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0.3em;
+  bottom: -3px;
+  height: 1.5px;
+  border-radius: 9999px;
+  background: var(--cert-red);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--cert-red) 85%, transparent);
+}
+
+/* The header bar: a thin plate of light on top, a machined shadow underneath. */
+.surface-bar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    color-mix(in srgb, var(--background) 82%, transparent);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* The now-playing dock: a graphite slab with a catch-light on its top edge. */
+.surface-dock {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--graphite-hi) 94%, transparent), color-mix(in srgb, var(--graphite-lo) 94%, transparent));
+  box-shadow:
+    inset 0 1px 0 var(--steel-catch),
+    0 -18px 40px -24px #000;
+}
+
+/* Raised things — covers, cards, panels: the catch-light plus a soft drop. */
+.surface-edge {
+  box-shadow:
+    inset 0 1px 0 var(--steel-catch),
+    0 12px 28px -16px rgba(0, 0, 0, 0.9);
+}
+
+/* Sunk things — the search field: graphite, darker at the bottom. */
+.surface-well {
+  background-image: linear-gradient(180deg, var(--graphite-hi), var(--graphite-lo));
+  box-shadow: inset 0 1px 0 var(--steel-catch);
+}
+
+/* Every red button gets a soft bevel: lighter at the top, deeper at the foot.
+   background-image only, so each button keeps its own colour and shadow. */
+.bg-cert-red {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.14));
+}
+
+::selection {
+  background: rgba(200, 205, 215, 0.28);
 }
 
 /* The header's nav strip (src/components/site-header.tsx).

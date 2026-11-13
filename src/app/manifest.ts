@@ -16,8 +16,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "AI-ed and proud — music credited to human and AI, by name.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0a0a0a",
-    theme_color: "#0a0a0a",
+    background_color: "#0b0b0c",
+    theme_color: "#0b0b0c",
     categories: ["music"],
     orientation: "portrait",
     icons: [
