@@ -47,7 +47,60 @@ export type LoadedDeck = {
   // Seconds of real audio the buffer holds (may be less than asked for when the
   // song is shorter than the window).
   seconds: number;
+  // The compressed audio itself (~1.4 MB a minute), kept so any part of the
+  // song can be decoded again later without holding the whole song as PCM
+  // (~10 MB a minute) or fetching it twice.
+  adts: AdtsIndex;
 };
+
+// Byte offsets of every AAC frame in an ADTS stream. Each frame is 1024
+// samples at the stream's own sample rate.
+export type AdtsIndex = { bytes: Uint8Array; frames: Uint32Array; sampleRate: number };
+
+const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+
+export function indexAdts(bytes: Uint8Array): AdtsIndex {
+  const offs: number[] = [];
+  let sampleRate = 44100;
+  let i = 0;
+  while (i + 7 <= bytes.length) {
+    if (bytes[i] !== 0xff || (bytes[i + 1] & 0xf6) !== 0xf0) {
+      i++;
+      continue;
+    }
+    const len = ((bytes[i + 3] & 0x03) << 11) | (bytes[i + 4] << 3) | (bytes[i + 5] >> 5);
+    if (len < 7) {
+      i++;
+      continue;
+    }
+    if (offs.length === 0) sampleRate = ADTS_RATES[(bytes[i + 2] >> 2) & 0x0f] ?? 44100;
+    offs.push(i);
+    i += len;
+  }
+  return { bytes, frames: Uint32Array.from(offs), sampleRate };
+}
+
+// Decode [from, from + seconds) of a song from its compressed frames. Returns
+// the buffer and where `from` landed inside it (a little audio is decoded
+// before it so the decoder is warmed up and nothing clicks at the start).
+export async function decodeRange(
+  idx: AdtsIndex,
+  from: number,
+  seconds: number,
+): Promise<{ buffer: AudioBuffer; lead: number } | null> {
+  const fd = 1024 / idx.sampleRate;
+  const WARM = 4; // frames decoded before the range and kept as lead-in
+  const want0 = Math.floor(Math.max(0, from) / fd);
+  const f0 = Math.max(0, want0 - WARM);
+  const f1 = Math.min(idx.frames.length, Math.ceil((from + seconds) / fd) + 2);
+  if (f1 <= f0) return null;
+  const start = idx.frames[f0];
+  const end = f1 < idx.frames.length ? idx.frames[f1] : idx.bytes.length;
+  const slice = idx.bytes.slice(start, end);
+  const ctx = new OfflineAudioContext(2, MIX_SAMPLE_RATE, MIX_SAMPLE_RATE);
+  const buffer = await ctx.decodeAudioData(slice.buffer);
+  return { buffer, lead: from - f0 * fd };
+}
 
 export async function loadDeck(
   hlsPlaylistKey: string | null,
@@ -97,7 +150,9 @@ export async function loadDeck(
     w += p.length;
   }
 
+  const index = indexAdts(adts);
   const ctx = new OfflineAudioContext(2, MIX_SAMPLE_RATE, MIX_SAMPLE_RATE);
-  const buffer = await ctx.decodeAudioData(adts.buffer);
-  return { buffer, seconds: Math.min(buffer.duration, seconds) };
+  // decodeAudioData detaches what it's given, so it gets a copy.
+  const buffer = await ctx.decodeAudioData(adts.slice().buffer);
+  return { buffer, seconds: Math.min(buffer.duration, seconds), adts: index };
 }

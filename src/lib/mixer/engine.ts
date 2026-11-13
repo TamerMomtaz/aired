@@ -1,238 +1,165 @@
-// The AIRED Mixer engine: two to six songs in, one long club mix out.
+// The AIRED Mixer engine: plays a SET SCRIPT (script.ts) as one long club mix.
 //
-// A real DJ set doesn't play half of one record and then half of another. It
-// trades PARTS: a phrase of A, then B comes in on the phrase line, then back to
-// A's next part, B's chorus over A's beat, and so on, with every song's story
-// moving forward each time it returns. That is what this engine does:
+// The script, written by the DJ brain or the built-in planner, says which part
+// of which song plays when, for how long, how it comes in, and what is added
+// on top. This file turns that into sound:
 //
-//   1. Every song is beat-tracked (tempo.ts) and cut into 8-bar phrases on its
-//      own downbeats (structure.ts).
-//   2. The first song's tempo is the master clock. Every other song is pitched
-//      vinyl-style to meet it (up to ±12%); one that can't be is still used, but
-//      always entered and left with a hard echo cut instead of a blend.
-//   3. The set is a row of 16-bar VISITS. Songs take turns, A B C A B C…, and
-//      each visit plays that song's next strong section, in the song's own order.
-//   4. Visits change on the bar line with one of three moves:
-//        blend   — the next song creeps in bass-cut for 4 bars; on the "one" the
-//                  basses swap and the old song is filtered away;
-//        mash-up — for 4 bars the old song keeps only its bass and kick while
-//                  the new one plays only its top: one song's beat under the
-//                  other's voice, then the bass drops back in;
-//        cut     — the old song is thrown into an echo and the new one slams in
-//                  with a boom (always used when tempos couldn't be locked).
-//   5. "Additions" follow an energy arc across the set (warm-up → build → peak →
-//      outro): a bridge kick, off-beat hats, claps, risers into big moments,
-//      drop booms and crashes, and sidechain pumping.
+//   prepareSongs — decode ONLY the parts the script uses, from each song's
+//                  compressed audio, each re-aligned on its own downbeat;
+//   planTimes    — lay the parts end to end on the master bar grid;
+//   renderSet    — play them through per-part filters, with the moves between
+//                  parts and the additions:
+//        blend    — the next part creeps in bass-cut for 4 bars; on the "one"
+//                   the basses swap and the old part is filtered away;
+//        mash-up  — for 4 bars the old part keeps only its beat and bass under
+//                   the new part's top;
+//        cut      — echo throw out, slam in (always for a song whose tempo
+//                   can't lock, and after a loop build);
+//        loop build, breakdown, filter rise, riser, drop, kick, hats, claps,
+//        and sidechain pump, wherever the script asks for them.
 //
 // It all renders in an OfflineAudioContext: faster than real time, and never a
 // second live audio element beside the global player (the one-<audio>
 // invariant in player-provider stays untouched).
 
-import { MIX_SAMPLE_RATE } from "./load";
+import { decodeRange, MIX_SAMPLE_RATE, type AdtsIndex } from "./load";
+import { shiftKey, type MusicalKey } from "./key";
+import { barSeconds, chooseRate, type Energy, type Fx, type Move, type SetScript } from "./script";
 import { refineStart, type Structure } from "./structure";
 import type { Tempo } from "./tempo";
 
-export type Energy = "lounge" | "club" | "peak";
-export type MixMinutes = 5 | 7 | 10;
+export type { Energy, MixMinutes, Move } from "./script";
 
 export const MIN_TRACKS = 2;
 export const MAX_TRACKS = 6;
 // How much of each song to read. A long song (no length cap, CLAUDE.md Rule 4)
-// is still fully usable; the Mixer just picks its sections from the first 8
-// minutes, which keeps a phone's memory in bounds.
+// is still fully usable; the Mixer picks its parts from the first 8 minutes,
+// which keeps a phone's memory in bounds.
 export const LOAD_SECONDS = 480;
 
-const VISIT_BARS = 16;
-const PRE_BARS = 4; // audio kept before a section, for blends
+const PRE_BARS = 4; // audio kept before a part, for blends
 const POST_BARS = 4; // audio kept after it, for mash-ups and filter-outs
 const TAIL_SECONDS = 4;
-const MAX_NUDGE = 0.12;
 
-// What survives of a song once its sections are chosen: just those sections,
-// packed into one small buffer, so six songs never sit in memory whole.
-export type PreparedTrack = {
+// What the Mixer keeps of a song after its first listen: the analysis and the
+// compressed audio. The decoded PCM is let go straight away.
+export type SongAnalysis = {
   title: string;
-  clip: AudioBuffer;
-  rate: number; // playback rate to meet the master tempo
-  synced: boolean;
-  bpm: number;
-  // Each chosen section: where it begins inside `clip`, its loudness, and
-  // where it came from in the song (for the timeline shown to the listener).
-  sections: { clipStart: number; rms: number; sourceStart: number }[];
+  tempo: Tempo;
+  structure: Structure;
+  key: MusicalKey;
+  duration: number;
+  adts: AdtsIndex;
 };
 
-export function chooseRate(master: number, bpm: number): { rate: number; synced: boolean } {
-  const ratio = master / bpm;
-  let best = ratio;
-  for (const c of [ratio * 2, ratio / 2]) if (Math.abs(c - 1) < Math.abs(best - 1)) best = c;
-  if (Math.abs(best - 1) <= MAX_NUDGE) return { rate: best, synced: true };
-  return { rate: 1, synced: false };
-}
+export type Part = { clip: AudioBuffer; start: number; rms: number };
 
-export function visitSeconds(masterBpm: number): number {
-  return VISIT_BARS * 4 * (60 / masterBpm);
-}
+export type PreparedSong = {
+  title: string;
+  rate: number;
+  synced: boolean;
+  bpm: number;
+  key: MusicalKey; // after the tempo lock's pitch change
+  parts: Map<string, Part>; // "phrase:bars" → decoded audio
+};
 
-// How many visits a set of `minutes` needs, and how many fall to each song.
-export function visitCounts(masterBpm: number, minutes: MixMinutes, tracks: number) {
-  const total = Math.max(tracks * 2, Math.ceil((minutes * 60) / visitSeconds(masterBpm)));
-  const per = Array.from({ length: tracks }, (_, i) =>
-    Math.floor(total / tracks) + (i < total % tracks ? 1 : 0),
-  );
-  return { total, per };
-}
-
-// Pick `count` 16-bar sections from a song and copy them out of the full
-// buffer. Sections run in the song's own order, so each return moves its story
-// forward; within each stretch of the song the strongest section wins. The
-// opening song always starts on its real intro.
-export function prepareTrack(
-  title: string,
-  full: AudioBuffer,
-  tempo: Tempo,
-  structure: Structure,
-  masterBpm: number,
-  count: number,
-  opener: boolean,
-): PreparedTrack {
-  const { rate, synced } = chooseRate(masterBpm, tempo.bpm);
-  const masterBar = (4 * 60) / masterBpm;
-  // Source seconds covered by one output bar.
-  const srcBar = masterBar * rate;
-  const ph = structure.phrases;
-  const visitSrc = VISIT_BARS * srcBar;
-
-  // Candidate starts: every phrase whose 16 bars fit in the audio we have.
-  const cands = ph
-    .map((p, i) => ({ i, start: p.start, score: p.rms + (ph[i + 1]?.rms ?? p.rms) }))
-    .filter((c) => c.start + visitSrc <= full.duration - 0.05);
-  if (cands.length === 0) {
-    cands.push({ i: 0, start: ph[0]?.start ?? 0, score: 1 });
-  }
-
-  const picks: number[] = [];
-  const pool = [...cands];
-  if (opener) picks.push(pool.shift()!.start);
-  const want = count - picks.length;
-  if (want > 0 && pool.length > 0) {
-    // Split the rest of the song into `want` stretches; take the strongest
-    // section in each, never overlapping the previous pick.
-    for (let k = 0; k < want; k++) {
-      const lo = Math.floor((k * pool.length) / want);
-      const hi = Math.max(lo + 1, Math.floor(((k + 1) * pool.length) / want));
-      let best: (typeof pool)[number] | null = null;
-      const last = picks[picks.length - 1];
-      for (const c of pool.slice(lo, hi)) {
-        if (last !== undefined && c.start < last + visitSrc - 0.01 && pool.length >= want * 2) continue;
-        if (!best || c.score > best.score) best = c;
-      }
-      picks.push((best ?? pool[Math.min(lo, pool.length - 1)]).start);
-    }
-  }
-  // A short song asked for many visits loops back over its strongest parts.
-  while (picks.length < count) picks.push(picks[picks.length % Math.max(1, picks.length)] ?? 0);
-
-  // Copy each unique section, with room before and after, into one clip.
-  const cache = new Map<number, number>();
-  const refined = picks.map((p) => {
-    if (!cache.has(p)) cache.set(p, refineStart(full, p, structure.beat));
-    return cache.get(p)!;
-  });
-  const unique = [...new Set(refined)];
-  const pre = PRE_BARS * srcBar;
-  const len = (PRE_BARS + VISIT_BARS + POST_BARS) * srcBar;
-  const sr = full.sampleRate;
-  const segFrames = Math.ceil(len * sr);
-  const clip = new AudioBuffer({
-    numberOfChannels: full.numberOfChannels,
-    length: segFrames * unique.length,
-    sampleRate: sr,
-  });
-  const offsets = new Map<number, number>();
-  unique.forEach((start, u) => {
-    const from = Math.round((start - pre) * sr);
-    for (let c = 0; c < full.numberOfChannels; c++) {
-      const src = full.getChannelData(c);
-      const dst = clip.getChannelData(c);
-      const base = u * segFrames;
-      const a = Math.max(0, from);
-      const b = Math.min(src.length, from + segFrames);
-      if (b > a) dst.set(src.subarray(a, b), base + (a - from));
-    }
-    offsets.set(start, u * segFrames / sr + pre);
-  });
-
-  const sections = refined.map((start) => {
-    const nearest = ph.reduce(
-      (best, p) => (Math.abs(p.start - start) < Math.abs(best.start - start) ? p : best),
-      ph[0] ?? { start, rms: 0.1 },
-    );
-    return { clipStart: offsets.get(start)!, rms: nearest.rms || 0.1, sourceStart: start };
-  });
-  return { title, clip, rate, synced, bpm: tempo.bpm, sections };
-}
-
-export type Move = "open" | "blend" | "mashup" | "cut";
-export type Stage = "warm" | "build" | "peak" | "outro";
-
-export type Visit = {
-  track: number;
-  section: number;
+export type PlannedVisit = {
+  song: number;
+  phrase: number;
+  bars: number;
   at: number; // output seconds
-  move: Move; // how this visit comes in
-  stage: Stage;
+  dur: number;
+  move: Move;
+  fx: Fx;
+  note?: string;
   sourceStart: number;
 };
 
 export type MixPlan = {
   bpm: number;
-  visitSeconds: number;
-  visits: Visit[];
+  title: string;
+  story: string;
+  by: "brain" | "rules";
+  visits: PlannedVisit[];
   end: number;
-  tracks: { title: string; bpm: number; rate: number; synced: boolean }[];
+  songs: { title: string; bpm: number; rate: number; synced: boolean; key: MusicalKey }[];
 };
 
-function stageAt(f: number): Stage {
-  if (f < 0.14) return "warm";
-  if (f < 0.34) return "build";
-  if (f < 0.86) return "peak";
-  return "outro";
+const partKey = (phrase: number, bars: number) => `${phrase}:${bars}`;
+
+export async function prepareSongs(
+  songs: SongAnalysis[],
+  script: SetScript,
+  onProgress?: (fraction: number) => void,
+): Promise<PreparedSong[]> {
+  const master = songs[script.visits[0].song].tempo.bpm;
+  const mBar = barSeconds(master);
+  const out: PreparedSong[] = songs.map((s) => {
+    const { rate, synced } = chooseRate(master, s.tempo.bpm);
+    return { title: s.title, rate, synced, bpm: s.tempo.bpm, key: shiftKey(s.key, rate), parts: new Map() };
+  });
+  const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars)}`, v])).values()];
+  let done = 0;
+  for (const v of jobs) {
+    const s = songs[v.song];
+    const p = out[v.song];
+    const srcBar = mBar * p.rate;
+    const ph = s.structure.phrases[v.phrase];
+    const pre = PRE_BARS * srcBar;
+    const len = (PRE_BARS + v.bars + POST_BARS) * srcBar;
+    const from = ph.start - pre;
+    const dec = await decodeRange(s.adts, Math.max(0, from), len + Math.min(0, from));
+    if (!dec) continue;
+    // Where the part's first downbeat sits in the decoded audio, fine-tuned.
+    const approx = dec.lead + (ph.start - Math.max(0, from));
+    const exact = refineStart(dec.buffer, approx, s.structure.beat);
+    // Copy into a clip whose PRE_BARS mark is exactly the downbeat.
+    const sr = dec.buffer.sampleRate;
+    const frames = Math.ceil(len * sr);
+    const clip = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: sr });
+    const shift = Math.round((exact - pre) * sr);
+    for (let c = 0; c < 2; c++) {
+      const src = dec.buffer.getChannelData(Math.min(c, dec.buffer.numberOfChannels - 1));
+      const dst = clip.getChannelData(c);
+      const a = Math.max(0, shift);
+      const b = Math.min(src.length, shift + frames);
+      if (b > a) dst.set(src.subarray(a, b), a - shift);
+    }
+    p.parts.set(partKey(v.phrase, v.bars), {
+      clip,
+      start: pre,
+      rms: Math.max(1e-4, (s.structure.phrases[v.phrase].rms + (s.structure.phrases[v.phrase + 1]?.rms ?? s.structure.phrases[v.phrase].rms)) / 2),
+    });
+    done++;
+    onProgress?.(done / jobs.length);
+  }
+  return out;
 }
 
-export function planSet(tracks: PreparedTrack[], masterBpm: number, energy: Energy): MixPlan {
-  const V = visitSeconds(masterBpm);
-  const n = tracks.reduce((s, t) => s + t.sections.length, 0);
-  const used = tracks.map(() => 0);
-  const visits: Visit[] = [];
-  for (let v = 0; v < n; v++) {
-    // Round-robin, skipping a song whose sections are spent.
-    let track = v % tracks.length;
-    for (let k = 0; k < tracks.length && used[track] >= tracks[track].sections.length; k++) {
-      track = (track + 1) % tracks.length;
-    }
-    const section = used[track]++;
-    const prev = visits[v - 1];
-    const stage = stageAt(n > 1 ? v / (n - 1) : 0);
-    let move: Move = "blend";
-    if (!prev) move = "open";
-    else if (!tracks[track].synced || !tracks[prev.track].synced) move = "cut";
-    else if (energy !== "lounge" && (stage === "build" || stage === "peak") && v % 3 === 2) move = "mashup";
-    else if (energy === "peak" && stage === "peak" && v % 4 === 0) move = "cut";
+export function planTimes(script: SetScript, songs: SongAnalysis[], prepared: PreparedSong[]): MixPlan {
+  const master = songs[script.visits[0].song].tempo.bpm;
+  const mBar = barSeconds(master);
+  let at = 0;
+  const visits: PlannedVisit[] = [];
+  for (const v of script.visits) {
+    if (!prepared[v.song].parts.has(partKey(v.phrase, v.bars))) continue;
+    const dur = v.bars * mBar;
     visits.push({
-      track,
-      section,
-      at: v * V,
-      move,
-      stage,
-      sourceStart: tracks[track].sections[section].sourceStart,
+      ...v,
+      at,
+      dur,
+      sourceStart: songs[v.song].structure.phrases[v.phrase].start,
     });
+    at += dur;
   }
   return {
-    bpm: masterBpm,
-    visitSeconds: V,
+    bpm: master,
+    title: script.title,
+    story: script.story,
+    by: script.by,
     visits,
-    end: n * V,
-    tracks: tracks.map((t) => ({ title: t.title, bpm: t.bpm, rate: t.rate, synced: t.synced })),
+    end: at,
+    songs: prepared.map((p) => ({ title: p.title, bpm: p.bpm, rate: p.rate, synced: p.synced, key: p.key })),
   };
 }
 
@@ -244,7 +171,7 @@ function noiseBuffer(ctx: BaseAudioContext, seconds = 2): AudioBuffer {
 }
 
 export async function renderSet(
-  tracks: PreparedTrack[],
+  prepared: PreparedSong[],
   plan: MixPlan,
   energy: Energy,
 ): Promise<AudioBuffer> {
@@ -252,7 +179,6 @@ export async function renderSet(
   const ctx = new OfflineAudioContext(2, Math.ceil(total * MIX_SAMPLE_RATE), MIX_SAMPLE_RATE);
   const beat = 60 / plan.bpm;
   const bar = beat * 4;
-  const V = plan.visitSeconds;
   const noise = noiseBuffer(ctx);
   const visits = plan.visits;
   const level = { lounge: 0.6, club: 0.85, peak: 1 }[energy];
@@ -300,21 +226,20 @@ export async function renderSet(
   echoSend.gain.linearRampToValueAtTime(0.6, plan.end);
 
   // Balance songs to a common loudness.
-  const rmsAll = visits.map((v) => tracks[v.track].sections[v.section].rms).sort((a, b) => a - b);
+  const partOf = (v: PlannedVisit) => prepared[v.song].parts.get(partKey(v.phrase, v.bars))!;
+  const rmsAll = visits.map((v) => partOf(v).rms).sort((a, b) => a - b);
   const target = rmsAll[Math.floor(rmsAll.length / 2)] || 0.1;
 
-  // ---- the visits -----------------------------------------------------------
+  // ---- the parts ------------------------------------------------------------
   visits.forEach((v, idx) => {
-    const t = tracks[v.track];
-    const sec = t.sections[v.section];
+    const song = prepared[v.song];
+    const part = partOf(v);
     const next = visits[idx + 1];
-    const g = Math.max(0.5, Math.min(2, target / sec.rms));
+    const g = Math.max(0.5, Math.min(2, target / part.rms));
     const T = v.at;
-    const Tend = T + V;
+    const Tend = T + v.dur;
+    const rate = song.rate;
 
-    const src = ctx.createBufferSource();
-    src.buffer = t.clip;
-    src.playbackRate.value = t.rate;
     const shelf = ctx.createBiquadFilter();
     shelf.type = "lowshelf";
     shelf.frequency.value = 220;
@@ -326,10 +251,20 @@ export async function renderSet(
     lp.frequency.value = 20000;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    src.connect(shelf).connect(hp).connect(lp).connect(gain).connect(music);
+    shelf.connect(hp).connect(lp).connect(gain).connect(music);
     const send = ctx.createGain();
     send.gain.value = 0;
     gain.connect(send).connect(echoSend);
+
+    // Clip time for an output time inside this part.
+    const clipAt = (t: number) => part.start + (t - T) * rate;
+    const play = (from: number, to: number, clipFrom: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = part.clip;
+      src.playbackRate.value = rate;
+      src.connect(shelf);
+      src.start(from, Math.max(0, clipFrom), Math.max(0.01, (to - from) * rate));
+    };
 
     // -- how it comes in --
     let startAt = T;
@@ -342,18 +277,32 @@ export async function renderSet(
       shelf.gain.setValueAtTime(-30, T - 0.01);
       shelf.gain.linearRampToValueAtTime(0, T);
     } else if (v.move === "mashup") {
-      // Top only for 4 bars, riding over the outgoing song's beat.
       gain.gain.setValueAtTime(g, T);
       hp.frequency.setValueAtTime(300, T);
       hp.frequency.setValueAtTime(300, T + PRE_BARS * bar - 0.01);
       hp.frequency.linearRampToValueAtTime(20, T + PRE_BARS * bar);
     } else {
-      // open / cut: full level on the "one".
       gain.gain.setValueAtTime(v.move === "open" ? 0 : g, T);
       if (v.move === "open") gain.gain.linearRampToValueAtTime(g, T + bar);
     }
 
-    // -- how it goes out (decided by the next visit's move) --
+    // -- inside the part --
+    if (v.fx.breakdown) {
+      // Bass out until the last bar, then it swells back for what follows.
+      shelf.gain.setValueAtTime(0, T + 0.01);
+      shelf.gain.linearRampToValueAtTime(-24, T + beat);
+      shelf.gain.setValueAtTime(-24, Tend - bar);
+      shelf.gain.linearRampToValueAtTime(0, Tend - 0.02);
+    }
+    const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
+    if (v.fx.filterRise || v.fx.loopBuild) {
+      const from = v.fx.loopBuild ? loopFrom : Math.max(T + PRE_BARS * bar, Tend - 8 * bar);
+      hp.frequency.setValueAtTime(20, from);
+      hp.frequency.exponentialRampToValueAtTime(700, Tend - 0.03);
+      hp.frequency.setValueAtTime(20, Tend);
+    }
+
+    // -- how it goes out (decided by the next part's move) --
     let stopAt = Tend + 0.05;
     if (!next) {
       stopAt = Tend + 0.2;
@@ -369,14 +318,12 @@ export async function renderSet(
       gain.gain.linearRampToValueAtTime(0, Tend + bar);
       stopAt = Tend + bar + 0.05;
     } else if (next.move === "mashup") {
-      // Keep only the beat and bass under the incoming song's top.
       lp.frequency.setValueAtTime(20000, Tend);
       lp.frequency.exponentialRampToValueAtTime(320, Tend + 0.25);
       gain.gain.setValueAtTime(g, Tend + PRE_BARS * bar - beat);
       gain.gain.linearRampToValueAtTime(0, Tend + PRE_BARS * bar);
       stopAt = Tend + PRE_BARS * bar + 0.05;
     } else {
-      // Cut: throw the last beat into the echo, then out on the bar line.
       send.gain.setValueAtTime(0, Tend - beat);
       send.gain.linearRampToValueAtTime(0.9, Tend - 0.02);
       send.gain.linearRampToValueAtTime(0, Tend);
@@ -384,8 +331,20 @@ export async function renderSet(
       gain.gain.linearRampToValueAtTime(0, Tend);
     }
 
-    const offset = sec.clipStart - (T - startAt) * t.rate;
-    src.start(startAt, Math.max(0, offset), (stopAt - startAt) * t.rate);
+    // -- the audio itself --
+    play(startAt, Math.min(stopAt, v.fx.loopBuild ? loopFrom : stopAt), clipAt(startAt));
+    if (v.fx.loopBuild) {
+      // The stutter build: the bar before the loop, repeated, tighter and
+      // tighter: 1 bar, 1 bar, ½, ½, then four ¼-bar hits.
+      const src0 = clipAt(loopFrom - bar);
+      const pattern = [1, 1, 0.5, 0.5, 0.25, 0.25, 0.25, 0.25];
+      let t = loopFrom;
+      for (const len of pattern) {
+        const dur = len * bar;
+        play(t, t + dur, src0);
+        t += dur;
+      }
+    }
   });
 
   // ---- additions on the grid ---------------------------------------------
@@ -491,39 +450,36 @@ export async function renderSet(
   };
 
   visits.forEach((v, idx) => {
-    const t = tracks[v.track];
+    const song = prepared[v.song];
     const T = v.at;
-    const Tend = T + V;
-    const synced = t.synced;
+    const Tend = T + v.dur;
     const next = visits[idx + 1];
+    const fx = v.fx;
 
-    const depth =
-      !synced || v.stage === "warm" || v.stage === "outro"
-        ? 0
-        : (v.stage === "peak" ? 0.35 : 0.2) * level;
-    if (depth > 0) for (let b = T; b < Tend - 1e-3; b += beat) pumpAt(b, depth);
-
-    if (synced && energy !== "lounge" && (v.stage === "build" || v.stage === "peak")) {
-      const kLvl = (v.stage === "peak" ? 0.65 : 0.45) * level;
-      for (let b = T; b < Tend - 1e-3; b += beat) kick(b, kLvl);
-      for (let b = T + beat / 2; b < Tend; b += beat) hat(b, 0.13 * level);
-      if (v.stage === "peak") for (let b = T + beat; b < Tend; b += 2 * beat) clap(b, 0.3 * level);
-    } else if (synced && energy === "lounge" && v.stage === "peak") {
-      for (let b = T; b < Tend - 1e-3; b += beat) kick(b, 0.3);
+    if (fx.pump && song.synced) {
+      const depth = (fx.claps ? 0.35 : 0.22) * level;
+      for (let b = T; b < Tend - 1e-3; b += beat) pumpAt(b, depth);
     }
-
-    // Big moment into the next visit: a riser before, a drop on the one.
-    if (next && energy !== "lounge") {
-      const rising =
-        (next.stage === "peak" && v.stage !== "peak") ||
-        next.move === "cut" ||
-        (next.stage === "peak" && idx % 2 === 1);
-      if (rising) {
-        const len = (next.stage === "peak" && v.stage !== "peak" ? 8 : 4) * bar;
-        riser(Tend - len, Tend, 0.22 * level + 0.05);
-        drop(Tend, level);
+    if (song.synced) {
+      const kLvl = (fx.claps ? 0.65 : 0.5) * level;
+      // During a loop build the kick doubles up with the stutter.
+      const loopFrom = fx.loopBuild ? Tend - 4 * bar : Tend;
+      if (fx.kick) {
+        for (let b = T; b < loopFrom - 1e-3; b += beat) kick(b, kLvl);
+        if (fx.loopBuild) {
+          for (let b = loopFrom; b < Tend - 2 * bar - 1e-3; b += beat) kick(b, kLvl);
+          for (let b = Tend - 2 * bar; b < Tend - bar - 1e-3; b += beat / 2) kick(b, kLvl * 0.9);
+          for (let b = Tend - bar; b < Tend - 1e-3; b += beat / 4) kick(b, kLvl * 0.8);
+        }
       }
+      if (fx.hats) for (let b = T + beat / 2; b < Tend; b += beat) hat(b, 0.13 * level);
+      if (fx.claps) for (let b = T + beat; b < Tend; b += 2 * beat) clap(b, 0.3 * level);
     }
+    if (next && (fx.riser || fx.loopBuild)) {
+      const len = (fx.loopBuild ? 4 : Math.min(8, v.bars / 2)) * bar;
+      riser(Tend - len, Tend, 0.22 * level + 0.05);
+    }
+    if (next && (fx.drop || fx.loopBuild)) drop(Tend, level);
   });
 
   const drumSrc = ctx.createBufferSource();
