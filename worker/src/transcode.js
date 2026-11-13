@@ -13,8 +13,15 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { config } from "./config.js";
-import { log } from "./logger.js";
-import { createMasterSignedUrl, getWork, updateWorkKeys } from "./supabase.js";
+import { log, logErr } from "./logger.js";
+import {
+  createMasterSignedUrl,
+  deleteMasterObject,
+  getMix,
+  getWork,
+  updateMixKey,
+  updateWorkKeys,
+} from "./supabase.js";
 import { uploadToR2 } from "./r2.js";
 import { transcodeToHls } from "./ffmpeg.js";
 
@@ -145,6 +152,73 @@ export async function transcodeWork(workId) {
     };
   } finally {
     // Always clean the scratch dir, success or failure.
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// MY MIXES — one saved mix: its uploaded master → HLS on R2 under
+// mix/<uuid>/hls/, the key recorded on the mix row, and the source upload
+// removed (the maker keeps the full file on their device; the account keeps
+// the stream). Keyed by the mix's random uuid, so a private mix's stream
+// address can't be guessed.
+export async function transcodeMix(mixId) {
+  const startedAt = Date.now();
+  const mix = await getMix(mixId);
+  if (!mix.master_storage_path) {
+    if (mix.hls_playlist_key) return { mixId, hlsPlaylistKey: mix.hls_playlist_key, already: true };
+    throw new Error(`mix ${mixId} has no master_storage_path — nothing to transcode`);
+  }
+  log(`mix=${mixId} transcode requested master=${mix.master_storage_path}`);
+
+  const tmp = await mkdtemp(join(tmpdir(), `aired-mix-${mixId.slice(0, 8)}-`));
+  try {
+    const ext = (extname(mix.master_storage_path) || ".bin").toLowerCase();
+    const masterLocal = join(tmp, `master${ext}`);
+    const res = await fetch(await createMasterSignedUrl(mix.master_storage_path));
+    if (!res.ok || !res.body) {
+      throw new Error(`mix master download failed: HTTP ${res.status} ${res.statusText}`);
+    }
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(masterLocal));
+
+    const outDir = join(tmp, "hls");
+    await mkdir(outDir);
+    await transcodeToHls({
+      inputPath: masterLocal,
+      outputDir: outDir,
+      audioBitrate: config.audioBitrate,
+      segmentSeconds: config.hlsSegmentSeconds,
+    });
+    const produced = await readdir(outDir);
+    const segments = produced.filter((f) => f.endsWith(".ts")).sort();
+    if (!produced.includes("playlist.m3u8") || segments.length === 0) {
+      throw new Error("ffmpeg produced no playlist/segments for the mix");
+    }
+
+    const hlsPrefix = `mix/${mixId}/hls`;
+    const hlsPlaylistKey = `${hlsPrefix}/playlist.m3u8`;
+    await mapWithConcurrency(segments, 6, async (seg) => {
+      await uploadToR2({
+        bucket: config.r2HlsBucket,
+        key: `${hlsPrefix}/${seg}`,
+        body: await readFile(join(outDir, seg)),
+        contentType: contentTypeFor(seg),
+      });
+    });
+    await uploadToR2({
+      bucket: config.r2HlsBucket,
+      key: hlsPlaylistKey,
+      body: await readFile(join(outDir, "playlist.m3u8")),
+      contentType: contentTypeFor("playlist.m3u8"),
+    });
+
+    await updateMixKey(mixId, hlsPlaylistKey);
+    await deleteMasterObject(mix.master_storage_path).catch((err) =>
+      logErr(`mix=${mixId} source upload cleanup failed`, err),
+    );
+    const elapsedMs = Date.now() - startedAt;
+    log(`mix=${mixId} DONE hls_playlist_key=${hlsPlaylistKey} segments=${segments.length} elapsed=${(elapsedMs / 1000).toFixed(1)}s`);
+    return { mixId, hlsPlaylistKey, segmentCount: segments.length, elapsedMs };
+  } finally {
     await rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
 }

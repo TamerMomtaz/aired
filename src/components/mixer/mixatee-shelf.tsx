@@ -1,11 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { usePlayer } from "@/components/player/player-provider";
 import type { Track } from "@/components/player/track";
 import { formatDuration } from "@/lib/format";
-import { deleteMix, loadMixAudio, mixPlayerId, renameMix, type SavedMix } from "@/lib/mixer/library";
+import { deleteMix, loadMixAudio, markOnAccount, mixPlayerId, renameMix, type SavedMix } from "@/lib/mixer/library";
+import { uploadMixToAccount } from "@/lib/mixes/upload";
+
+// The catalog numbers a mix was built from. Mixes saved before these were
+// stored carry them only in their credit labels ("AIRED-0092 · …").
+function sourceIds(m: SavedMix): number[] {
+  if (m.sourceWorkIds?.length) return m.sourceWorkIds;
+  return m.credits
+    .map((c) => Number(/AIRED-(\d+)/.exec(c.label)?.[1]))
+    .filter((n) => Number.isSafeInteger(n) && n > 0);
+}
 
 // File URLs for saved mixes, made once per page visit and shared by the shelf
 // and the player, so a mix that is playing keeps playing while you browse.
@@ -46,6 +57,34 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
   const { playQueue, current, isPlaying, toggle } = usePlayer();
   const [confirm, setConfirm] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [keeping, setKeeping] = useState<string | null>(null);
+  const [needSignIn, setNeedSignIn] = useState(false);
+
+  async function keep(m: SavedMix) {
+    setError(null);
+    setNeedSignIn(false);
+    const blob = await loadMixAudio(m.id).catch(() => null);
+    if (!blob) return setError("That mix couldn't be read from this device.");
+    setKeeping(m.id);
+    const r = await uploadMixToAccount(blob, {
+      title: m.title,
+      seconds: m.seconds,
+      bpm: m.bpm,
+      energy: m.energy,
+      dj: m.dj,
+      story: m.story,
+      plannedBy: m.plannedBy,
+      sourceWorkIds: sourceIds(m),
+    });
+    setKeeping(null);
+    if ("error" in r) {
+      if (r.error === "signin") setNeedSignIn(true);
+      else setError(r.error);
+      return;
+    }
+    await markOnAccount(m.id, r.id).catch(() => {});
+    onChange();
+  }
 
   async function play(from: number) {
     setError(null);
@@ -131,7 +170,24 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
                 </div>
               </div>
               <p className="text-xs text-muted/80">{m.credits.map((c) => `${c.label} by ${c.by}`).join(" · ")}</p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {m.accountId ? (
+                  <Link
+                    href={`/mixes/${m.accountId}`}
+                    className="rounded-lg border border-cert-red/40 px-3 py-1.5 text-xs text-foreground hover:border-cert-red/70"
+                  >
+                    On AIRED ✓
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void keep(m)}
+                    disabled={keeping !== null}
+                    className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+                  >
+                    {keeping === m.id ? "Saving to AIRED…" : "Keep on AIRED"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void download(m)}
@@ -153,9 +209,20 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
         })}
       </ul>
       {error ? <p className="text-xs text-muted">{error}</p> : null}
+      {needSignIn ? (
+        <p className="text-xs text-foreground">
+          <Link href="/login?next=/mix" className="underline">
+            Sign in
+          </Link>{" "}
+          to keep mixes on your AIRED account.
+        </p>
+      ) : null}
       <p className="text-xs text-muted/70">
-        MixaTee lives in this browser on this device. Clearing the site&apos;s data removes it, so download the
-        ones you love.
+        MixaTee lives in this browser on this device. Tap <strong>Keep on AIRED</strong> to save a mix to your
+        account, where it plays on any device you sign in on.{" "}
+        <Link href="/mixes" className="underline">
+          My mixes on AIRED
+        </Link>
       </p>
     </section>
   );

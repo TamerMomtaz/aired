@@ -52,7 +52,7 @@ export function NowPlayingBar() {
         : "Repeat off";
   const contributorNames = current.contributors.map((c) => c.name).join(" · ");
   // A MixaTee (a mix saved on this device) has no catalog page of its own.
-  const isMix = !!current.localUrl;
+  const isMix = !!current.localUrl || !!current.mixId;
 
   function fractionFromClientX(clientX: number): number {
     const bar = barRef.current;
@@ -139,7 +139,7 @@ export function NowPlayingBar() {
 
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4">
           <Link
-            href={isMix ? "/mix#mixatee" : `/registry/${current.id}`}
+            href={current.mixId ? `/mixes/${current.mixId}` : isMix ? "/mix#mixatee" : `/registry/${current.id}`}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition hover:opacity-90"
             aria-label={isMix ? `Open MixaTee ${current.title}` : `Open AIRED-${current.id} ${current.title}`}
           >

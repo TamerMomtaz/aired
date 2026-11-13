@@ -45,3 +45,23 @@ export async function purgeWork(workId, { masterStoragePath } = {}) {
   );
   return result;
 }
+
+// MY MIXES — a deleted mix: its stream on R2 and any source upload still left.
+// The row is already gone (the app deletes it first, as its owner).
+export async function purgeMix(mixId, { masterStoragePath } = {}) {
+  const result = { mixId, hlsDeleted: 0, sourceDeleted: 0 };
+  await Promise.all([
+    deleteByPrefix({ bucket: config.r2HlsBucket, prefix: `mix/${mixId}/` })
+      .then((n) => {
+        result.hlsDeleted = n;
+      })
+      .catch((err) => logErr(`mix=${mixId} R2 hls purge failed`, err)),
+    deleteMasterObject(masterStoragePath)
+      .then(({ removed }) => {
+        result.sourceDeleted = removed;
+      })
+      .catch((err) => logErr(`mix=${mixId} source purge failed`, err)),
+  ]);
+  log(`mix=${mixId} purged hls=${result.hlsDeleted} source=${result.sourceDeleted}`);
+  return result;
+}

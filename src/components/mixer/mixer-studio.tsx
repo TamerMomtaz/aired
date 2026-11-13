@@ -268,6 +268,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
           plannedBy: plan.by,
           credits: tracks.map((t) => ({ label: formatWorkLabel(t.id, t.title), by: names(t) })),
           makers: [...new Set(tracks.flatMap((t) => t.contributors.map((c) => c.name)))],
+          sourceWorkIds: tracks.map((t) => t.id),
         },
         blob,
       ).then(

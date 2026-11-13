@@ -31,6 +31,16 @@ It is a plain-JavaScript Node service (no build step) so the container has the
 fewest ways to break; `ffmpeg` is installed in the image and verified at build
 time.
 
+## My mixes (`/transcode-mix`, `/purge-mix`)
+
+A mix kept on someone's account (`public.mix`) goes through the same pipeline:
+`POST /transcode-mix { mix_id }` downloads its upload from the private
+`masters` bucket, writes HLS to `aired-hls` under `mix/<uuid>/hls/`, records
+`mix.hls_playlist_key`, and removes the source upload (the maker keeps the full
+file on their device). `POST /purge-mix { mix_id, master_storage_path? }` clears
+`mix/<uuid>/` and any leftover upload after the app deletes the row. Same Bearer
+secret as `/transcode`. The app calls both from `src/lib/mixes/worker.ts`.
+
 ## Deploy on Railway
 
 This lives in a **self-contained folder** so Railway deploys it straight from

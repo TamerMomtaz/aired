@@ -95,3 +95,27 @@ export async function deleteMasterObject(path) {
   }
   return { removed: 1 };
 }
+
+// MY MIXES — a mix saved to its maker's account (public.mix).
+export async function getMix(mixId) {
+  const { data, error } = await supabase
+    .from("mix")
+    .select("id, title, master_storage_path, hls_playlist_key")
+    .eq("id", mixId)
+    .single();
+  if (error) {
+    throw new Error(`Could not read mix ${mixId}: ${error.message}`);
+  }
+  return data;
+}
+
+// Record the HLS key and forget the source upload (the worker removes it).
+export async function updateMixKey(mixId, hlsPlaylistKey) {
+  const { error } = await supabase
+    .from("mix")
+    .update({ hls_playlist_key: hlsPlaylistKey, master_storage_path: null })
+    .eq("id", mixId);
+  if (error) {
+    throw new Error(`Could not update mix ${mixId}: ${error.message}`);
+  }
+}

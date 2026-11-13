@@ -30,6 +30,10 @@ export type SavedMix = {
   credits: MixCredit[];
   // Every distinct maker across the source works, for the player's artist line.
   makers: string[];
+  // The catalog works it was built from (older saves may not have this).
+  sourceWorkIds?: number[];
+  // Set once the mix is kept on the person's AIRED account.
+  accountId?: string;
 };
 
 function open(): Promise<IDBDatabase> {
@@ -105,6 +109,19 @@ export async function renameMix(id: string, title: string): Promise<void> {
     const store = tx.objectStore(META);
     const mix = (await request(store.get(id))) as SavedMix | undefined;
     if (mix) store.put({ ...mix, title });
+    await done(tx);
+  } finally {
+    db.close();
+  }
+}
+
+export async function markOnAccount(id: string, accountId: string): Promise<void> {
+  const db = await open();
+  try {
+    const tx = db.transaction(META, "readwrite");
+    const store = tx.objectStore(META);
+    const mix = (await request(store.get(id))) as SavedMix | undefined;
+    if (mix) store.put({ ...mix, accountId });
     await done(tx);
   } finally {
     db.close();

@@ -7,8 +7,8 @@ import { timingSafeEqual } from "node:crypto";
 
 import { config } from "./config.js";
 import { log, logErr } from "./logger.js";
-import { transcodeWork } from "./transcode.js";
-import { purgeWork } from "./purge.js";
+import { transcodeMix, transcodeWork } from "./transcode.js";
+import { purgeMix, purgeWork } from "./purge.js";
 import { CLIP_ORIENTATIONS, renderShareVideo } from "./clip.js";
 import {
   REEL_HIGHLIGHTS,
@@ -121,6 +121,43 @@ const server = createServer(async (req, res) => {
         });
       } finally {
         inFlight.delete(workId);
+      }
+    }
+
+    // MY MIXES — transcode one saved mix (body { mix_id }) or purge a deleted
+    // one (body { mix_id, master_storage_path? }). Same Bearer-secret guard.
+    if (req.method === "POST" && (url.pathname === "/transcode-mix" || url.pathname === "/purge-mix")) {
+      if (!secretOk(extractSecret(req))) {
+        return sendJson(res, 401, { ok: false, error: "unauthorized" });
+      }
+      let body;
+      try {
+        body = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        return sendJson(res, 400, { ok: false, error: "invalid JSON body" });
+      }
+      const mixId = String(body.mix_id ?? "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(mixId)) {
+        return sendJson(res, 400, { ok: false, error: "mix_id must be a uuid" });
+      }
+      if (url.pathname === "/purge-mix") {
+        const masterStoragePath = typeof body.master_storage_path === "string" ? body.master_storage_path : null;
+        const result = await purgeMix(mixId, { masterStoragePath });
+        return sendJson(res, 200, { ok: true, ...result });
+      }
+      const key = `mix:${mixId}`;
+      if (inFlight.has(key)) {
+        return sendJson(res, 409, { ok: false, error: `mix ${mixId} is already transcoding` });
+      }
+      inFlight.add(key);
+      try {
+        const result = await transcodeMix(mixId);
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (err) {
+        logErr(`mix=${mixId} transcode failed`, err);
+        return sendJson(res, 500, { ok: false, mixId, error: err?.message ?? "transcode failed" });
+      } finally {
+        inFlight.delete(key);
       }
     }
 
