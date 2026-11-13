@@ -6,6 +6,7 @@ import { GoLiveButton } from "@/components/go-live-button";
 import { IssueCertButton } from "@/components/issue-cert-button";
 import { AddToMood } from "@/components/library/add-to-mood";
 import { AdornButton } from "@/components/library/adorn-button";
+import { MixLink } from "@/components/mixer/mix-link";
 import { DownloadButton } from "@/components/offline/download-button";
 import { PlayerStage } from "@/components/player-stage";
 import { trackFromFeedWork, type Track } from "@/components/player/track";
@@ -571,6 +572,7 @@ export default async function WorkPage({
             {/* The listener's two acts, beside the maker's: keep this song, or
                 place it in a run of your own. */}
             <AdornButton workId={work.id} title={work.title} variant="full" />
+            {work.hls_playlist_key ? <MixLink workId={work.id} title={work.title} variant="full" /> : null}
             <AddToMood
               workId={work.id}
               title={work.title}

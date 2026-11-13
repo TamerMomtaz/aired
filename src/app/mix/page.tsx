@@ -8,15 +8,27 @@ import { getFeed } from "@/lib/works/queries";
 export const metadata: Metadata = {
   title: "Mix · AIRED",
   description:
-    "Pick two to six AIRED songs and the Mixer weaves them into one long, beat-matched club set — right here, no outside tools.",
+    "Pick one to six AIRED songs and the Mixer weaves them into one long, beat-matched club set — right here, no outside tools.",
 };
 
 // The AIRED Mixer. The page only hands the live catalog to the studio; all the
 // audio work happens in the listener's browser (src/lib/mixer), straight off the
 // public HLS bucket. No backend, no schema change, no new cost.
-export default async function MixPage() {
+// Every live song can be mixed, not only the newest page of the feed. The
+// catalog is small enough to hand over whole; past this many the picker would
+// need a server search instead.
+const MIX_CATALOG_LIMIT = 2000;
+
+export default async function MixPage({
+  searchParams,
+}: {
+  // ?add=12 (or 12,40) opens the Mixer with those songs in the set: the "Mix
+  // it" button on every song links here.
+  searchParams: Promise<{ add?: string | string[] }>;
+}) {
+  const { add } = await searchParams;
   const supabase = await createClient();
-  const feed = await getFeed(supabase);
+  const feed = await getFeed(supabase, MIX_CATALOG_LIMIT);
   const sources: MixSource[] = feed
     .filter((w) => !!w.hls_playlist_key)
     .map((w) => ({
@@ -33,7 +45,7 @@ export default async function MixPage() {
       <header className="mb-8 flex flex-col gap-1">
         <h1 className="text-2xl font-semibold text-foreground">Mix</h1>
         <p className="text-sm text-muted">
-          Pick two to six songs. The Mixer finds their beat, locks them to one
+          Pick one to six songs (one song becomes a remix). The Mixer finds their beat, locks them to one
           tempo, and weaves them together part by part, like a club set, for
           five minutes or more. Every maker of every song stays credited on
           the mix.
@@ -42,7 +54,14 @@ export default async function MixPage() {
           My mixes on AIRED
         </Link>
       </header>
-      <MixerStudio sources={sources} />
+      <MixerStudio sources={sources} initialIds={parseAdd(add, sources)} />
     </main>
   );
+}
+
+function parseAdd(add: string | string[] | undefined, sources: MixSource[]): number[] | undefined {
+  const raw = (Array.isArray(add) ? add.join(",") : add ?? "").split(",");
+  const known = new Set(sources.map((s) => s.id));
+  const ids = raw.map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && known.has(n));
+  return ids.length ? ids.slice(0, 6) : undefined;
 }
