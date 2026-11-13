@@ -19,6 +19,20 @@ RUN apt-get update \
   && ffmpeg -hide_banner -filters | grep -q " ass " \
   && test -f /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
 
+# STEMS: the open Demucs model (MIT) splits each live song into vocals, drums,
+# bass and the rest for the Mixer. CPU-only PyTorch; the htdemucs weights are
+# downloaded at build time so the running worker never fetches a model.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 python3-venv \
+  && rm -rf /var/lib/apt/lists/* \
+  && python3 -m venv /opt/stems \
+  && /opt/stems/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 \
+  && /opt/stems/bin/pip install --no-cache-dir demucs==4.1.0 \
+  && /opt/stems/bin/python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+
+# The weights are in the image; never reach for the hub at run time.
+ENV HF_HUB_OFFLINE=1
+
 WORKDIR /app
 
 # Install production deps first for better layer caching. Use the lockfile when

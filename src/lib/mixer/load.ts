@@ -156,3 +156,84 @@ export async function loadDeck(
   const buffer = await ctx.decodeAudioData(adts.slice().buffer);
   return { buffer, seconds: Math.min(buffer.duration, seconds), adts: index };
 }
+
+// ---- stems --------------------------------------------------------------
+// A song split into vocals, drums, bass and the rest by the worker (worker/
+// src/stems.js). Each stem is its own HLS rendition on the same timeline as
+// the song, so only the stretches a mix actually uses are fetched.
+
+export const STEM_NAMES = ["vocals", "drums", "bass", "other"] as const;
+export type StemName = (typeof STEM_NAMES)[number];
+
+type StemPlaylist = { segments: (Segment & { t0: number })[] };
+export type StemSource = {
+  playlists: Record<StemName, StemPlaylist>;
+  cache: Map<string, Uint8Array>;
+  // Samples the stems sit late (+) or early (−) against the song, measured on
+  // first use (an encoder's start-up delay can differ by a frame).
+  lag?: number;
+};
+
+export async function loadStemSource(base: string, signal?: AbortSignal): Promise<StemSource | null> {
+  try {
+    const entries = await Promise.all(
+      STEM_NAMES.map(async (name) => {
+        const url = `${base}/${name}/playlist.m3u8`;
+        const { segments } = parseMedia(await fetchText(url, signal), url);
+        let t = 0;
+        const timed = segments.map((s) => {
+          const x = { ...s, t0: t };
+          t += s.duration;
+          return x;
+        });
+        return [name, { segments: timed }] as const;
+      }),
+    );
+    if (entries.some(([, p]) => p.segments.length === 0)) return null;
+    return { playlists: Object.fromEntries(entries) as Record<StemName, StemPlaylist>, cache: new Map() };
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") throw err;
+    return null;
+  }
+}
+
+// Decode [from, from + seconds) of one stem, fetching only the segments that
+// cover it (plus one before, to warm the decoder). Same return as decodeRange.
+export async function decodeStemRange(
+  src: StemSource,
+  stem: StemName,
+  from: number,
+  seconds: number,
+  signal?: AbortSignal,
+): Promise<{ buffer: AudioBuffer; lead: number } | null> {
+  const segs = src.playlists[stem].segments;
+  const a = Math.max(0, from - 0.5);
+  const b = from + seconds;
+  let i0 = segs.findIndex((s) => s.t0 + s.duration > a);
+  if (i0 < 0) return null;
+  let i1 = i0;
+  while (i1 + 1 < segs.length && segs[i1 + 1].t0 < b) i1++;
+  i0 = Math.max(0, i0);
+  const parts: Uint8Array[] = [];
+  for (let i = i0; i <= i1; i++) {
+    const url = segs[i].url;
+    let bytes = src.cache.get(url);
+    if (!bytes) {
+      const res = await fetch(url, { signal, mode: "cors" });
+      if (!res.ok) throw new Error(`Couldn't fetch a stem (HTTP ${res.status}).`);
+      bytes = demuxAdts(new Uint8Array(await res.arrayBuffer()));
+      src.cache.set(url, bytes);
+    }
+    parts.push(bytes);
+  }
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const adts = new Uint8Array(total);
+  let w = 0;
+  for (const p of parts) {
+    adts.set(p, w);
+    w += p.length;
+  }
+  const idx = indexAdts(adts);
+  const t0 = segs[i0].t0;
+  return decodeRange(idx, from - t0, seconds);
+}

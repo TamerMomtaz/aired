@@ -41,6 +41,27 @@ file on their device). `POST /purge-mix { mix_id, master_storage_path? }` clears
 `mix/<uuid>/` and any leftover upload after the app deletes the row. Same Bearer
 secret as `/transcode`. The app calls both from `src/lib/mixes/worker.ts`.
 
+## Stems (for the Mixer)
+
+Every live song is split once into four stems (vocals, drums, bass, other) with
+the open Demucs model (`htdemucs`, MIT), baked into the image. A background
+sweep (`src/stems.js`) starts a minute after boot and runs every 30 minutes: it
+splits, one song at a time and at low CPU priority, every live song that has no
+stems yet, so uploads still go live in minutes. Each stem is its own HLS
+rendition (AAC 128k, same segment length as the song) in `aired-hls` under
+`work/<id>/stems/<token>/<stem>/`, with `done.json` written last. `<token>` is
+an HMAC of the id with `TRANSCODE_SHARED_SECRET`, so the clean vocals can't be
+found by guessing; the app's `/api/mix/stems` computes the same token and hands
+it only to the Mixer. The originals are never touched; deleting
+`work/<id>/stems/` undoes it.
+
+`POST /stems { work_id }` (same Bearer secret) queues one song by hand.
+Env knobs, all optional: `STEMS_ENABLED=0` switches it off, `STEMS_THREADS`
+(default 2), `STEMS_NICE` (15), `STEMS_SWEEP_MINUTES` (30), `STEMS_BITRATE`
+(128k), `STEMS_MODEL` (htdemucs).
+
+A three-minute song takes about three minutes on two CPU threads.
+
 ## Deploy on Railway
 
 This lives in a **self-contained folder** so Railway deploys it straight from

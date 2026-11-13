@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { log, logErr } from "./logger.js";
 import { transcodeMix, transcodeWork } from "./transcode.js";
 import { purgeMix, purgeWork } from "./purge.js";
+import { hasStems, queueStems, startStemsSweep } from "./stems.js";
 import { CLIP_ORIENTATIONS, renderShareVideo } from "./clip.js";
 import {
   REEL_HIGHLIGHTS,
@@ -327,6 +328,27 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // STEMS — queue one song for splitting (body { work_id }), or ask whether it
+    // has stems yet. The background sweep does this for every live song anyway.
+    if (req.method === "POST" && url.pathname === "/stems") {
+      if (!secretOk(extractSecret(req))) {
+        return sendJson(res, 401, { ok: false, error: "unauthorized" });
+      }
+      let body;
+      try {
+        body = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        return sendJson(res, 400, { ok: false, error: "invalid JSON body" });
+      }
+      const workId = Number(body.work_id);
+      if (!Number.isInteger(workId) || workId <= 0) {
+        return sendJson(res, 400, { ok: false, error: "work_id must be a positive integer" });
+      }
+      if (await hasStems(workId)) return sendJson(res, 200, { ok: true, workId, ready: true });
+      queueStems(workId);
+      return sendJson(res, 202, { ok: true, workId, ready: false, queued: true });
+    }
+
     return sendJson(res, 404, { ok: false, error: "not found" });
   } catch (err) {
     logErr("request failed", err);
@@ -339,4 +361,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(config.port, () => {
   log(`aired-transcode-worker listening on :${config.port}`);
+  startStemsSweep();
 });

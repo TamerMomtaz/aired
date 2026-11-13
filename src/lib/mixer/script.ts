@@ -92,6 +92,9 @@ export type SongBrief = {
   // How many times the listener added this song (1–3): it gets that share of
   // the set and keeps coming back between the others.
   plays?: number;
+  // Split into vocals / drums / bass / music by the worker: the engine can
+  // swap basslines, lay voices over other songs' beats, strip to an acapella.
+  stems?: boolean;
 };
 
 export const NO_FX: Fx = {

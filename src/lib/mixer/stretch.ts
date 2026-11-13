@@ -28,6 +28,13 @@ const WINDOW = (() => {
 // `rate` > 1 plays faster (shorter output), < 1 slower, exactly as a
 // playbackRate would, but the pitch stays where it was.
 export function stretchBuffer(buf: AudioBuffer, rate: number): AudioBuffer {
+  return stretchWithGrains(buf, rate).out;
+}
+
+// The same, also returning where each grain was read from, so the song's
+// stems (stems.ts) can be stretched with exactly the same grains and still add
+// up to the song sample for sample.
+export function stretchWithGrains(buf: AudioBuffer, rate: number): { out: AudioBuffer; grains: Int32Array } {
   const sr = buf.sampleRate;
   const chans = buf.numberOfChannels;
   const inLen = buf.length;
@@ -48,6 +55,7 @@ export function stretchBuffer(buf: AudioBuffer, rate: number): AudioBuffer {
   const norm = new Float32Array(outLen);
   const ha = HS * rate; // input hop
 
+  const grains = new Int32Array(Math.ceil(outLen / HS) + 1);
   let prev = -1; // where the previous grain was read from
   for (let k = 0; ; k++) {
     const o = k * HS;
@@ -89,6 +97,7 @@ export function stretchBuffer(buf: AudioBuffer, rate: number): AudioBuffer {
       if (hi < lo) pos = Math.max(0, Math.min(inLen - 1, nominal));
     }
     prev = pos;
+    grains[k] = pos;
     for (let i = 0; i < N; i++) {
       const oi = o + i;
       if (oi >= outLen) break;
@@ -101,6 +110,51 @@ export function stretchBuffer(buf: AudioBuffer, rate: number): AudioBuffer {
   }
   // Even out the very start and end, where fewer grains overlap.
   for (let i = 0; i < outLen; i++) {
+    const n = norm[i];
+    if (n > 1e-3 && Math.abs(n - 1) > 1e-3) for (let c = 0; c < chans; c++) dst[c][i] /= n;
+  }
+  return { out, grains };
+}
+
+// Replay recorded grains over another signal on the same input timeline, for
+// output samples [o0, o1) only. `input` holds input samples starting at
+// `inOffset`; anything outside it reads as silence. The result's sample 0 is
+// output sample o0.
+export function applyGrains(
+  input: AudioBuffer,
+  inOffset: number,
+  grains: Int32Array,
+  o0: number,
+  o1: number,
+): AudioBuffer {
+  const sr = input.sampleRate;
+  const chans = input.numberOfChannels;
+  const len = Math.max(1, o1 - o0);
+  const out = new AudioBuffer({ numberOfChannels: chans, length: len, sampleRate: sr });
+  const src: Float32Array[] = [];
+  const dst: Float32Array[] = [];
+  for (let c = 0; c < chans; c++) {
+    src.push(input.getChannelData(c));
+    dst.push(out.getChannelData(c));
+  }
+  const norm = new Float32Array(len);
+  const k0 = Math.max(0, Math.floor((o0 - N) / HS));
+  for (let k = k0; k < grains.length; k++) {
+    const o = k * HS;
+    if (o >= o1) break;
+    const pos = grains[k] - inOffset;
+    for (let i = 0; i < N; i++) {
+      const oi = o + i - o0;
+      if (oi < 0) continue;
+      if (oi >= len) break;
+      const w = WINDOW[i];
+      norm[oi] += w;
+      const ii = pos + i;
+      if (ii < 0 || ii >= input.length) continue;
+      for (let c = 0; c < chans; c++) dst[c][oi] += src[c][ii] * w;
+    }
+  }
+  for (let i = 0; i < len; i++) {
     const n = norm[i];
     if (n > 1e-3 && Math.abs(n - 1) > 1e-3) for (let c = 0; c < chans; c++) dst[c][i] /= n;
   }

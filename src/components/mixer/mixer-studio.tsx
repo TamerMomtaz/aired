@@ -17,13 +17,14 @@ import {
   MIN_TRACKS,
   planTimes,
   prepareSongs,
+  prepareStems,
   renderSet,
   type MixPlan,
   type SongAnalysis,
 } from "@/lib/mixer/engine";
 import { detectKey } from "@/lib/mixer/key";
 import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
-import { loadDeck, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
+import { loadDeck, loadStemSource, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
 import {
   bestOpener,
   fixScript,
@@ -238,7 +239,19 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         const key = detectKey(deck.buffer);
         analyses.push({ title: s.title, tempo, structure, key, duration: deck.seconds, adts: deck.adts });
       }
-      let briefs = analyses.map((a, i) => ({ ...toBrief(a, tracks[i]), plays: plays[i] }));
+      // Songs the worker has split into stems are mixed on their stems where
+      // the moves want it, and the DJ brain is told which ones they are.
+      show("Checking which songs have stems", 0.6);
+      const bases = await fetch(`/api/mix/stems?ids=${tracks.map((t) => t.id).join(",")}`, { signal: ac.signal })
+        .then((r) => (r.ok ? r.json() : { stems: {} }))
+        .then((d: { stems?: Record<string, string | null> }) => d.stems ?? {})
+        .catch(() => ({}) as Record<string, string | null>);
+      if (ac.signal.aborted) return;
+      for (let i = 0; i < tracks.length; i++) {
+        const base = bases[String(tracks[i].id)];
+        analyses[i].stems = base ? await loadStemSource(base, ac.signal) : null;
+      }
+      let briefs = analyses.map((a, i) => ({ ...toBrief(a, tracks[i]), plays: plays[i], stems: !!analyses[i].stems }));
       // Let the Mixer pick the opener whose key and tempo flow best into the
       // others; the planners then find the smoothest order from it.
       if (autoOrder && tracks.length > 1) {
@@ -271,6 +284,12 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       show("Mixing the set", 0.82);
       await tick();
       const plan = planTimes(script, analyses, prepared);
+      if (analyses.some((a) => a.stems)) {
+        show("Splitting the moves into stems", 0.82);
+        await prepareStems(analyses, prepared, plan, energy, (f) => show("Splitting the moves into stems", 0.82 + f * 0.08));
+        if (ac.signal.aborted) return;
+        show("Mixing the set", 0.9);
+      }
       const signed = useTag && tag ? await decodeTag(tag.audio, MIX_SAMPLE_RATE) : null;
       const dj = useTag && tag?.name ? tag.name : null;
       const buffer = await renderSet(prepared, plan, energy, signed);
@@ -524,6 +543,7 @@ async function askBrain(
           duration: briefs[i].duration,
           phrases: briefs[i].phrases,
           plays: briefs[i].plays ?? 1,
+          stems: briefs[i].stems === true,
         })),
       }),
     });

@@ -26,9 +26,17 @@
 // second live audio element beside the global player (the one-<audio>
 // invariant in player-provider stays untouched).
 
-import { decodeRange, MIX_SAMPLE_RATE, type AdtsIndex } from "./load";
+import {
+  decodeRange,
+  decodeStemRange,
+  MIX_SAMPLE_RATE,
+  STEM_NAMES,
+  type AdtsIndex,
+  type StemName,
+  type StemSource,
+} from "./load";
 import { camelotDistance, type MusicalKey } from "./key";
-import { KEY_LOCK_MIN, stretchBuffer } from "./stretch";
+import { applyGrains, KEY_LOCK_MIN, stretchWithGrains } from "./stretch";
 import {
   barSeconds,
   chooseRate,
@@ -66,9 +74,28 @@ export type SongAnalysis = {
   key: MusicalKey;
   duration: number;
   adts: AdtsIndex;
+  // The song split into vocals / drums / bass / the rest, when the worker has
+  // done it. With stems the Mixer mixes like a DJ on stems: one bassline at a
+  // time, beats under voices, clean acapellas on top.
+  stems?: StemSource | null;
 };
 
-export type Part = { clip: AudioBuffer; start: number; rms: number };
+// A stretch of a part played from its stems instead of the whole song. c0 and
+// c1 are clip seconds; every buffer starts at c0.
+export type StemWindow = { c0: number; c1: number; bufs: Record<StemName, AudioBuffer> };
+
+export type Part = {
+  clip: AudioBuffer;
+  start: number;
+  rms: number;
+  // Where the clip came from, so its stems can be cut to match it exactly:
+  // the source second at clip input sample 0, and the key-lock grains.
+  src0: number;
+  grains: Int32Array;
+  windows: StemWindow[];
+  // A line's clean voice, from the vocal stem (lines only).
+  voice?: AudioBuffer | null;
+};
 
 export type PreparedSong = {
   title: string;
@@ -140,7 +167,12 @@ function loudness(clip: AudioBuffer, from: number, to: number): number {
 
 // Decode `len` source seconds starting `pre` before `at`, and copy it into a
 // clip whose `pre` mark is exactly the downbeat nearest `at`.
-async function cutClip(s: SongAnalysis, at: number, pre: number, len: number): Promise<AudioBuffer | null> {
+async function cutClip(
+  s: SongAnalysis,
+  at: number,
+  pre: number,
+  len: number,
+): Promise<{ clip: AudioBuffer; src0: number } | null> {
   const from = at - pre;
   const dec = await decodeRange(s.adts, Math.max(0, from), len + Math.min(0, from));
   if (!dec) return null;
@@ -157,7 +189,7 @@ async function cutClip(s: SongAnalysis, at: number, pre: number, len: number): P
     const b = Math.min(src.length, shift + frames);
     if (b > a) dst.set(src.subarray(a, b), a - shift);
   }
-  return clip;
+  return { clip, src0: Math.max(0, from) - dec.lead + shift / sr };
 }
 
 export async function prepareSongs(
@@ -196,11 +228,14 @@ export async function prepareSongs(
     const pre = PRE_BARS * srcBar;
     const raw = await cutClip(s, ph.start + (v.skip ?? 0) * srcBar, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
     if (!raw) continue;
-    const { clip, scale } = lockKey(raw, p.rate);
+    const { clip, scale, grains } = lockKey(raw.clip, p.rate);
     p.parts.set(partKey(v.phrase, v.bars, v.skip), {
       clip,
       start: pre * scale,
       rms: loudness(clip, pre * scale, (pre + v.bars * srcBar) * scale),
+      src0: raw.src0,
+      grains,
+      windows: [],
     });
     await tick();
     onProgress?.(++done / all);
@@ -214,12 +249,25 @@ export async function prepareSongs(
     const pre = srcBar / 8;
     const raw = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
     if (!raw) continue;
-    const { clip, scale } = lockKey(raw, p.rate);
-    p.lines.set(lineKey(l), {
+    const { clip, scale, grains } = lockKey(raw.clip, p.rate);
+    const line: Part = {
       clip,
       start: pre * scale,
       rms: loudness(clip, pre * scale, (pre + l.len * srcBar) * scale),
-    });
+      src0: raw.src0,
+      grains,
+      windows: [],
+    };
+    // With stems, a lifted line is the singer alone: no second beat or
+    // bassline sneaking in under the song that's playing.
+    if (s.stems) {
+      const w = await stemWindow(s.stems, line, 0, clip.duration, s.stems.lag === undefined ? STEM_NAMES : ["vocals"]).catch(() => null);
+      if (w) {
+        line.voice = w.bufs.vocals;
+        line.rms = loudness(w.bufs.vocals, line.start, line.start + l.len * srcBar * scale);
+      }
+    }
+    p.lines.set(lineKey(l), line);
     onProgress?.(++done / all);
   }
   for (const p of out) if (Math.abs(p.rate - 1) > KEY_LOCK_MIN) p.playRate = 1;
@@ -228,9 +276,168 @@ export async function prepareSongs(
 
 // Key lock: stretch a clip to the set's tempo without moving its pitch.
 // `scale` turns a time in the source into a time in the returned clip.
-function lockKey(clip: AudioBuffer, rate: number): { clip: AudioBuffer; scale: number } {
-  if (Math.abs(rate - 1) <= KEY_LOCK_MIN) return { clip, scale: 1 };
-  return { clip: stretchBuffer(clip, rate), scale: 1 / rate };
+function lockKey(clip: AudioBuffer, rate: number): { clip: AudioBuffer; scale: number; grains: Int32Array } {
+  if (Math.abs(rate - 1) <= KEY_LOCK_MIN) return { clip, scale: 1, grains: identityGrains(clip.length) };
+  const { out, grains } = stretchWithGrains(clip, rate);
+  return { clip: out, scale: 1 / rate, grains };
+}
+
+// Grains that copy the clip as it is (no key lock needed): the stems still go
+// through applyGrains, so one code path serves both.
+function identityGrains(length: number): Int32Array {
+  const g = new Int32Array(Math.ceil(length / 1024) + 1);
+  for (let k = 0; k < g.length; k++) g[k] = k * 1024;
+  return g;
+}
+
+// Cut the stems for clip seconds [c0, c1) of a part, stretched with the part's
+// own grains so they line up with it sample for sample.
+async function stemWindow(
+  src: StemSource,
+  part: Part,
+  c0: number,
+  c1: number,
+  names: readonly StemName[] = STEM_NAMES,
+): Promise<StemWindow | null> {
+  const sr = part.clip.sampleRate;
+  const o0 = Math.max(0, Math.floor(c0 * sr));
+  const o1 = Math.min(part.clip.length, Math.ceil(c1 * sr));
+  if (o1 - o0 < sr * 0.05) return null;
+  const k0 = Math.max(0, Math.floor(o0 / 1024) - 2);
+  const k1 = Math.min(part.grains.length - 1, Math.ceil(o1 / 1024) + 1);
+  let ia = Infinity;
+  let ib = -Infinity;
+  for (let k = k0; k <= k1; k++) {
+    ia = Math.min(ia, part.grains[k]);
+    ib = Math.max(ib, part.grains[k] + 2048);
+  }
+  if (!Number.isFinite(ia)) return null;
+  const from = part.src0 + ia / sr;
+  const seconds = (ib - ia) / sr;
+  const decoded = {} as Record<StemName, { buffer: AudioBuffer; inOffset: number }>;
+  for (const name of STEM_NAMES) {
+    if (!names.includes(name)) continue;
+    const dec = await decodeStemRange(src, name, Math.max(0, from), seconds);
+    if (!dec) return null;
+    // Input sample of the decoded buffer's first sample.
+    decoded[name] = { buffer: dec.buffer, inOffset: Math.round((Math.max(0, from) - dec.lead - part.src0) * sr) };
+  }
+  const build = (lag: number) => {
+    const bufs = {} as Record<StemName, AudioBuffer>;
+    for (const name of names) {
+      const d = decoded[name];
+      bufs[name] = applyGrains(d.buffer, d.inOffset - lag, part.grains, o0, o1);
+    }
+    return bufs;
+  };
+  if (src.lag === undefined && names.length === STEM_NAMES.length) {
+    // First use: find how far the stems sit from the song, once per song.
+    src.lag = 0;
+    const found = measureLag(build(0), part.clip, o0);
+    if (found !== null) src.lag = found;
+  }
+  return { c0: o0 / sr, c1: o1 / sr, bufs: build(src.lag ?? 0) };
+}
+
+// How many samples the summed stems sit late against the clip (positive =
+// late), searched within ±2048 over two seconds in the middle of the window.
+// Null when the match is too weak to trust.
+function measureLag(bufs: Record<StemName, AudioBuffer>, clip: AudioBuffer, o0: number): number | null {
+  const n = bufs.vocals.length;
+  const sr = clip.sampleRate;
+  const len = Math.min(n - 4200, 2 * sr);
+  if (len < sr / 2) return null;
+  const a = Math.floor((n - len) / 2);
+  const sum = new Float32Array(len);
+  for (const k of STEM_NAMES) {
+    const d = bufs[k].getChannelData(0);
+    for (let i = 0; i < len; i++) sum[i] += d[a + i];
+  }
+  const mix = clip.getChannelData(0);
+  let best = -1;
+  let lag = 0;
+  const STEP = 3;
+  for (let L = -2048; L <= 2048; L++) {
+    let xy = 0;
+    let xx = 0;
+    let yy = 0;
+    for (let i = 0; i < len; i += STEP) {
+      const j = o0 + a + i - L;
+      const y = j >= 0 && j < mix.length ? mix[j] : 0;
+      const x = sum[i];
+      xy += x * y;
+      xx += x * x;
+      yy += y * y;
+    }
+    const c = xy / Math.sqrt(xx * yy + 1e-12);
+    if (c > best) {
+      best = c;
+      lag = L;
+    }
+  }
+  return best > 0.5 ? lag : null;
+}
+
+// The stretches of each part the moves want on stems: the blend or mash-up in
+// and out, a breakdown, a line laid on top. Decoded after the plan is timed and
+// before the render, only for songs that have stems.
+export async function prepareStems(
+  songs: SongAnalysis[],
+  prepared: PreparedSong[],
+  plan: MixPlan,
+  energy: Energy,
+  onProgress?: (fraction: number) => void,
+): Promise<number> {
+  const bar = barSeconds(plan.bpm);
+  const beat = bar / 4;
+  const st = STYLE[energy];
+  const mashBars = energy === "lounge" ? 8 : 4;
+  const wanted: { v: PlannedVisit; ranges: [number, number][] }[] = [];
+  plan.visits.forEach((v, idx) => {
+    if (!songs[v.song].stems) return;
+    const T = v.at;
+    const Tend = T + v.dur;
+    const next = plan.visits[idx + 1];
+    const prev = plan.visits[idx - 1];
+    const ranges: [number, number][] = [];
+    const clash =
+      !!prev && prev.song !== v.song && camelotDistance(prepared[prev.song].key, prepared[v.song].key) >= 3;
+    if (v.move === "blend") ranges.push([T - (clash ? 2 : st.blendBars) * bar - 0.05, T + bar]);
+    if (v.move === "mashup") ranges.push([T - 0.05, T + mashBars * bar + beat]);
+    if (v.fx.breakdown) ranges.push([T, (v.fx.loopBuild ? Tend - 4 * bar : Tend) - 0.02]);
+    for (const l of v.layers) ranges.push([T + l.at * bar - 0.1, T + (l.at + l.len * l.times) * bar + 0.1]);
+    if (next?.move === "blend") ranges.push([Tend - bar, Tend + (energy === "lounge" ? 4 : 1) * bar + 0.05]);
+    if (next?.move === "mashup") ranges.push([Tend - beat, Tend + mashBars * bar + 0.05]);
+    if (ranges.length) wanted.push({ v, ranges });
+  });
+  let done = 0;
+  let made = 0;
+  for (const { v, ranges } of wanted) {
+    const part = prepared[v.song].parts.get(partKey(v.phrase, v.bars, v.skip));
+    const src = songs[v.song].stems;
+    if (!part || !src) continue;
+    const rate = prepared[v.song].playRate;
+    // Output seconds → clip seconds, merged where they touch.
+    const clipRanges = ranges
+      .map(([a, b]) => [part.start + (a - v.at) * rate, part.start + (b - v.at) * rate] as [number, number])
+      .sort((x, y) => x[0] - y[0]);
+    const merged: [number, number][] = [];
+    for (const r of clipRanges) {
+      const last = merged[merged.length - 1];
+      if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
+      else merged.push([...r]);
+    }
+    for (const [a, b] of merged) {
+      const w = await stemWindow(src, part, a, b).catch(() => null);
+      if (w) {
+        part.windows.push(w);
+        made++;
+      }
+    }
+    onProgress?.(++done / wanted.length);
+    await tick();
+  }
+  return made;
 }
 
 // Let the page breathe between long stretches of work.
@@ -376,6 +583,36 @@ export async function renderSet(
     send.gain.value = 0;
     gain.connect(send).connect(echoSend);
 
+    // -- stems: where this part plays from its four stems instead of the song --
+    // The whole song and its stems are cut and stretched alike, so they swap
+    // over in 8 ms without a seam. Each stem has its own fader; events are
+    // collected and written in time order at the end of the part.
+    const mixGate = ctx.createGain();
+    const stemGate = ctx.createGain();
+    stemGate.gain.value = 0;
+    const faders = {} as Record<StemName, GainNode>;
+    for (const n of STEM_NAMES) {
+      faders[n] = ctx.createGain();
+      faders[n].connect(stemGate);
+    }
+    stemGate.connect(shelf);
+    mixGate.connect(shelf);
+    const events = new Map<AudioParam, [number, number, number][]>();
+    const ev = (param: AudioParam, t: number, value: number, ramp = 0.015) => {
+      const list = events.get(param) ?? [];
+      list.push([t, value, ramp]);
+      events.set(param, list);
+    };
+    const stem = (names: StemName[], t: number, value: number, ramp = 0.015) => {
+      for (const n of names) ev(faders[n].gain, t, value, ramp);
+    };
+    const winOut = part.windows.map((w) => ({
+      w,
+      a: T + (w.c0 - part.start) / rate,
+      b: T + (w.c1 - part.start) / rate,
+    }));
+    const covered = (a: number, b: number) => winOut.some((x) => x.a <= a + 0.02 && x.b >= b - 0.02);
+
     // Clip time for an output time inside this part.
     const clipAt = (t: number) => part.start + (t - T) * rate;
     const play = (from: number, to: number, clipFrom: number) => {
@@ -389,7 +626,7 @@ export async function renderSet(
       const src = ctx.createBufferSource();
       src.buffer = part.clip;
       src.playbackRate.value = rate;
-      src.connect(shelf);
+      src.connect(mixGate);
       src.start(from, clipFrom, (to - from) * rate);
     };
     // Call and response: for 8 bars the songs swap the top every
@@ -446,16 +683,31 @@ export async function renderSet(
       gain.gain.setValueAtTime(0, startAt);
       gain.gain.linearRampToValueAtTime(g * 0.8, T);
       gain.gain.setValueAtTime(g, T);
-      shelf.gain.setValueAtTime(-30, startAt);
-      shelf.gain.setValueAtTime(-30, T - 0.01);
-      shelf.gain.linearRampToValueAtTime(0, T);
+      if (covered(startAt, T)) {
+        // On stems: the new song's drums and music ride in under the old
+        // song; its bassline takes over exactly on the one, its singer after.
+        stem(["bass", "vocals"], startAt - 0.05, 0, 0.001);
+        stem(["bass"], T - 0.015, 1);
+        stem(["vocals"], T, 1, beat / 2);
+      } else {
+        shelf.gain.setValueAtTime(-30, startAt);
+        shelf.gain.setValueAtTime(-30, T - 0.01);
+        shelf.gain.linearRampToValueAtTime(0, T);
+      }
     } else if (v.move === "trade") {
       trade(T, true, g);
     } else if (v.move === "mashup") {
       gain.gain.setValueAtTime(g, T);
-      hp.frequency.setValueAtTime(300, T);
-      hp.frequency.setValueAtTime(300, T + mashBars * bar - 0.01);
-      hp.frequency.linearRampToValueAtTime(20, T + mashBars * bar);
+      if (covered(T, T + mashBars * bar)) {
+        // On stems, a true mash-up: this song's voice and music over the old
+        // song's beat and bassline, then its own beat takes over.
+        stem(["drums", "bass"], T - 0.05, 0, 0.001);
+        stem(["drums", "bass"], T + mashBars * bar - 0.015, 1);
+      } else {
+        hp.frequency.setValueAtTime(300, T);
+        hp.frequency.setValueAtTime(300, T + mashBars * bar - 0.01);
+        hp.frequency.linearRampToValueAtTime(20, T + mashBars * bar);
+      }
     } else if (v.move === "cut" && !visits[idx - 1]?.fx.loopBuild) {
       // A cut that isn't a drop lands soft: in over half a beat, its top
       // opening over the first bar, under the old song's echo tail.
@@ -469,14 +721,20 @@ export async function renderSet(
     }
 
     // -- inside the part --
-    if (v.fx.breakdown) {
+    const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
+    if (v.fx.breakdown && covered(T + beat, loopFrom - bar)) {
+      // On stems: the beat and the bass fall away, leaving the voice and the
+      // music; the drums build back over the last bar, the bass lands after.
+      stem(["drums", "bass"], T, 0, beat);
+      stem(["drums"], loopFrom - bar, 1, bar);
+      stem(["bass"], loopFrom - 0.03, 1);
+    } else if (v.fx.breakdown) {
       // Bass out until the last bar, then it swells back for what follows.
       shelf.gain.setValueAtTime(0, T + 0.01);
       shelf.gain.linearRampToValueAtTime(-24, T + beat);
       shelf.gain.setValueAtTime(-24, Tend - bar);
       shelf.gain.linearRampToValueAtTime(0, Tend - 0.02);
     }
-    const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
     // A filter rise only makes sense into a cut or a drop: before a blend it
     // would strip the bass while the incoming song's bass is still held back,
     // leaving a hole.
@@ -502,10 +760,17 @@ export async function renderSet(
       gain.gain.linearRampToValueAtTime(0, Tend + SEAM);
       stopAt = Tend + SEAM + 0.01;
     } else if (next.move === "blend") {
-      shelf.gain.setValueAtTime(0, Tend - 0.01);
-      shelf.gain.linearRampToValueAtTime(-30, Tend);
       // Lounge lets the old song drift away over 4 bars.
       const out = (energy === "lounge" ? 4 : 1) * bar;
+      if (covered(Tend - bar, Tend + out)) {
+        // On stems: the old bassline hands over on the one and the old voice
+        // finishes its line; only the drums and music drift away.
+        stem(["bass"], Tend - 0.015, 0);
+        stem(["vocals"], Tend - beat / 2, 0, beat / 2);
+      } else {
+        shelf.gain.setValueAtTime(0, Tend - 0.01);
+        shelf.gain.linearRampToValueAtTime(-30, Tend);
+      }
       hp.frequency.setValueAtTime(20, Tend);
       hp.frequency.exponentialRampToValueAtTime(1000, Tend + out);
       gain.gain.setValueAtTime(g, Tend);
@@ -515,8 +780,14 @@ export async function renderSet(
       trade(Tend, false, 0);
       stopAt = Tend + 8 * bar + 0.05;
     } else if (next.move === "mashup") {
-      lp.frequency.setValueAtTime(20000, Tend);
-      lp.frequency.exponentialRampToValueAtTime(320, Tend + 0.25);
+      if (covered(Tend - beat, Tend + mashBars * bar)) {
+        // On stems: only this song's beat and bassline stay, under the new
+        // song's voice.
+        stem(["vocals", "other"], Tend - 0.015, 0);
+      } else {
+        lp.frequency.setValueAtTime(20000, Tend);
+        lp.frequency.exponentialRampToValueAtTime(320, Tend + 0.25);
+      }
       gain.gain.setValueAtTime(g, Tend + mashBars * bar - beat);
       gain.gain.linearRampToValueAtTime(0, Tend + mashBars * bar);
       stopAt = Tend + mashBars * bar + 0.05;
@@ -543,15 +814,37 @@ export async function renderSet(
       }
     }
 
+    // -- the stem windows: stems in, whole song out, and back --
+    const playTo = Math.min(stopAt, v.fx.loopBuild ? loopFrom : stopAt);
+    for (const { w, a, b } of winOut) {
+      const from = Math.max(a, startAt);
+      const to = Math.min(b, playTo);
+      if (to - from < 0.05) continue;
+      for (const n of STEM_NAMES) {
+        const src = ctx.createBufferSource();
+        src.buffer = w.bufs[n];
+        src.playbackRate.value = rate;
+        src.connect(faders[n]);
+        src.start(from, (from - a) * rate, (to - from) * rate);
+      }
+      ev(stemGate.gain, from, 1, 0.008);
+      ev(mixGate.gain, from, 0, 0.008);
+      ev(stemGate.gain, to - 0.008, 0, 0.008);
+      ev(mixGate.gain, to - 0.008, 1, 0.008);
+    }
+
     // -- the lines dropped on top --
     for (const l of v.layers) {
       const ls = prepared[l.song];
       const line = ls.lines.get(lineKey(l));
       if (!line) continue;
+      const voice = line.voice ?? null;
       const lg = Math.max(0.5, Math.min(2, target / line.rms)) * (energy === "lounge" ? 0.75 : 0.9);
       const lhp = ctx.createBiquadFilter();
       lhp.type = "highpass";
-      lhp.frequency.value = l.style === "chop" ? 280 : 380;
+      // A clean voice from the stems needs no carving; a line cut from the
+      // whole song is thinned to keep its beat and bass out of the way.
+      lhp.frequency.value = voice ? 110 : l.style === "chop" ? 280 : 380;
       lhp.Q.value = 0.7;
       const lgain = ctx.createGain();
       lgain.gain.value = 0;
@@ -562,7 +855,7 @@ export async function renderSet(
       // One slice of the line: `off` output seconds into it, for `dur`.
       const hit = (t: number, off: number, dur: number) => {
         const src = ctx.createBufferSource();
-        src.buffer = line.clip;
+        src.buffer = voice ?? line.clip;
         src.playbackRate.value = ls.playRate;
         src.connect(lhp);
         src.start(t, line.start + off * ls.playRate, dur * ls.playRate + 0.01);
@@ -591,10 +884,29 @@ export async function renderSet(
         lsend.gain.linearRampToValueAtTime(0.95, w1 - 0.02);
         lsend.gain.linearRampToValueAtTime(0, w1);
       }
-      mid.gain.setValueAtTime(0, Math.max(T, w0 - 0.05));
-      mid.gain.linearRampToValueAtTime(-7, w0);
-      mid.gain.setValueAtTime(-7, w1);
-      mid.gain.linearRampToValueAtTime(0, w1 + 0.08);
+      if (covered(w0, w1)) {
+        // On stems the singer underneath steps aside for the line.
+        stem(["vocals"], w0 - 0.06, 0.12, 0.06);
+        stem(["vocals"], w1, 1, 0.08);
+      } else {
+        mid.gain.setValueAtTime(0, Math.max(T, w0 - 0.05));
+        mid.gain.linearRampToValueAtTime(-7, w0);
+        mid.gain.setValueAtTime(-7, w1);
+        mid.gain.linearRampToValueAtTime(0, w1 + 0.08);
+      }
+    }
+
+    // Write every fader move in time order (each a short ramp from where the
+    // fader was to where it goes).
+    for (const [param, list] of events) {
+      list.sort((x, y) => x[0] - y[0]);
+      let cur = param.value;
+      for (const [t, value, ramp] of list) {
+        const t0 = Math.max(0, t);
+        param.setValueAtTime(cur, t0);
+        param.linearRampToValueAtTime(value, t0 + Math.max(0.001, ramp));
+        cur = value;
+      }
     }
   });
 
