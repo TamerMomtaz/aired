@@ -291,6 +291,69 @@ li:nth-child(2n) .surface-edge::after {
   opacity: 1;
 }
 
+/* Living portraits (Tee: "like Harry Potter haunted frames") ----------------
+   Every cover moves slowly inside its frame: a gentle push-in and drift, as if
+   the picture were breathing. Four paths and staggered starts so a shelf never
+   moves in step. Transform only, so it stays smooth and cheap. */
+.aspect-square.overflow-hidden > img {
+  animation: aired-portrait-a 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+li:nth-child(4n + 2) .aspect-square.overflow-hidden > img {
+  animation-name: aired-portrait-b;
+  animation-duration: 26s;
+  animation-delay: -7s;
+}
+
+li:nth-child(4n + 3) .aspect-square.overflow-hidden > img {
+  animation-name: aired-portrait-c;
+  animation-duration: 24s;
+  animation-delay: -13s;
+}
+
+li:nth-child(4n + 4) .aspect-square.overflow-hidden > img {
+  animation-name: aired-portrait-d;
+  animation-duration: 28s;
+  animation-delay: -4s;
+}
+
+@keyframes aired-portrait-a {
+  from {
+    transform: scale(1.04) translate(0, 0);
+  }
+  to {
+    transform: scale(1.14) translate(-3%, -2%);
+  }
+}
+
+@keyframes aired-portrait-b {
+  from {
+    transform: scale(1.12) translate(2%, -2%);
+  }
+  to {
+    transform: scale(1.04) translate(-1%, 1%);
+  }
+}
+
+@keyframes aired-portrait-c {
+  from {
+    transform: scale(1.05) translate(-2%, 2%) rotate(-0.6deg);
+  }
+  to {
+    transform: scale(1.15) translate(2%, -1%) rotate(0.6deg);
+  }
+}
+
+@keyframes aired-portrait-d {
+  from {
+    transform: scale(1.1) translate(0, 3%);
+  }
+  to {
+    transform: scale(1.05) translate(0, -2%);
+  }
+}
+
 /* Osama Osama's album "البوم في اي بي" and its song (AIRED-0079): the upload
    carries a long code scrawled across the lower part of the photo. At Tee's
    request AIRED shows only the top of his picture (face and headphones), so
@@ -326,6 +389,10 @@ img:is(
   .surface-edge::after {
     animation: none;
     --neon-angle: 140deg;
+  }
+
+  .aspect-square.overflow-hidden > img {
+    animation: none;
   }
 
 
