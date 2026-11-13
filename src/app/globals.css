@@ -443,7 +443,62 @@ img:is(
   background-image: url("/covers/osama-aired.svg") !important;
 }
 
+/* Fresh drop (Listen): the two newest songs, with moving covers. */
+.fresh-heading {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #ffd27a, #ff8a3d, #ff2bd6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fresh-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--cert-red);
+  box-shadow: 0 0 0 0 rgba(255, 45, 45, 0.7);
+  animation: fresh-ping 1.6s ease-out infinite;
+}
+
+@keyframes fresh-ping {
+  to {
+    box-shadow: 0 0 0 10px rgba(255, 45, 45, 0);
+  }
+}
+
+.fresh-frame {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#15151a, #15151a) padding-box,
+    linear-gradient(135deg, #ffd27a, #ff8a3d, #ff2bd6, #47a8ff) border-box;
+  box-shadow: 0 18px 40px -18px rgba(255, 138, 61, 0.55), 0 0 30px -10px rgba(255, 43, 214, 0.45);
+}
+
+.fresh-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 2;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #1a0d00;
+  background: linear-gradient(90deg, #ffd27a, #ff8a3d);
+  box-shadow: 0 0 14px rgba(255, 170, 80, 0.7);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .fresh-dot {
+    animation: none;
+  }
+
   :is(button, a).bg-cert-red,
   :is(button, a)[class*="border-white/"] {
     transition: none;
