@@ -1,8 +1,8 @@
 // Find a song's tempo and where its beats fall, so two decks can be locked
 // together the way a DJ does by ear.
 //
-// Method: an onset envelope (how sharply the low-mid energy rises, ~172 frames a
-// second), autocorrelated across the club range to find the beat period, then a
+// Method: an onset envelope (how sharply the bass and the hats rise, ~172
+// frames a second), autocorrelated across the club range to find the beat period, then a
 // comb search for the phase — the offset at which the strongest onsets line up
 // on that period. AI-rendered songs hold a very steady tempo, which is exactly
 // the case this simple method is good at.
@@ -17,36 +17,61 @@ export type Tempo = {
   confidence: number;
 };
 
-function onsetEnvelope(buf: AudioBuffer, maxSeconds: number): Float32Array {
+function onsetEnvelope(buf: AudioBuffer, maxSeconds: number): { mix: Float32Array; low: Float32Array } {
   const sr = buf.sampleRate;
   const n = Math.min(buf.length, Math.floor(maxSeconds * sr));
   const l = buf.getChannelData(0);
   const r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
   const frames = Math.floor(n / HOP);
-  const env = new Float32Array(frames);
+  const low = new Float32Array(frames);
+  const high = new Float32Array(frames);
 
-  // One-pole low-pass (~200 Hz) so the kick and bass drive the envelope.
-  const a = Math.exp((-2 * Math.PI * 200) / sr);
+  // Two bands, because not every song keeps time with a kick. The low band
+  // (one-pole low-pass, ~200 Hz) follows the kick and bass; the high band
+  // (above ~3 kHz) follows hats, shakers, claps and hand drums. A darbuka
+  // groove or a shuffle can leave the low band with no steady pulse at all:
+  // read alone, it once put a 107 BPM song at 138 and every mix with it
+  // collided. Each band is scaled to the same average before they're summed,
+  // so neither drowns the other.
+  const aLow = Math.exp((-2 * Math.PI * 200) / sr);
+  const aHigh = Math.exp((-2 * Math.PI * 3000) / sr);
   let lp = 0;
-  let prev = 0;
+  let lp3 = 0;
+  let prevLow = 0;
+  let prevHigh = 0;
+  let sumLow = 0;
+  let sumHigh = 0;
   for (let f = 0; f < frames; f++) {
-    let e = 0;
+    let eLow = 0;
+    let eHigh = 0;
     const base = f * HOP;
     for (let i = 0; i < HOP; i++) {
       const x = (l[base + i] + r[base + i]) * 0.5;
-      lp = (1 - a) * x + a * lp;
-      e += lp * lp;
+      lp = (1 - aLow) * x + aLow * lp;
+      lp3 = (1 - aHigh) * x + aHigh * lp3;
+      const hp = x - lp3;
+      eLow += lp * lp;
+      eHigh += hp * hp;
     }
-    const v = Math.log1p(e * 1000);
-    env[f] = Math.max(0, v - prev);
-    prev = v;
+    const vLow = Math.log1p(eLow * 1000);
+    const vHigh = Math.log1p(eHigh * 1000);
+    low[f] = Math.max(0, vLow - prevLow);
+    high[f] = Math.max(0, vHigh - prevHigh);
+    prevLow = vLow;
+    prevHigh = vHigh;
+    sumLow += low[f];
+    sumHigh += high[f];
   }
-  return env;
+  const kLow = sumLow > 0 ? frames / sumLow : 0;
+  const kHigh = sumHigh > 0 ? frames / sumHigh : 0;
+  const mix = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) mix[f] = low[f] * kLow + high[f] * kHigh;
+  return { mix, low };
 }
 
 export function detectTempo(buf: AudioBuffer, maxSeconds = 480): Tempo {
   const fps = buf.sampleRate / HOP;
-  const env = onsetEnvelope(buf, maxSeconds);
+  const { mix: env, low } = onsetEnvelope(buf, maxSeconds);
   const n = env.length;
   if (n < fps * 8) return { bpm: 120, firstBeat: 0, confidence: 0 };
 
@@ -100,7 +125,11 @@ export function detectTempo(buf: AudioBuffer, maxSeconds = 480): Tempo {
   // with off-beat bass and triplet parts it wandered by up to 0.5%.)
   const fine = combRefine(env, bpm, fps);
   const finalBeat = (60 * fps) / fine.bpm;
-  let phase = fine.phase;
+  // Where the beat falls is the kick's call, not the hats': house hats sit
+  // between the kicks, and the two bands together can land the grid half a
+  // beat off. Only a song with no steady low pulse takes the phase from both.
+  const kick = phaseOf(low, finalBeat);
+  let phase = kick.contrast >= 1.15 ? kick.phase : fine.phase;
   while (phase < 0) phase += finalBeat;
   while (phase >= finalBeat) phase -= finalBeat;
   return { bpm: (60 * fps) / finalBeat, firstBeat: phase / fps, confidence };
@@ -136,4 +165,25 @@ function combRefine(env: Float32Array, bpm: number, fps: number): { bpm: number;
     }
   }
   return { bpm: best.bpm, phase };
+}
+
+// The offset at which the onsets stack hardest on a fixed beat period, and how
+// clearly it beats the average offset (1 = no pulse at all).
+function phaseOf(env: Float32Array, per: number): { phase: number; contrast: number } {
+  const STEPS = 96;
+  let top = -1;
+  let sum = 0;
+  let phase = 0;
+  for (let k = 0; k < STEPS; k++) {
+    const o = (k * per) / STEPS;
+    let s = 0;
+    for (let t = o; t < env.length - 1; t += per) s += env[Math.round(t)];
+    sum += s;
+    if (s > top) {
+      top = s;
+      phase = o;
+    }
+  }
+  const mean = sum / STEPS;
+  return { phase, contrast: mean > 0 ? top / mean : 1 };
 }

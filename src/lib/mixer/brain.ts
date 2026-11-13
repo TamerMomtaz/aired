@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import {
+  chooseRate,
   masterBpm,
   NO_FX,
   STYLE,
@@ -125,14 +126,13 @@ function parseLine(x: unknown): Layer | null {
   return { song, phrase, bar, len, at, times, style: m[7] as Layer["style"] } as Layer;
 }
 
-function briefText(songs: SongBrief[], opener: number): string {
-  const master = songs[opener].bpm;
+function briefText(songs: SongBrief[], opener: number, energy: Energy): string {
+  const master = masterBpm(songs, opener, energy);
   return songs
     .map((s, i) => {
       const lock = (() => {
-        const ratio = master / s.bpm;
-        const best = [ratio, ratio * 2, ratio / 2].reduce((a, b) => (Math.abs(b - 1) < Math.abs(a - 1) ? b : a));
-        return Math.abs(best - 1) <= 0.12 ? `locks to the opener at ${((best - 1) * 100).toFixed(1)}%` : "CANNOT lock to the opener's tempo";
+        const r = chooseRate(master, s.bpm);
+        return r.synced ? `locks to the set tempo at ${((r.rate - 1) * 100).toFixed(1)}%` : "CANNOT lock to the set tempo";
       })();
       const phrases = s.phrases
         .map((p, k) => `${k}@${Math.round(p.start)}s ${p.label} e${p.energy} b${p.bass} v${p.vocal} lines ${p.lines.join(",")}`)
@@ -168,13 +168,13 @@ export async function planWithBrain(input: {
   const { songs, energy, minutes, vibe } = input;
   const user = [
     `Energy setting: ${energy}. Minimum length: ${minutes} minutes.`,
-    `If song 0 opens, the set runs at ${masterBpm(songs[0].bpm, energy).toFixed(1)} BPM, so one bar is ${(240 / masterBpm(songs[0].bpm, energy)).toFixed(2)} s (${STYLE[energy].push === 1 ? "the opener's own tempo" : `the opener's tempo ${STYLE[energy].push > 1 ? "+" : "-"}4%`}).`,
+    `If song 0 opens, the set runs at ${masterBpm(songs, 0, energy).toFixed(1)} BPM, so one bar is ${(240 / masterBpm(songs, 0, energy)).toFixed(2)} s (set from the opener's tempo${STYLE[energy].push === 1 ? "" : ` ${STYLE[energy].push > 1 ? "+" : "-"}4%`}, moved toward the other songs when they are far from it, so they all lock).`,
     songs.length === 1
       ? `This is a REMIX of one song: rebuild it in the ${energy} mood from its own parts, the way a remixer would, not a DJ playing it through. Rearrange its phrases into a new arc (not its original order). Pick one remix idea that fits the vibe (or the mood if no vibe) and commit to it: an extended club version (long intro of beat and bass, the hook teased in echo, a long build, one huge drop); a dub version (stripped parts, breakdowns, lines thrown into echo, long spaces); a hook-chop version (the hook chopped and repeated over the other parts, again and again, under risers); a breakdown-first version (open on the calmest part, the full chorus only at the end); or call and response (its verse traded against its chorus bar by bar). Drop its own best lines over its other parts, and use breakdowns, loop builds and drops. Never play two copies of the same phrase on top of each other. Say in the story which idea you chose.`
       : `Song 0 is the suggested opener, chosen because its key and tempo flow best into the others; you may choose another opener if it makes a better set (it then sets the tempo). Songs whose keys are 3 or more steps apart on the Camelot wheel must never overlap: go between them with a "cut" (echo out, slam in).`,
     vibe ? `The listener's vibe for this set: "${vibe}"` : "The listener gave no vibe; make the best club journey these songs allow.",
     "",
-    briefText(songs, 0),
+    briefText(songs, 0, energy),
     "",
     "Plan the set.",
   ].join("\n");

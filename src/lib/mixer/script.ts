@@ -116,11 +116,39 @@ export const STYLE: Record<
   peak: { push: 1.04, bars: 8, blendBars: 4, tradeEvery: 1, layerBias: ["chop", "lift"] },
 };
 
-const MAX_NUDGE = 0.12;
+// The furthest a song is sped up or slowed down to lock. Key lock keeps the
+// pitch, but past about 8% a voice starts to sound stretched, and DJ decks
+// stop there too.
+export const MAX_NUDGE = 0.08;
 export const POST_BARS = 8; // audio kept after a part, for trades and fades
 
-export function masterBpm(openerBpm: number, energy: Energy): number {
-  return openerBpm * STYLE[energy].push;
+// The set's tempo: the opener's (pushed for Peak, eased for Lounge), unless
+// that leaves a song too far away to lock, or stretched more than 4%. Then the
+// set moves toward the others, the way a DJ meets a slower record halfway: a
+// 107 and a 122 BPM song both lock at about 114 instead of the 107 one being
+// cut in cold.
+export function masterBpm(songs: { bpm: number }[], opener: number, energy: Energy): number {
+  const base = songs[opener].bpm * STYLE[energy].push;
+  let best = base;
+  let bestCost = Infinity;
+  for (let k = -60; k <= 60; k++) {
+    const f = 1 + k * 0.0025;
+    const m = base * f;
+    let locked = 0;
+    let worst = 0;
+    for (const s of songs) {
+      const r = chooseRate(m, s.bpm);
+      if (!r.synced) continue;
+      locked++;
+      worst = Math.max(worst, Math.abs(r.rate - 1));
+    }
+    const cost = -locked * 1000 + Math.max(0, worst - 0.04) * 100 + Math.abs(f - 1) * 10;
+    if (cost < bestCost - 1e-9) {
+      bestCost = cost;
+      best = m;
+    }
+  }
+  return best;
 }
 
 export function chooseRate(master: number, bpm: number): { rate: number; synced: boolean } {
@@ -159,7 +187,7 @@ export function fixScript(
   if (script.visits.length === 0 || !songs[script.visits[0]?.song]) {
     return rulesScript(songs, energy, minutes);
   }
-  const master = masterBpm(songs[script.visits[0].song].bpm, energy);
+  const master = masterBpm(songs, script.visits[0].song, energy);
   const mBar = barSeconds(master);
   const rates = songs.map((s) => chooseRate(master, s.bpm));
   const out: ScriptVisit[] = [];
@@ -312,8 +340,8 @@ function harmonicOrder(songs: SongBrief[], opener: number, master: number): numb
 export function bestOpener(songs: SongBrief[], energy: Energy): number {
   let best = 0;
   let bestCost = Infinity;
-  songs.forEach((s, i) => {
-    const master = masterBpm(s.bpm, energy);
+  songs.forEach((_, i) => {
+    const master = masterBpm(songs, i, energy);
     const order = harmonicOrder(songs, i, master);
     let cost = orderCost(songs, order, master);
     for (const t of songs) {
@@ -354,7 +382,7 @@ export function rulesScript(
   opener = 0,
 ): SetScript {
   const st = STYLE[energy];
-  const master = masterBpm(songs[opener].bpm, energy);
+  const master = masterBpm(songs, opener, energy);
   const order = harmonicOrder(songs, opener, master);
   const mBar = barSeconds(master);
   const rate = (i: number) => chooseRate(master, songs[i].bpm);
