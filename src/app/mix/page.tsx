@@ -7,7 +7,7 @@ import { getFeed } from "@/lib/works/queries";
 export const metadata: Metadata = {
   title: "Mix · AIRED",
   description:
-    "Pick two AIRED songs and the Mixer beat-matches them into one club mix — right here, no outside tools.",
+    "Pick two to six AIRED songs and the Mixer weaves them into one long, beat-matched club set — right here, no outside tools.",
 };
 
 // The AIRED Mixer. The page only hands the live catalog to the studio; all the
@@ -32,9 +32,10 @@ export default async function MixPage() {
       <header className="mb-8 flex flex-col gap-1">
         <h1 className="text-2xl font-semibold text-foreground">Mix</h1>
         <p className="text-sm text-muted">
-          Pick two songs. The Mixer finds their beat, locks them together, and
-          drops one into the other like a club set. Every maker of both songs
-          stays credited on the mix.
+          Pick two to six songs. The Mixer finds their beat, locks them to one
+          tempo, and weaves them together part by part, like a club set, for
+          five minutes or more. Every maker of every song stays credited on
+          the mix.
         </p>
       </header>
       <MixerStudio sources={sources} />
