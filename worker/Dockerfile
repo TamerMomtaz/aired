@@ -22,11 +22,18 @@ RUN apt-get update \
 # STEMS: the open Demucs model (MIT) splits each live song into vocals, drums,
 # bass and the rest for the Mixer. CPU-only PyTorch; the htdemucs weights are
 # downloaded at build time so the running worker never fetches a model.
+# Debian's pip (23.0) chokes on a typing_extensions wheel on the PyTorch index,
+# so pip is upgraded first, and only torch comes from that index (its other
+# needs come from PyPI).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 python3-venv \
   && rm -rf /var/lib/apt/lists/* \
   && python3 -m venv /opt/stems \
-  && /opt/stems/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 \
+  && /opt/stems/bin/pip install --no-cache-dir --upgrade pip \
+  && /opt/stems/bin/pip install --no-cache-dir \
+       --index-url https://download.pytorch.org/whl/cpu \
+       --extra-index-url https://pypi.org/simple \
+       torch==2.5.1+cpu \
   && /opt/stems/bin/pip install --no-cache-dir demucs==4.1.0 \
   && /opt/stems/bin/python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
 
