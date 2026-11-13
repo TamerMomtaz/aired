@@ -108,9 +108,9 @@ export const STYLE: Record<
   // A touch slower, long 32-bar parts, 8-bar blends, lines floating in echo.
   lounge: { push: 0.96, bars: 32, blendBars: 8, tradeEvery: 2, layerBias: ["echo", "lift"] },
   // The opener's tempo, 16-bar parts, call and response, lines lifted across.
-  club: { push: 1, bars: 16, blendBars: 4, tradeEvery: 2, layerBias: ["lift", "echo", "chop"] },
+  club: { push: 1, bars: 16, blendBars: 8, tradeEvery: 2, layerBias: ["lift", "echo", "chop"] },
   // Pushed faster, 8-bar parts traded bar by bar, chopped vocals, drops.
-  peak: { push: 1.04, bars: 8, blendBars: 2, tradeEvery: 1, layerBias: ["chop", "lift"] },
+  peak: { push: 1.04, bars: 8, blendBars: 4, tradeEvery: 1, layerBias: ["chop", "lift"] },
 };
 
 const MAX_NUDGE = 0.12;
@@ -203,6 +203,13 @@ export function fixScript(
     if (prev && (!rates[raw.song].synced || !rates[prev.song].synced)) move = "cut";
     // A loop build ends on a hard drop, so whatever follows it cuts in.
     if (prev?.fx.loopBuild) move = "cut";
+    // Mash-ups and trades layer two songs' voices: only between keys that sit
+    // together on the Camelot wheel.
+    if (prev && (move === "mashup" || move === "trade")) {
+      const ka = shiftKey(songs[prev.song].key, rates[prev.song].rate);
+      const kb = shiftKey(s.key, rates[raw.song].rate);
+      if (camelotDistance(ka, kb) >= 3) move = "blend";
+    }
     // A trade swaps the same song with itself to no effect.
     if (move === "trade" && prev?.song === raw.song) move = "blend";
     const fx: Fx = { ...NO_FX, ...raw.fx };
@@ -379,7 +386,6 @@ export function rulesScript(
       fx.drop = true;
       notes.push("Loop build into the drop.");
     }
-    if (energy === "lounge" && v === peakAt - 1) fx.filterRise = true;
     if (v === peakAt) notes.push("The drop: everything back in.");
     if (stage === "peak" && energy === "peak" && v % 4 === 3 && v !== peakAt - 1) {
       fx.loopBuild = true;
@@ -396,7 +402,7 @@ export function rulesScript(
     else if (prev?.song === song) move = "blend";
     else if (energy === "lounge") move = v % 3 === 2 ? "mashup" : "blend";
     else if (energy === "club") move = stage === "warm" ? "blend" : (["trade", "mashup", "blend"] as const)[v % 3];
-    else move = stage === "warm" ? "blend" : (["trade", "cut", "trade", "mashup"] as const)[v % 4];
+    else move = stage === "warm" ? "blend" : (["trade", "blend", "trade", "mashup"] as const)[v % 4];
     if (fx.breakdown && (move === "trade" || move === "mashup")) move = "blend";
     if (move === "trade") notes.push("Call and response: the two songs trade bars.");
 

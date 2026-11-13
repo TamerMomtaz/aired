@@ -27,7 +27,7 @@
 // invariant in player-provider stays untouched).
 
 import { decodeRange, MIX_SAMPLE_RATE, type AdtsIndex } from "./load";
-import { shiftKey, type MusicalKey } from "./key";
+import { camelotDistance, shiftKey, type MusicalKey } from "./key";
 import {
   barSeconds,
   chooseRate,
@@ -106,6 +106,31 @@ const lineKey = (l: Pick<Layer, "phrase" | "bar" | "len">) => `${l.phrase}:${l.b
 // The set's tempo: fixScript stores it; older scripts fall back to the opener.
 const setBpm = (songs: SongAnalysis[], script: SetScript) => script.bpm ?? songs[script.visits[0].song].tempo.bpm;
 
+// How loud a stretch of a clip sounds, close to how loudness meters (LUFS)
+// hear it: the sub-bass under ~60 Hz, which the ear barely registers, is left
+// out. Used to level parts and lines against each other from the real audio.
+function loudness(clip: AudioBuffer, from: number, to: number): number {
+  const sr = clip.sampleRate;
+  const a = Math.max(0, Math.floor(from * sr));
+  const b = Math.min(clip.length, Math.floor(to * sr));
+  const k = Math.exp((-2 * Math.PI * 60) / sr);
+  let upper = 0;
+  let n = 0;
+  for (let c = 0; c < clip.numberOfChannels; c++) {
+    const d = clip.getChannelData(c);
+    let lp = 0;
+    for (let i = a; i < b; i++) {
+      const x = d[i];
+      lp = (1 - k) * x + k * lp;
+      if (i & 3) continue;
+      upper += (x - lp) * (x - lp);
+      n++;
+    }
+  }
+  if (!n) return 1e-4;
+  return Math.max(1e-4, Math.sqrt(upper / n));
+}
+
 // Decode `len` source seconds starting `pre` before `at`, and copy it into a
 // clip whose `pre` mark is exactly the downbeat nearest `at`.
 async function cutClip(s: SongAnalysis, at: number, pre: number, len: number): Promise<AudioBuffer | null> {
@@ -163,8 +188,11 @@ export async function prepareSongs(
     const pre = PRE_BARS * srcBar;
     const clip = await cutClip(s, ph.start, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
     if (!clip) continue;
-    const next = s.structure.phrases[v.phrase + 1] ?? ph;
-    p.parts.set(partKey(v.phrase, v.bars), { clip, start: pre, rms: Math.max(1e-4, (ph.rms + next.rms) / 2) });
+    p.parts.set(partKey(v.phrase, v.bars), {
+      clip,
+      start: pre,
+      rms: loudness(clip, pre, pre + v.bars * srcBar),
+    });
     onProgress?.(++done / all);
   }
   for (const l of lineJobs) {
@@ -176,7 +204,7 @@ export async function prepareSongs(
     const pre = srcBar / 8;
     const clip = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
     if (!clip) continue;
-    p.lines.set(lineKey(l), { clip, start: pre, rms: Math.max(1e-4, ph.rms) });
+    p.lines.set(lineKey(l), { clip, start: pre, rms: loudness(clip, pre, pre + l.len * srcBar) });
     onProgress?.(++done / all);
   }
   return out;
@@ -333,26 +361,52 @@ export async function renderSet(
       src.connect(shelf);
       src.start(from, clipFrom, (to - from) * rate);
     };
-    // Call and response: the two songs swap every `tradeEvery` bars for 8 bars.
+    // Call and response: for 8 bars the songs swap the top every
+    // `tradeEvery` bars, while the outgoing song keeps one continuous beat and
+    // bass line underneath; on bar 8 the bass hands over. The groove never
+    // breaks, only the voices answer each other.
     const trade = (from: number, incoming: boolean, after: number) => {
       const k = st.tradeEvery * bar;
-      let cur = incoming ? 0 : g;
-      gain.gain.setValueAtTime(cur, from);
-      for (let i = 0; i * k < 8 * bar - 1e-6; i++) {
-        const t0 = from + i * k;
-        const want = (i % 2 === 0) === incoming ? g : 0;
-        gain.gain.setValueAtTime(cur, t0);
-        gain.gain.linearRampToValueAtTime(want, t0 + 0.008);
-        cur = want;
+      const end = from + 8 * bar;
+      if (incoming) {
+        hp.frequency.setValueAtTime(250, from);
+        let cur = 0;
+        gain.gain.setValueAtTime(0, from);
+        for (let i = 0; i * k < 8 * bar - 1e-6; i++) {
+          const t0 = from + i * k;
+          const want = i % 2 === 0 ? g : 0;
+          gain.gain.setValueAtTime(cur, t0);
+          gain.gain.linearRampToValueAtTime(want, t0 + 0.012);
+          cur = want;
+        }
+        gain.gain.setValueAtTime(cur, end);
+        gain.gain.linearRampToValueAtTime(after, end + 0.012);
+        hp.frequency.setValueAtTime(250, end - 0.01);
+        hp.frequency.exponentialRampToValueAtTime(20, end + 0.03);
+      } else {
+        gain.gain.setValueAtTime(g, from);
+        let cur = 20000;
+        lp.frequency.setValueAtTime(cur, from);
+        for (let i = 0; i * k < 8 * bar - 1e-6; i++) {
+          const t0 = from + i * k;
+          const want = i % 2 === 0 ? 250 : 20000; // even turns belong to the new song
+          lp.frequency.setValueAtTime(cur, t0);
+          lp.frequency.exponentialRampToValueAtTime(want, t0 + 0.015);
+          cur = want;
+        }
+        gain.gain.setValueAtTime(g, end);
+        gain.gain.linearRampToValueAtTime(after, end + 0.03);
       }
-      gain.gain.setValueAtTime(cur, from + 8 * bar);
-      gain.gain.linearRampToValueAtTime(after, from + 8 * bar + 0.008);
     };
 
     // -- how it comes in --
     let startAt = T;
+    // Keys that clash (3+ steps apart on the Camelot wheel) sound sour layered
+    // for long, so those blends are kept short.
+    const prevSong = idx > 0 ? prepared[visits[idx - 1].song] : null;
+    const clash = !!prevSong && prevSong !== song && camelotDistance(prevSong.key, song.key) >= 3;
     if (v.move === "blend") {
-      startAt = T - st.blendBars * bar;
+      startAt = T - (clash ? 2 : st.blendBars) * bar;
       gain.gain.setValueAtTime(0, startAt);
       gain.gain.linearRampToValueAtTime(g * 0.8, T);
       gain.gain.setValueAtTime(g, T);
@@ -366,6 +420,13 @@ export async function renderSet(
       hp.frequency.setValueAtTime(300, T);
       hp.frequency.setValueAtTime(300, T + mashBars * bar - 0.01);
       hp.frequency.linearRampToValueAtTime(20, T + mashBars * bar);
+    } else if (v.move === "cut" && !visits[idx - 1]?.fx.loopBuild) {
+      // A cut that isn't a drop lands soft: in over half a beat, its top
+      // opening over the first bar, under the old song's echo tail.
+      gain.gain.setValueAtTime(0, T);
+      gain.gain.linearRampToValueAtTime(g, T + beat / 2);
+      lp.frequency.setValueAtTime(700, T);
+      lp.frequency.exponentialRampToValueAtTime(20000, T + bar);
     } else {
       gain.gain.setValueAtTime(v.move === "open" ? 0 : g, T);
       if (v.move === "open") gain.gain.linearRampToValueAtTime(g, T + bar);
@@ -380,7 +441,11 @@ export async function renderSet(
       shelf.gain.linearRampToValueAtTime(0, Tend - 0.02);
     }
     const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
-    if (v.fx.filterRise || v.fx.loopBuild) {
+    // A filter rise only makes sense into a cut or a drop: before a blend it
+    // would strip the bass while the incoming song's bass is still held back,
+    // leaving a hole.
+    const rising = v.fx.filterRise && (!next || next.move === "cut" || v.fx.drop);
+    if (rising || v.fx.loopBuild) {
       const from = v.fx.loopBuild ? loopFrom : Math.max(T + mashBars * bar, Tend - 8 * bar);
       hp.frequency.setValueAtTime(20, from);
       hp.frequency.exponentialRampToValueAtTime(700, Tend - 0.03);
@@ -636,7 +701,7 @@ export async function renderSet(
       thp.type = "highpass";
       thp.frequency.value = 120;
       const tg = ctx.createGain();
-      tg.gain.value = 0.8;
+      tg.gain.value = 0.6;
       const tsend = ctx.createGain();
       tsend.gain.setValueAtTime(0.35, t);
       tsend.gain.setValueAtTime(0.35, t + Math.max(0, tag.duration - 0.25));
@@ -650,7 +715,7 @@ export async function renderSet(
       const b = Math.round((t + tag.duration) * PUMP_RATE);
       const fadeN = Math.round(0.08 * PUMP_RATE);
       for (let i = Math.max(0, a); i < Math.min(pump.length, b + fadeN); i++) {
-        const k = i < b ? 0.55 : 0.55 + 0.45 * ((i - b) / fadeN);
+        const k = i < b ? 0.6 : 0.6 + 0.4 * ((i - b) / fadeN);
         pump[i] = Math.min(pump[i], k);
       }
     }
