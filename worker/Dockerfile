@@ -24,7 +24,8 @@ RUN apt-get update \
 # downloaded at build time so the running worker never fetches a model.
 # Debian's pip (23.0) chokes on a typing_extensions wheel on the PyTorch index,
 # so pip is upgraded first, and only torch comes from that index (its other
-# needs come from PyPI).
+# needs come from PyPI). demucs imports numpy without declaring it. A 3-second
+# test split at the end proves the whole chain works before the image ships.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 python3-venv \
   && rm -rf /var/lib/apt/lists/* \
@@ -34,8 +35,12 @@ RUN apt-get update \
        --index-url https://download.pytorch.org/whl/cpu \
        --extra-index-url https://pypi.org/simple \
        torch==2.5.1+cpu \
-  && /opt/stems/bin/pip install --no-cache-dir demucs==4.1.0 \
-  && /opt/stems/bin/python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+  && /opt/stems/bin/pip install --no-cache-dir demucs==4.1.0 "numpy<3" \
+  && /opt/stems/bin/python -c "from demucs.pretrained import get_model; get_model('htdemucs')" \
+  && ffmpeg -hide_banner -loglevel error -f lavfi -i "sine=frequency=220:duration=3" -ac 2 -ar 44100 /tmp/probe.wav \
+  && /opt/stems/bin/python -m demucs.separate -n htdemucs -d cpu -o /tmp/probe-out --filename "{stem}.{ext}" /tmp/probe.wav \
+  && test "$(find /tmp/probe-out -name "*.wav" | wc -l)" -eq 4 \
+  && rm -rf /tmp/probe.wav /tmp/probe-out
 
 # The weights are in the image; never reach for the hub at run time.
 ENV HF_HUB_OFFLINE=1
