@@ -54,7 +54,7 @@ export default async function MixPage({
       </div>
       <header className="club-hero mb-8 flex flex-col gap-2">
         <p className="club-kicker">AIRED · Live booth</p>
-        <h1 className="club-title">MIX</h1>
+        <h1 className="club-title">MIX<span className="club-title-a">a</span>TEE</h1>
         <p className="club-tagline">Your songs. One set. Your drop.</p>
         <p className="text-sm text-muted">
           Pick one to six songs (one song becomes a remix). The Mixer finds their beat, locks them to one
