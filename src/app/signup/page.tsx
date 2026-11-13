@@ -25,7 +25,7 @@ export default async function SignupPage({
       <header className="flex flex-col gap-2 text-center">
         <Link
           href="/"
-          className="text-2xl font-semibold tracking-[0.2em] text-foreground"
+          className="aired-lockup self-center text-2xl font-semibold tracking-[0.3em]"
         >
           AIRED
         </Link>

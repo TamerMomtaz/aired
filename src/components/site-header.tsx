@@ -72,14 +72,14 @@ export async function SiteHeader() {
       ];
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/8 bg-background/80 backdrop-blur">
+    <header className="surface-bar sticky top-0 z-20 border-b border-white/8 backdrop-blur">
       {/* gap-2 on a phone, gap-3 from sm: up. Those 8px are the difference
           between the three phone entries fitting at 360px and the rail having
           to scroll 2px — measured. Desktop keeps the spacing it always had. */}
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-5 sm:gap-3">
         <Link
           href="/"
-          className="shrink-0 text-lg font-semibold tracking-[0.2em] text-foreground"
+          className="aired-lockup shrink-0 text-lg font-semibold tracking-[0.3em]"
         >
           AIRED
         </Link>

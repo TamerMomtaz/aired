@@ -79,7 +79,7 @@ export function SearchBar({
         placeholder={placeholder}
         autoComplete="off"
         autoFocus={autoFocus}
-        className={`w-full rounded-lg border border-white/10 bg-white/5 ${padding} text-foreground outline-none transition placeholder:text-muted/60 focus:border-cert-red/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-cert-red/40`}
+        className={`w-full surface-well rounded-lg border border-white/10 ${padding} text-foreground outline-none transition placeholder:text-muted/60 focus:border-cert-red/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-cert-red/40`}
       />
     </form>
   );

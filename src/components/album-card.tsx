@@ -11,7 +11,7 @@ import type { AlbumCardData } from "@/lib/albums/public-queries";
 export function AlbumCard({ album }: { album: AlbumCardData }) {
   const count = album.liveSongCount;
   return (
-    <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
+    <article className="surface-edge group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
       <Link
         href={`/album/${album.id}`}
         className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"

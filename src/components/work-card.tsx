@@ -42,7 +42,7 @@ export function WorkCard({
       <div className="relative">
         <Link
           href={`/registry/${work.id}`}
-          className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
+          className="surface-edge relative block aspect-square overflow-hidden rounded-lg border border-white/8"
           aria-label={`Open AIRED-${work.id} ${work.title}`}
         >
           {work.artwork_url ? (

@@ -31,7 +31,7 @@ export default async function QrPage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-8 px-5 py-12 text-center">
       <div className="flex flex-col items-center gap-2">
-        <span className="text-2xl font-semibold tracking-[0.3em] text-foreground">
+        <span className="aired-lockup text-2xl font-semibold tracking-[0.3em]">
           AIRED
         </span>
         <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-cert-red">
