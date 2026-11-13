@@ -3,8 +3,8 @@
 // The host's speaking voice.
 //
 // Two voices, best first:
-//   1. A natural human voice from /api/host/voice (ElevenLabs), when the
-//      server has a key for it.
+//   1. Kahotia's own voice from /api/host/voice (a male neural voice from
+//      Microsoft Azure Speech, or ElevenLabs), when the server has a key.
 //   2. The phone's own speech voice (speechSynthesis), picking the most natural
 //      one the phone has for the language (Siri, Google, "Enhanced",
 //      "Natural" voices before the robotic defaults).
@@ -90,13 +90,17 @@ export class HostVoice {
     this.stop();
     if (muted || !text.trim()) return;
     if (this.human !== false && this.audio) {
-      const ok = await this.sayHuman(text, onProgress);
+      const ok = await this.sayHuman(text, lang, onProgress);
       if (ok) return;
     }
     await this.sayDevice(text, lang, onProgress);
   }
 
-  private async sayHuman(text: string, onProgress?: OnProgress): Promise<boolean> {
+  private async sayHuman(
+    text: string,
+    lang: VoiceLang,
+    onProgress?: OnProgress,
+  ): Promise<boolean> {
     let stopped = false;
     const controller = new AbortController();
     this.cancel = () => {
@@ -108,7 +112,7 @@ export class HostVoice {
       const res = await fetch("/api/host/voice", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, lang }),
         signal: controller.signal,
       });
       if (res.status === 501) {
