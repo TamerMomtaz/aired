@@ -27,7 +27,8 @@
 // invariant in player-provider stays untouched).
 
 import { decodeRange, MIX_SAMPLE_RATE, type AdtsIndex } from "./load";
-import { camelotDistance, shiftKey, type MusicalKey } from "./key";
+import { camelotDistance, type MusicalKey } from "./key";
+import { KEY_LOCK_MIN, stretchBuffer } from "./stretch";
 import {
   barSeconds,
   chooseRate,
@@ -71,9 +72,12 @@ export type Part = { clip: AudioBuffer; start: number; rms: number };
 export type PreparedSong = {
   title: string;
   rate: number;
+  // How fast its clips play back. With key lock the clips are already
+  // stretched to the set's tempo, so this is 1 and the pitch never moves.
+  playRate: number;
   synced: boolean;
   bpm: number;
-  key: MusicalKey; // after the tempo lock's pitch change
+  key: MusicalKey; // key lock: the song keeps its own key
   parts: Map<string, Part>; // "phrase:bars" → decoded audio
   lines: Map<string, Part>; // "phrase:bar:len" → a lifted line
 };
@@ -166,9 +170,10 @@ export async function prepareSongs(
     return {
       title: s.title,
       rate,
+      playRate: rate,
       synced,
       bpm: s.tempo.bpm,
-      key: shiftKey(s.key, rate),
+      key: s.key,
       parts: new Map(),
       lines: new Map(),
     };
@@ -187,13 +192,15 @@ export async function prepareSongs(
     const srcBar = mBar * p.rate;
     const ph = s.structure.phrases[v.phrase];
     const pre = PRE_BARS * srcBar;
-    const clip = await cutClip(s, ph.start, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
-    if (!clip) continue;
+    const raw = await cutClip(s, ph.start, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
+    if (!raw) continue;
+    const { clip, scale } = lockKey(raw, p.rate);
     p.parts.set(partKey(v.phrase, v.bars), {
       clip,
-      start: pre,
-      rms: loudness(clip, pre, pre + v.bars * srcBar),
+      start: pre * scale,
+      rms: loudness(clip, pre * scale, (pre + v.bars * srcBar) * scale),
     });
+    await tick();
     onProgress?.(++done / all);
   }
   for (const l of lineJobs) {
@@ -203,13 +210,29 @@ export async function prepareSongs(
     const ph = s.structure.phrases[l.phrase];
     if (!ph) continue;
     const pre = srcBar / 8;
-    const clip = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
-    if (!clip) continue;
-    p.lines.set(lineKey(l), { clip, start: pre, rms: loudness(clip, pre, pre + l.len * srcBar) });
+    const raw = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
+    if (!raw) continue;
+    const { clip, scale } = lockKey(raw, p.rate);
+    p.lines.set(lineKey(l), {
+      clip,
+      start: pre * scale,
+      rms: loudness(clip, pre * scale, (pre + l.len * srcBar) * scale),
+    });
     onProgress?.(++done / all);
   }
+  for (const p of out) if (Math.abs(p.rate - 1) > KEY_LOCK_MIN) p.playRate = 1;
   return out;
 }
+
+// Key lock: stretch a clip to the set's tempo without moving its pitch.
+// `scale` turns a time in the source into a time in the returned clip.
+function lockKey(clip: AudioBuffer, rate: number): { clip: AudioBuffer; scale: number } {
+  if (Math.abs(rate - 1) <= KEY_LOCK_MIN) return { clip, scale: 1 };
+  return { clip: stretchBuffer(clip, rate), scale: 1 / rate };
+}
+
+// Let the page breathe between long stretches of work.
+const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 export function planTimes(script: SetScript, songs: SongAnalysis[], prepared: PreparedSong[]): MixPlan {
   const master = setBpm(songs, script);
@@ -322,7 +345,7 @@ export async function renderSet(
     const g = Math.max(0.5, Math.min(2, target / part.rms));
     const T = v.at;
     const Tend = T + v.dur;
-    const rate = song.rate;
+    const rate = song.playRate;
 
     const shelf = ctx.createBiquadFilter();
     shelf.type = "lowshelf";
@@ -522,9 +545,9 @@ export async function renderSet(
       const hit = (t: number, off: number, dur: number) => {
         const src = ctx.createBufferSource();
         src.buffer = line.clip;
-        src.playbackRate.value = ls.rate;
+        src.playbackRate.value = ls.playRate;
         src.connect(lhp);
-        src.start(t, line.start + off * ls.rate, dur * ls.rate + 0.01);
+        src.start(t, line.start + off * ls.playRate, dur * ls.playRate + 0.01);
         lgain.gain.setValueAtTime(0, t);
         lgain.gain.linearRampToValueAtTime(lg, t + 0.005);
         lgain.gain.setValueAtTime(lg, t + dur - 0.01);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { usePlayer } from "@/components/player/player-provider";
 import { MixaTeeShelf } from "@/components/mixer/mixatee-shelf";
+import { Mp3Button } from "@/components/mixer/mp3-button";
 import { TagPanel } from "@/components/mixer/tag-panel";
 import { formatCatalogId, formatWorkLabel } from "@/lib/catalog";
 import { formatDuration } from "@/lib/format";
@@ -558,8 +559,13 @@ function MixResult({
           download={fileName}
           className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30"
         >
-          Download the mix
+          Download WAV
         </a>
+        <Mp3Button
+          getWav={() => fetch(stage.url).then((r) => r.blob())}
+          fileName={fileName.replace(/\.wav$/, "")}
+          className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30 disabled:opacity-60"
+        />
         <span className="text-xs text-muted">
           {stage.saved
             ? "Saved in your MixaTee below."
