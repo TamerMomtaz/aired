@@ -27,11 +27,12 @@ type Pulse = { trace: Trace; at: number; color: string };
 const TRACE_INKS = [
   "rgba(205, 210, 222, 0.12)", // silver
   "rgba(205, 210, 222, 0.12)",
-  "rgba(205, 210, 222, 0.12)",
+  "rgba(214, 186, 128, 0.13)", // gold
   "rgba(214, 186, 128, 0.13)", // gold
   "rgba(70, 150, 255, 0.13)", // blue
 ];
-const PULSE_INKS = ["#47a8ff", "#47a8ff", "#e6c27a", "#eef1f7"];
+// Warmed for the mood lift: gold and amber lead, blue still runs through.
+const PULSE_INKS = ["#e6c27a", "#ffb36b", "#47a8ff", "#eef1f7", "#e6c27a"];
 
 // Eight directions; diagonals are rarer, the way a real board routes.
 const DIRS: Pt[] = [

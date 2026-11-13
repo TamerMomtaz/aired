@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ArtGlow } from "@/components/art/art-glow";
+
 import type { AlbumCardData } from "@/lib/albums/public-queries";
 
 // One album on the Listen shelf (and on an artist page): a cover that opens to
@@ -12,6 +14,8 @@ export function AlbumCard({ album }: { album: AlbumCardData }) {
   const count = album.liveSongCount;
   return (
     <article className="surface-edge group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
+      <div className="relative isolate">
+      <ArtGlow src={album.coverUrl} />
       <Link
         href={`/album/${album.id}`}
         className="relative block aspect-square overflow-hidden rounded-lg border border-white/8"
@@ -35,6 +39,7 @@ export function AlbumCard({ album }: { album: AlbumCardData }) {
           Album
         </span>
       </Link>
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <Link

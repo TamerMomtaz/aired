@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ArtGlow } from "@/components/art/art-glow";
 import { AdornButton } from "@/components/library/adorn-button";
 import { MixLink } from "@/components/mixer/mix-link";
 import { CardPlayButton } from "@/components/player/card-play-button";
@@ -40,7 +41,8 @@ export function WorkCard({
     <article className="group flex flex-col gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 transition hover:border-white/15 hover:bg-white/[0.04]">
       {/* The share button is a sibling of the cover Link, never a child — no
           nested anchors, and a tap on the icon never navigates to the song. */}
-      <div className="relative">
+      <div className="relative isolate">
+        <ArtGlow src={work.artwork_url} />
         <Link
           href={`/registry/${work.id}`}
           className="surface-edge relative block aspect-square overflow-hidden rounded-lg border border-white/8"
