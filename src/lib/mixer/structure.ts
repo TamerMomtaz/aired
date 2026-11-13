@@ -228,19 +228,29 @@ export function refineStart(buf: AudioBuffer, approx: number, beat: number): num
     prev = v;
   }
   const fps = sr / hop;
-  let best = 0;
-  let bestScore = -1;
   const steps = Math.round(span * fps);
-  for (let d = -steps; d <= steps; d++) {
-    let s = 0;
-    for (let k = 0; k < beats; k++) {
-      const i = Math.round((approx - from / sr + k * beat) * fps) + d;
-      s += env[i] ?? 0;
+  // Best alignment of `n` beats starting near `at`, within ±span.
+  const search = (at: number, n: number) => {
+    let best = 0;
+    let bestScore = -1;
+    for (let d = -steps; d <= steps; d++) {
+      let s = 0;
+      for (let k = 0; k < n; k++) {
+        const i = Math.round((at - from / sr + k * beat) * fps) + d;
+        s += env[i] ?? 0;
+      }
+      if (s > bestScore) {
+        bestScore = s;
+        best = d;
+      }
     }
-    if (s > bestScore) {
-      bestScore = s;
-      best = d;
-    }
-  }
-  return approx + best / fps;
+    return { at: at + best / fps, score: bestScore };
+  };
+  const on = search(approx, beats - 1);
+  // A grid that locked onto the off-beats (hats, offbeat bass) puts every part
+  // half a beat out, and two songs blended that way gallop. The kick lives on
+  // the beat, so if the low end hits clearly harder half a beat later, the
+  // real beat is there.
+  const off = search(approx + beat / 2, beats - 1);
+  return off.score > on.score * 1.5 ? off.at : on.at;
 }
