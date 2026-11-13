@@ -314,7 +314,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // that request is not mistaken for a stuck one.
   const lastPlayRequestAtRef = useRef(0);
 
-  const currentUrl = buildStreamUrl(current?.hlsPlaylistKey);
+  const currentUrl = current?.localUrl ?? buildStreamUrl(current?.hlsPlaylistKey);
 
   // ---- the flight recorder's view of this provider ------------------------
   // Everything the recorder needs that only lives in here: the element, the
@@ -447,7 +447,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playQueue = useCallback((tracks: Track[], startIndex: number) => {
     if (tracks.length === 0) return;
     const i = clamp(startIndex, 0, tracks.length - 1);
-    const targetUrl = buildStreamUrl(tracks[i].hlsPlaylistKey);
+    const targetUrl = tracks[i].localUrl ?? buildStreamUrl(tracks[i].hlsPlaylistKey);
     diag(
       "playQueue",
       `work=${tracks[i].id} "${tracks[i].title}" · ${i + 1}/${tracks.length}`,
@@ -663,7 +663,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (playRecordedRef.current) return;
       const workId = currentIdRef.current;
       const sid = sessionIdRef.current;
-      if (workId === null || !sid) return;
+      // A saved mix (negative id) is not a catalog work: no play is recorded.
+      if (workId === null || workId < 0 || !sid) return;
       const dur =
         Number.isFinite(audio.duration) && audio.duration > 0
           ? audio.duration
@@ -837,6 +838,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!currentUrl) {
       audio.removeAttribute("src");
       audio.load(); // fires "emptied" → resets the clock
+      return;
+    }
+
+    // A MixaTee is a plain audio file on this device: the element plays it
+    // directly, with no HLS engine in between.
+    if (currentUrl.startsWith("blob:")) {
+      diag("local-attach", "saved mix", snap());
+      audio.src = currentUrl;
       return;
     }
 
@@ -1271,6 +1280,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // fresh off the element at each write instead.
   useEffect(() => {
     if (queue.length === 0 || index < 0) return;
+    // A saved mix's file URL dies with the page, so a run holding one is not
+    // written: a reload brings back the last catalog run instead.
+    if (queue.some((t) => t.localUrl)) return;
 
     const save = () => {
       const audio = audioRef.current;
