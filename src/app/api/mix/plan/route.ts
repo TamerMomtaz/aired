@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const minutes: MixMinutes = body.minutes === 7 || body.minutes === 10 ? body.minutes : 5;
   const vibe = typeof body.vibe === "string" ? body.vibe.slice(0, 300) : "";
   const rawSongs = Array.isArray(body.songs) ? body.songs.slice(0, 6) : [];
-  if (rawSongs.length < 2) return NextResponse.json({ ai: false }, { status: 400 });
+  if (rawSongs.length < 1) return NextResponse.json({ ai: false }, { status: 400 });
 
   const catalog = await getVoiceCatalog();
   const byId = new Map(catalog.map((s) => [s.id, s]));
@@ -79,6 +79,7 @@ export async function POST(req: Request) {
       key: keyFromTonic(Math.round(num(r.tonic, 0, 11, 0)), r.minor === true, num(r.keyConfidence, 0, 1, 0.5)),
       duration: num(r.duration, 1, 7200, 180),
       phrases,
+      plays: Math.round(num(r.plays, 1, 3, 1)),
     });
   }
 

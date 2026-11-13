@@ -10,6 +10,7 @@ import { formatDuration } from "@/lib/format";
 import {
   LOAD_SECONDS,
   MAX_TRACKS,
+  MAX_REPEATS,
   MIN_TRACKS,
   planTimes,
   prepareSongs,
@@ -21,6 +22,7 @@ import { detectKey } from "@/lib/mixer/key";
 import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
 import { loadDeck, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
 import {
+  bestOpener,
   fixScript,
   rulesScript,
   type Energy,
@@ -123,6 +125,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [vibe, setVibe] = useState("");
   const [useBrain, setUseBrain] = useState(true);
+  const [autoOrder, setAutoOrder] = useState(true);
   const [tag, setTag] = useState<SavedTag | null>(null);
   const [useTag, setUseTag] = useState(false);
   const [mixes, setMixes] = useState<SavedMix[]>([]);
@@ -155,14 +158,15 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   const ready = set.length >= MIN_TRACKS && !busy;
 
   function add(id: number) {
-    setSetIds((ids) => (ids.includes(id) || ids.length >= MAX_TRACKS ? ids : [...ids, id]));
+    setSetIds((ids) =>
+      ids.filter((x) => x === id).length >= MAX_REPEATS || ids.length >= MAX_TRACKS ? ids : [...ids, id],
+    );
   }
-  function remove(id: number) {
-    setSetIds((ids) => ids.filter((x) => x !== id));
+  function remove(i: number) {
+    setSetIds((ids) => ids.filter((_, k) => k !== i));
   }
-  function move(id: number, dir: -1 | 1) {
+  function move(i: number, dir: -1 | 1) {
     setSetIds((ids) => {
-      const i = ids.indexOf(id);
       const j = i + dir;
       if (i < 0 || j < 0 || j >= ids.length) return ids;
       const out = [...ids];
@@ -172,8 +176,11 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   }
 
   async function makeMix() {
-    const tracks = set;
-    if (tracks.length < MIN_TRACKS) return;
+    if (set.length < MIN_TRACKS) return;
+    // A song added more than once is listened to once and gets that many
+    // shares of the set.
+    let tracks = set.filter((s, i) => set.findIndex((t) => t.id === s.id) === i);
+    let plays = tracks.map((t) => set.filter((s) => s.id === t.id).length);
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -201,7 +208,19 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         const key = detectKey(deck.buffer);
         analyses.push({ title: s.title, tempo, structure, key, duration: deck.seconds, adts: deck.adts });
       }
-      const briefs = analyses.map((a, i) => toBrief(a, tracks[i]));
+      let briefs = analyses.map((a, i) => ({ ...toBrief(a, tracks[i]), plays: plays[i] }));
+      // Let the Mixer pick the opener whose key and tempo flow best into the
+      // others; the planners then find the smoothest order from it.
+      if (autoOrder && tracks.length > 1) {
+        const o = bestOpener(briefs, energy);
+        const front = <T,>(xs: T[]) => [xs[o], ...xs.filter((_, i) => i !== o)];
+        tracks = front(tracks);
+        plays = front(plays);
+        analyses.splice(0, analyses.length, ...front(analyses));
+        briefs = front(briefs);
+      }
+      const remix = tracks.length === 1;
+      const energyLabel = ENERGIES.find((e) => e.value === energy)?.label ?? energy;
 
       // 2. Plan the set: the DJ brain if it's reachable, else the built-in rules.
       let script: SetScript | null = null;
@@ -227,7 +246,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
       show("Packing the file", 0.96);
       await tick();
       const blob = encodeWav(buffer, {
-        title: `${plan.title} (AIRED Mix)`,
+        title: remix ? `${plan.title} (AIRED ${energyLabel} Remix)` : `${plan.title} (AIRED Mix)`,
         artist: tracks.map(names).join(" × "),
         comment:
           `AIRED Mix. Built from ` +
@@ -239,11 +258,11 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
       const saved = await saveMix(
         {
           id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          title: plan.title,
+          title: remix ? `${plan.title} · ${energyLabel} remix` : plan.title,
           createdAt: Date.now(),
           seconds: buffer.duration,
           bpm: plan.bpm,
-          energy: ENERGIES.find((e) => e.value === energy)?.label ?? energy,
+          energy: energyLabel,
           dj,
           story: plan.story || null,
           plannedBy: plan.by,
@@ -285,7 +304,24 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SetList set={set} onRemove={remove} onMove={move} disabled={busy} />
+      <SetList set={set} onRemove={remove} onMove={move} disabled={busy} autoOrder={autoOrder} />
+
+      <label className="-mt-3 flex items-start gap-2 px-1 text-sm text-foreground">
+        <input
+          type="checkbox"
+          checked={autoOrder}
+          onChange={(e) => setAutoOrder(e.target.checked)}
+          disabled={busy}
+          className="mt-0.5 size-4 accent-white"
+        />
+        <span>
+          Let the Mixer choose the order
+          <span className="block text-xs text-muted">
+            It picks the opener and the order whose keys and tempos flow best, so songs collide less. Turn off to keep
+            your order.
+          </span>
+        </span>
+      </label>
 
       <SongPicker
         sources={sources}
@@ -337,7 +373,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
           {busy ? "Mixing…" : stage.kind === "done" ? "Mix again" : "Mix it"}
         </button>
         {set.length < MIN_TRACKS ? (
-          <p className="text-xs text-muted">Add at least two songs.</p>
+          <p className="text-xs text-muted">Add a song. One song on its own becomes a remix in the mood you pick.</p>
         ) : null}
       </div>
 
@@ -427,6 +463,7 @@ async function askBrain(
           keyConfidence: analyses[i].key.confidence,
           duration: briefs[i].duration,
           phrases: briefs[i].phrases,
+          plays: briefs[i].plays ?? 1,
         })),
       }),
     });
@@ -452,7 +489,7 @@ function MixResult({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">{plan.title}</h2>
         <p className="text-xs text-muted">
-          AIRED Mix · {formatDuration(Math.round(stage.seconds))} · {Math.round(plan.bpm)} BPM ·{" "}
+          {set.length === 1 ? "AIRED Remix" : "AIRED Mix"} · {formatDuration(Math.round(stage.seconds))} · {Math.round(plan.bpm)} BPM ·{" "}
           {plan.visits.length} parts ·{" "}
           {plan.by === "brain" ? "planned by the DJ brain" : "planned by the Mixer's own rules"}
         </p>
@@ -546,24 +583,32 @@ function SetList({
   onRemove,
   onMove,
   disabled,
+  autoOrder,
 }: {
   set: MixSource[];
-  onRemove: (id: number) => void;
-  onMove: (id: number, dir: -1 | 1) => void;
+  onRemove: (i: number) => void;
+  onMove: (i: number, dir: -1 | 1) => void;
   disabled: boolean;
+  autoOrder: boolean;
 }) {
+  const remix = set.length > 0 && set.every((s) => s.id === set[0].id);
   return (
     <fieldset className="flex flex-col gap-2 rounded-2xl border border-white/10 p-4" disabled={disabled}>
       <legend className="px-1 text-sm font-semibold text-foreground">
         Your set{" "}
         <span className="font-normal text-muted">
-          · {set.length} of {MAX_TRACKS} · the first song opens and sets the tempo
+          · {set.length} of {MAX_TRACKS} ·{" "}
+          {remix
+            ? "one song: the Mixer remixes it"
+            : autoOrder
+              ? "the Mixer picks the opener and order"
+              : "the first song opens and sets the tempo"}
         </span>
       </legend>
       {set.length === 0 ? <p className="px-1 text-xs text-muted">Add songs from the list below.</p> : null}
       <ol className="flex flex-col gap-1">
         {set.map((s, i) => (
-          <li key={s.id} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
+          <li key={`${s.id}-${i}`} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
             <span className="w-5 shrink-0 text-center text-xs text-muted">{i + 1}</span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm text-foreground">{s.title}</span>
@@ -571,13 +616,13 @@ function SetList({
                 {formatCatalogId(s.id)} · {names(s)}
               </span>
             </span>
-            <IconButton label="Move up" onClick={() => onMove(s.id, -1)} disabled={i === 0}>
+            <IconButton label="Move up" onClick={() => onMove(i, -1)} disabled={i === 0}>
               ↑
             </IconButton>
-            <IconButton label="Move down" onClick={() => onMove(s.id, 1)} disabled={i === set.length - 1}>
+            <IconButton label="Move down" onClick={() => onMove(i, 1)} disabled={i === set.length - 1}>
               ↓
             </IconButton>
-            <IconButton label="Remove" onClick={() => onRemove(s.id)}>
+            <IconButton label="Remove" onClick={() => onRemove(i)}>
               ✕
             </IconButton>
           </li>
@@ -639,7 +684,10 @@ function SongPicker({
   return (
     <fieldset className="flex flex-col gap-2 rounded-2xl border border-white/10 p-4" disabled={disabled}>
       <legend className="px-1 text-sm font-semibold text-foreground">
-        Add songs <span className="font-normal text-muted">· 2 to {MAX_TRACKS}</span>
+        Add songs{" "}
+        <span className="font-normal text-muted">
+          · 1 to {MAX_TRACKS} · add a song up to {MAX_REPEATS} times to hear it more
+        </span>
       </legend>
       <input
         type="search"
@@ -650,13 +698,14 @@ function SongPicker({
       />
       <ul className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
         {list.map((s) => {
-          const added = inSet.includes(s.id);
+          const count = inSet.filter((x) => x === s.id).length;
+          const maxed = count >= MAX_REPEATS;
           return (
             <li key={s.id}>
               <button
                 type="button"
                 onClick={() => onAdd(s.id)}
-                disabled={added || full}
+                disabled={maxed || full}
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-white/[0.04] disabled:hover:bg-transparent"
               >
                 {s.artworkUrl ? (
@@ -672,7 +721,7 @@ function SongPicker({
                   </span>
                 </span>
                 <span className="ml-auto shrink-0 text-xs text-muted">
-                  {added ? "In the set ✓" : full ? "" : "+ Add"}
+                  {count > 0 ? `In the set${count > 1 ? ` ×${count}` : ""} ✓${maxed || full ? "" : " · + again"}` : full ? "" : "+ Add"}
                 </span>
               </button>
             </li>

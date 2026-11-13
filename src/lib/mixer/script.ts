@@ -85,6 +85,9 @@ export type SongBrief = {
     vocal: number; // 0–9 within the song: how much voice/hook is in it
     lines: number[]; // bar offsets of its best 2-bar lines
   }[];
+  // How many times the listener added this song (1–3): it gets that share of
+  // the set and keeps coming back between the others.
+  plays?: number;
 };
 
 export const NO_FX: Fx = {
@@ -205,13 +208,16 @@ export function fixScript(
     if (prev?.fx.loopBuild) move = "cut";
     // Mash-ups and trades layer two songs' voices: only between keys that sit
     // together on the Camelot wheel.
-    if (prev && (move === "mashup" || move === "trade")) {
-      const ka = shiftKey(songs[prev.song].key, rates[prev.song].rate);
-      const kb = shiftKey(s.key, rates[raw.song].rate);
-      if (camelotDistance(ka, kb) >= 3) move = "blend";
-    }
-    // A trade swaps the same song with itself to no effect.
-    if (move === "trade" && prev?.song === raw.song) move = "blend";
+    // Keys 3+ steps apart on the wheel sound sour on top of each other, so
+    // those songs never overlap: the old one echoes out and the new one lands
+    // clean, the way a DJ gets between songs that don't share a key.
+    const clash =
+      !!prev &&
+      prev.song !== raw.song &&
+      camelotDistance(shiftKey(songs[prev.song].key, rates[prev.song].rate), shiftKey(s.key, rates[raw.song].rate)) >= 3;
+    if (clash && move !== "cut") move = "cut";
+    // A trade of a part with itself does nothing.
+    if (move === "trade" && prev?.song === raw.song && prev.phrase === phrase) move = "blend";
     const fx: Fx = { ...NO_FX, ...raw.fx };
     if (!rates[raw.song].synced) {
       fx.kick = fx.hats = fx.claps = fx.pump = false;
@@ -223,7 +229,7 @@ export function fixScript(
     }
     if (energy === "lounge") {
       fx.claps = fx.loopBuild = fx.kick = fx.hats = fx.pump = false;
-      if (move === "cut" && prev && rates[raw.song].synced && rates[prev.song].synced) move = "blend";
+      if (move === "cut" && prev && rates[raw.song].synced && rates[prev.song].synced && !clash) move = "blend";
       if (move === "trade") move = "mashup";
     }
     const v: ScriptVisit = { song: raw.song, phrase, bars, move, fx, note: raw.note?.slice(0, 160) };
@@ -241,9 +247,16 @@ export function fixScript(
       if (total >= minutes * 60) break;
       if (used.has(`${v.song}:${v.phrase}`) && extra.length > out.length) continue;
       const prev = out[out.length - 1];
+      const clash =
+        prev.song !== v.song &&
+        camelotDistance(shiftKey(songs[prev.song].key, rates[prev.song].rate), shiftKey(songs[v.song].key, rates[v.song].rate)) >= 3;
       let move: Move =
-        !rates[v.song].synced || !rates[prev.song].synced || prev.fx.loopBuild ? "cut" : v.move === "open" ? "blend" : v.move;
-      if (move === "trade" && prev.song === v.song) move = "blend";
+        !rates[v.song].synced || !rates[prev.song].synced || prev.fx.loopBuild || clash
+          ? "cut"
+          : v.move === "open"
+            ? "blend"
+            : v.move;
+      if (move === "trade" && prev.song === v.song && prev.phrase === v.phrase) move = "blend";
       out.push({ ...v, move });
       total += v.bars * mBar;
     }
@@ -254,28 +267,64 @@ export function fixScript(
   return { ...script, visits: out, bpm: master };
 }
 
-// Order songs so each next one sits close on the Camelot wheel, starting from
-// the opener the listener picked. Songs that can't lock tempo go last.
-function harmonicOrder(songs: SongBrief[], opener: number, master: number): number[] {
-  const left = songs.map((_, i) => i).filter((i) => i !== opener);
-  const order = [opener];
-  while (left.length) {
-    const cur = songs[order[order.length - 1]];
-    const curKey = shiftKey(cur.key, chooseRate(master, cur.bpm).rate);
-    let best = 0;
-    let bestScore = Infinity;
-    left.forEach((i, k) => {
-      const r = chooseRate(master, songs[i].bpm);
-      const key = shiftKey(songs[i].key, r.rate);
-      const score = camelotDistance(curKey, key) + (r.synced ? 0 : 10) + k * 0.01;
-      if (score < bestScore) {
-        bestScore = score;
-        best = k;
-      }
-    });
-    order.push(left.splice(best, 1)[0]);
+// How well an order of songs flows, lower is better: the steps around the
+// Camelot wheel from each song to the next (and from the last back to the
+// first, since the set keeps cycling through them), after each song's tempo
+// change has moved its key, plus a large cost for a song that can't lock.
+function orderCost(songs: SongBrief[], order: number[], master: number): number {
+  const keyOf = (i: number) => shiftKey(songs[i].key, chooseRate(master, songs[i].bpm).rate);
+  let cost = 0;
+  for (let k = 0; k < order.length; k++) {
+    const a = order[k];
+    if (!chooseRate(master, songs[a].bpm).synced) cost += 10;
+    if (order.length > 1) cost += camelotDistance(keyOf(a), keyOf(order[(k + 1) % order.length])) * (k === order.length - 1 ? 0.5 : 1);
   }
-  return order;
+  return cost;
+}
+
+function permutations(items: number[]): number[][] {
+  if (items.length <= 1) return [items];
+  return items.flatMap((x, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((p) => [x, ...p]));
+}
+
+// The order that flows best from the given opener: every order is tried (at
+// most 5! = 120 for six songs).
+function harmonicOrder(songs: SongBrief[], opener: number, master: number): number[] {
+  const rest = songs.map((_, i) => i).filter((i) => i !== opener);
+  let best = [opener, ...rest];
+  let bestCost = orderCost(songs, best, master);
+  for (const p of permutations(rest)) {
+    const o = [opener, ...p];
+    const c = orderCost(songs, o, master);
+    if (c < bestCost - 1e-9) {
+      best = o;
+      bestCost = c;
+    }
+  }
+  return best;
+}
+
+// The song that makes the smoothest set as the opener (it sets the tempo):
+// the best key flow from it, plus how far the others must be sped up or
+// slowed down to lock (6% of stretch weighs about as much as a two-step key
+// jump), since big stretches are heard as a pitch change.
+export function bestOpener(songs: SongBrief[], energy: Energy): number {
+  let best = 0;
+  let bestCost = Infinity;
+  songs.forEach((s, i) => {
+    const master = masterBpm(s.bpm, energy);
+    const order = harmonicOrder(songs, i, master);
+    let cost = orderCost(songs, order, master);
+    for (const t of songs) {
+      const r = chooseRate(master, t.bpm);
+      if (r.synced) cost += (Math.abs(r.rate - 1) * 100) / 3;
+    }
+    if (cost < bestCost - 1e-9) {
+      best = i;
+      bestCost = cost;
+    }
+  });
+  return best;
 }
 
 // A song's best line: the phrase with the most voice in it, and its top line.
@@ -308,8 +357,42 @@ export function rulesScript(
   const order = harmonicOrder(songs, opener, master);
   const mBar = barSeconds(master);
   const rate = (i: number) => chooseRate(master, songs[i].bpm);
-  const n = Math.max(songs.length * 2, Math.ceil((minutes * 60) / (st.bars * mBar)));
-  const per = order.map((_, i) => Math.floor(n / order.length) + (i < n % order.length ? 1 : 0));
+  const single = songs.length === 1;
+  const weight = order.map((i) => Math.max(1, Math.min(3, Math.round(songs[i].plays ?? 1))));
+  const W = weight.reduce((a, b) => a + b, 0);
+  const n = Math.max(single ? 4 : W * 2, Math.ceil((minutes * 60) / (st.bars * mBar)));
+  // Each song's share of the parts, by how many times it was added.
+  const per = weight.map((w) => Math.floor((n * w) / W));
+  for (let k = 0; per.reduce((a, b) => a + b, 0) < n; k++) {
+    const frac = weight.map((w, i) => (n * w) / W - per[i]);
+    per[frac.indexOf(Math.max(...frac))]++;
+    if (k > 12) break;
+  }
+  // Who plays when: the opener first; then the song most owed its share,
+  // never the same song twice in a row while another can go (Peak plays two
+  // parts of a song back to back). A song added three times keeps coming back
+  // between the others.
+  const seq: number[] = [];
+  {
+    const left = [...per];
+    const credit = weight.map(() => 0);
+    for (let v = 0; v < n; v++) {
+      const prev = seq[v - 1];
+      let pick: number;
+      if (v === 0) pick = 0;
+      else if (energy === "peak" && v % 2 === 1 && left[prev] > 0) pick = prev;
+      else {
+        const open = order.map((_, i) => i).filter((i) => left[i] > 0);
+        if (open.length === 0) break;
+        for (const i of open) credit[i] += weight[i];
+        const pool = open.length > 1 ? open.filter((i) => i !== prev) : open;
+        pick = pool.reduce((a, b) => (credit[b] > credit[a] ? b : a));
+        credit[pick] -= W;
+      }
+      left[pick]--;
+      seq.push(pick);
+    }
+  }
 
   // Each song's parts, in its own order: the strongest phrase in each stretch.
   const parts = order.map((si, oi) => {
@@ -327,12 +410,29 @@ export function rulesScript(
     if (oi === 0) picks.push(cands[0].i);
     const rest = oi === 0 ? cands.slice(1) : cands;
     const want = count - picks.length;
-    for (let k = 0; k < want && rest.length; k++) {
-      const lo = Math.floor((k * rest.length) / want);
-      const hi = Math.max(lo + 1, Math.floor(((k + 1) * rest.length) / want));
-      const slice = rest.slice(lo, hi);
-      slice.sort((a, b) => b.p.energy + b.p.vocal / 2 - (a.p.energy + a.p.vocal / 2));
-      picks.push(slice[0].i);
+    const strength = (c: { p: SongBrief["phrases"][number] }) => c.p.energy + c.p.vocal / 2;
+    if (want <= rest.length) {
+      for (let k = 0; k < want; k++) {
+        const lo = Math.floor((k * rest.length) / want);
+        const hi = Math.max(lo + 1, Math.floor(((k + 1) * rest.length) / want));
+        const slice = rest.slice(lo, hi);
+        slice.sort((a, b) => strength(b) - strength(a));
+        picks.push(slice[0].i);
+      }
+    } else if (rest.length) {
+      // More parts than the song has (a remix, or a song added several
+      // times): one pass through all of it, then passes through its strongest
+      // half, each in song order, so the same part never plays twice in a row.
+      const strong = [...rest].sort((a, b) => strength(b) - strength(a)).slice(0, Math.max(2, Math.ceil(rest.length / 2)));
+      strong.sort((a, b) => a.i - b.i);
+      const queue = [...rest.map((c) => c.i)];
+      while (queue.length < want) queue.push(...strong.map((c) => c.i));
+      for (let k = 0; k < want; k++) {
+        if (picks.length && picks[picks.length - 1] === queue[k] && k + 1 < queue.length) {
+          [queue[k], queue[k + 1]] = [queue[k + 1], queue[k]];
+        }
+        picks.push(queue[k]);
+      }
     }
     while (picks.length < count) picks.push(picks[picks.length % Math.max(1, picks.length)] ?? 0);
     return { bars: bars as Bars, picks };
@@ -351,12 +451,8 @@ export function rulesScript(
   const used = order.map(() => 0);
   const visits: ScriptVisit[] = [];
   const peakAt = Math.max(2, Math.round(n * 0.62));
-  let ord = 0;
-  for (let v = 0; v < n; v++) {
-    // Peak plays two parts of a song before the next; others alternate.
-    if (v > 0 && (energy !== "peak" || v % 2 === 0)) ord = (ord + 1) % order.length;
-    let oi = ord;
-    for (let k = 0; k < order.length && used[oi] >= parts[oi].picks.length; k++) oi = (oi + 1) % order.length;
+  for (let v = 0; v < seq.length; v++) {
+    const oi = seq[v];
     const song = order[oi];
     const phrase = parts[oi].picks[used[oi]++];
     const bars = parts[oi].bars;
@@ -399,7 +495,7 @@ export function rulesScript(
     const prev = visits[v - 1];
     if (v === 0) move = "open";
     else if (prev?.fx.loopBuild) move = "cut";
-    else if (prev?.song === song) move = "blend";
+    else if (prev?.song === song && !single) move = "blend";
     else if (energy === "lounge") move = v % 3 === 2 ? "mashup" : "blend";
     else if (energy === "club") move = stage === "warm" ? "blend" : (["trade", "mashup", "blend"] as const)[v % 3];
     else move = stage === "warm" ? "blend" : (["trade", "blend", "trade", "mashup"] as const)[v % 4];
@@ -412,8 +508,14 @@ export function rulesScript(
     if (rate(song).synced && stage !== "outro" && !fx.breakdown) {
       const style = st.layerBias[v % st.layerBias.length];
       // Teaser: a line from the next song in the order, before it arrives.
-      const nextSong = order[(oi + 1) % order.length];
-      if (nextSong !== song && rate(nextSong).synced && v < n - 1) {
+      // (In a one-song remix, a line from its own next part.)
+      const nextSong = v + 1 < seq.length ? order[seq[v + 1]] : song;
+      const nextPart = parts[seq[v + 1] ?? oi]?.picks[used[seq[v + 1] ?? oi]];
+      if (
+        v + 1 < seq.length &&
+        (nextSong !== song || (single && nextPart !== undefined && nextPart !== phrase)) &&
+        rate(nextSong).synced
+      ) {
         // The line comes from the very part of that song that plays next.
         const ni = order.indexOf(nextSong);
         const upcoming = parts[ni].picks[used[ni]] ?? bestLine(songs[nextSong]).phrase;
@@ -428,7 +530,7 @@ export function rulesScript(
         }
       }
       // The thread: the set's hook comes back over other songs.
-      if (thread && thread.song !== song && v % 3 === 1 && room >= 8) {
+      if (thread && (thread.song !== song || (single && thread.phrase !== phrase)) && v % 3 === 1 && room >= 8) {
         const len = energy === "peak" ? 1 : 2;
         const times = energy === "peak" ? 4 : 2;
         const at = energy === "lounge" ? 4 : 2;
@@ -454,8 +556,14 @@ export function rulesScript(
     peak: "Pushed faster and harder: short parts traded bar by bar, chopped vocal hooks, loop builds and drops.",
   }[energy];
   return {
-    title: order.map((i) => songs[i].title).join(" × "),
-    story,
+    title: single ? songs[0].title : order.map((i) => songs[i].title).join(" × "),
+    story: single
+      ? {
+          lounge: `A Lounge remix of "${songs[0].title}": slower and warm, its parts rearranged into long, melting stretches, its own lines floating back in echo.`,
+          club: `A Club remix of "${songs[0].title}": its parts rearranged and traded in call and response, its hook coming back over the other parts, built for the floor.`,
+          peak: `A Peak remix of "${songs[0].title}": pushed faster and harder, its parts chopped short, its hook stuttered into loop builds and drops.`,
+        }[energy]
+      : story,
     visits,
     by: "rules",
   };

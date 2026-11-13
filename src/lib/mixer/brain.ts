@@ -149,7 +149,7 @@ function briefText(songs: SongBrief[], opener: number): string {
         .map((p, k) => `${k}@${Math.round(p.start)}s ${p.label} e${p.energy} b${p.bass} v${p.vocal} lines ${p.lines.join(",")}`)
         .join(" | ");
       return [
-        `Song ${i}: "${s.title}"${s.makers.length ? ` by ${s.makers.join(", ")}` : ""}`,
+        `Song ${i}: "${s.title}"${s.makers.length ? ` by ${s.makers.join(", ")}` : ""}${(s.plays ?? 1) > 1 ? ` · the listener added it ${s.plays} times: give it about ${s.plays} shares of the set and bring it back between the other songs` : ""}`,
         s.descriptors.length ? `  sound: ${s.descriptors.join(", ")}` : null,
         `  ${Math.round(s.bpm)} BPM (${lock}) · key ${s.key.name} (${s.key.camelot}${s.key.confidence < 0.3 ? ", uncertain" : ""}) · ${Math.round(s.duration)}s`,
         `  phrases (index@start label energy0-9 bass0-9 vocal0-9 best-line-bars): ${phrases}`,
@@ -180,7 +180,9 @@ export async function planWithBrain(input: {
   const user = [
     `Energy setting: ${energy}. Minimum length: ${minutes} minutes.`,
     `If song 0 opens, the set runs at ${masterBpm(songs[0].bpm, energy).toFixed(1)} BPM, so one bar is ${(240 / masterBpm(songs[0].bpm, energy)).toFixed(2)} s (${STYLE[energy].push === 1 ? "the opener's own tempo" : `the opener's tempo ${STYLE[energy].push > 1 ? "+" : "-"}4%`}).`,
-    `The listener's suggested opener is song 0; you may choose another opener if it makes a better set (it then sets the tempo).`,
+    songs.length === 1
+      ? `This is a REMIX of one song: rebuild it in the ${energy} mood from its own parts. Rearrange its phrases into a new arc (not its original order), trade its verse against its chorus in call and response, drop its own best lines over its other parts, and use breakdowns, loop builds and drops. Never play two copies of the same phrase on top of each other.`
+      : `Song 0 is the suggested opener, chosen because its key and tempo flow best into the others; you may choose another opener if it makes a better set (it then sets the tempo). Songs whose keys are 3 or more steps apart on the Camelot wheel must never overlap: go between them with a "cut" (echo out, slam in).`,
     vibe ? `The listener's vibe for this set: "${vibe}"` : "The listener gave no vibe; make the best club journey these songs allow.",
     "",
     briefText(songs, 0),
