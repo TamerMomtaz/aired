@@ -9,7 +9,7 @@ import { getVoiceCatalog } from "@/lib/voice/catalog";
 // POST /api/mix/plan — ask the DJ brain for a set script.
 //
 // Body: { vibe?, energy, minutes, songs: [{ id, bpm, tonic, minor, keyConfidence,
-//         duration, phrases: [{ start, label, energy, bass }] }] }
+//         duration, phrases: [{ start, label, energy, bass, vocal, lines }] }] }
 // Reply: { ai: true, script } or { ai: false } (the browser then plans with its
 //         built-in rules, so the Mixer always works).
 //
@@ -67,6 +67,8 @@ export async function POST(req: Request) {
         label: LABELS.includes(p.label as PhraseLabel) ? (p.label as PhraseLabel) : "groove",
         energy: Math.round(num(p.energy, 0, 9, 5)),
         bass: Math.round(num(p.bass, 0, 9, 5)),
+        vocal: Math.round(num(p.vocal, 0, 9, 5)),
+        lines: (Array.isArray(p.lines) ? p.lines.slice(0, 2) : [0]).map((b) => Math.round(num(b, 0, 7, 0))),
       }),
     );
     songs.push({

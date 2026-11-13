@@ -22,6 +22,12 @@ export type Phrase = {
   high: number;
   // What the phrase is doing in the song, read from the numbers above.
   label: PhraseLabel;
+  // How much of the phrase lives in the voice range (≈300–3400 Hz) compared
+  // with the rest of the song: high where someone sings or a hook plays.
+  vocal: number;
+  // Bar offsets (0–7) inside the phrase where its strongest 2-bar lines start:
+  // the "sentences" a DJ can lift and drop into another song.
+  lines: number[];
 };
 
 export type PhraseLabel = "intro" | "breakdown" | "build" | "drop" | "groove" | "outro";
@@ -47,7 +53,10 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
   const low = new Float64Array(Math.max(0, nBeats));
   const lowAll = new Float64Array(Math.max(0, nBeats));
   const highAll = new Float64Array(Math.max(0, nBeats));
+  const midAbs = new Float64Array(Math.max(0, nBeats));
   const a = Math.exp((-2 * Math.PI * 150) / sr);
+  const am1 = Math.exp((-2 * Math.PI * 300) / sr);
+  const am2 = Math.exp((-2 * Math.PI * 3400) / sr);
   const ah = Math.exp((-2 * Math.PI * 4000) / sr);
   for (let b = 0; b < nBeats; b++) {
     const s0 = Math.floor((tempo.firstBeat + b * beat) * sr);
@@ -57,13 +66,19 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
     let el = 0;
     let ela = 0;
     let eh = 0;
+    let em = 0;
     let lp = 0;
     let lph = 0;
+    let m1 = 0;
+    let m2 = 0;
     for (let i = s0; i < s1; i++) {
       const x = (l[i] + r[i]) * 0.5;
       lp = (1 - a) * x + a * lp;
       lph = (1 - ah) * x + ah * lph;
+      m1 = (1 - am1) * x + am1 * m1;
+      m2 = (1 - am2) * x + am2 * m2;
       if (i & 1) continue;
+      em += (m2 - m1) * (m2 - m1);
       ef += x * x;
       ela += lp * lp;
       eh += (x - lph) * (x - lph);
@@ -73,6 +88,7 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
     low[b] = el;
     lowAll[b] = ela / (ef || 1);
     highAll[b] = eh / (ef || 1);
+    midAbs[b] = Math.sqrt(em / Math.max(1, (s1 - s0) / 2));
   }
 
   // Downbeat: the beat position (0..3) with the strongest low end on average.
@@ -119,7 +135,7 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
   const phrases: Phrase[] = [];
   // A short pickup before the first full phrase becomes its own "phrase 0" so
   // an intro is never thrown away.
-  const blank = { rms: 0, low: 0, high: 0, label: "groove" as PhraseLabel };
+  const blank = { rms: 0, low: 0, high: 0, label: "groove" as PhraseLabel, vocal: 0, lines: [0] };
   if (off > 0) phrases.push({ start: Math.max(0, firstBar + (off - BARS_PER_PHRASE) * bar), ...blank });
   for (let j = off; j + BARS_PER_PHRASE <= nBars; j += BARS_PER_PHRASE) {
     phrases.push({ start: firstBar + j * bar, ...blank });
@@ -130,8 +146,14 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
     let lo = 0;
     let hi = 0;
     let n = 0;
+    let mid = 0;
+    const barMid: number[] = [];
     for (let j = j0; j < Math.min(nBars, j0 + BARS_PER_PHRASE); j++) {
       s += barE[j];
+      let bm = 0;
+      for (let k = 0; k < 4; k++) bm += midAbs[down + j * 4 + k] ?? 0;
+      barMid.push(bm);
+      mid += bm / Math.max(1e-9, barE[j] * 4);
       for (let k = 0; k < 4; k++) {
         lo += lowAll[down + j * 4 + k];
         hi += highAll[down + j * 4 + k];
@@ -141,6 +163,13 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
     p.rms = n ? s / n : 0;
     p.low = n ? lo / (n * 4) : 0;
     p.high = n ? hi / (n * 4) : 0;
+    p.vocal = n ? mid / n : 0;
+    // The two strongest 2-bar windows on even bars.
+    const wins = [0, 2, 4, 6]
+      .filter((o) => o + 1 < barMid.length)
+      .map((o) => ({ o, e: barMid[o] + barMid[o + 1] }))
+      .sort((x, y) => y.e - x.e);
+    p.lines = wins.length ? wins.slice(0, 2).map((w) => w.o) : [0];
   }
   labelPhrases(phrases);
   return { beat, bar, phrases };
