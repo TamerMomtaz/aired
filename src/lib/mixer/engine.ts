@@ -221,6 +221,7 @@ export async function renderSet(
   prepared: PreparedSong[],
   plan: MixPlan,
   energy: Energy,
+  tag?: AudioBuffer | null,
 ): Promise<AudioBuffer> {
   const total = plan.end + TAIL_SECONDS;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * MIX_SAMPLE_RATE), MIX_SAMPLE_RATE);
@@ -625,6 +626,36 @@ export async function renderSet(
     if (next && (fx.drop || fx.loopBuild)) drop(Tend, level);
   });
 
+  // ---- the DJ tag: twice, in the first bars and just after the big drop ----
+  if (tag && visits.length) {
+    const times = tagTimes(plan, bar);
+    for (const t of times) {
+      const src = ctx.createBufferSource();
+      src.buffer = tag;
+      const thp = ctx.createBiquadFilter();
+      thp.type = "highpass";
+      thp.frequency.value = 120;
+      const tg = ctx.createGain();
+      tg.gain.value = 0.8;
+      const tsend = ctx.createGain();
+      tsend.gain.setValueAtTime(0.35, t);
+      tsend.gain.setValueAtTime(0.35, t + Math.max(0, tag.duration - 0.25));
+      tsend.gain.linearRampToValueAtTime(0.85, t + tag.duration);
+      tsend.gain.linearRampToValueAtTime(0, t + tag.duration + 0.05);
+      src.connect(thp).connect(tg).connect(master);
+      tg.connect(tsend).connect(echoSend);
+      src.start(t);
+      // The music steps back while the tag speaks.
+      const a = Math.round((t - 0.03) * PUMP_RATE);
+      const b = Math.round((t + tag.duration) * PUMP_RATE);
+      const fadeN = Math.round(0.08 * PUMP_RATE);
+      for (let i = Math.max(0, a); i < Math.min(pump.length, b + fadeN); i++) {
+        const k = i < b ? 0.55 : 0.55 + 0.45 * ((i - b) / fadeN);
+        pump[i] = Math.min(pump[i], k);
+      }
+    }
+  }
+
   const drumSrc = ctx.createBufferSource();
   drumSrc.buffer = drumBuf;
   drumSrc.connect(drums);
@@ -639,6 +670,24 @@ export async function renderSet(
   const rendered = await ctx.startRendering();
   normalize(rendered, 0.89); // ≈ −1 dBFS peak
   return rendered;
+}
+
+// Where the tag lands: one bar into the set, and one bar after the big drop
+// (the part after the first loop build past a third of the set, else after a
+// drop, else at about 60% through), always on a downbeat.
+export function tagTimes(plan: MixPlan, bar: number): number[] {
+  const v = plan.visits;
+  if (!v.length) return [];
+  const first = v[0].at + bar;
+  const third = plan.end / 3;
+  let i = v.findIndex((x, k) => k > 0 && x.at >= third && v[k - 1].fx.loopBuild);
+  if (i < 0) i = v.findIndex((x, k) => k > 0 && x.at >= third && v[k - 1].fx.drop);
+  if (i < 0) {
+    const target = plan.end * 0.6;
+    i = v.reduce((best, x, k) => (Math.abs(x.at - target) < Math.abs(v[best].at - target) ? k : best), 0);
+  }
+  const second = v[i].at + bar;
+  return second - first > 8 * bar && second < plan.end - 4 * bar ? [first, second] : [first];
 }
 
 function normalize(buf: AudioBuffer, peakTarget: number) {
