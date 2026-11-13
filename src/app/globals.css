@@ -178,6 +178,7 @@ body::before {
     var(--tw-ring-offset-shadow, 0 0 #0000),
     var(--tw-ring-shadow, 0 0 #0000),
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 0 12px -4px rgba(71, 168, 255, 0.55),
     0 2px 0 rgba(0, 0, 0, 0.65),
     0 10px 20px -10px #000;
   transition:
@@ -194,10 +195,91 @@ body::before {
     0 1px 0 rgba(0, 0, 0, 0.65);
 }
 
+/* Neon frames -----------------------------------------------------------------
+   Every song and album card wears a thin neon frame in the circuit's own
+   colours: a faint blue ring that is always lit, and a bright run of neon
+   blue, gold and silver that travels round the edge, like a pulse on the
+   board behind. Cards in a row start at different points, so a shelf
+   shimmers rather than blinks in step. */
+@property --neon-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.surface-edge {
+  position: relative;
+  border-color: rgba(71, 168, 255, 0.22) !important;
+  box-shadow:
+    inset 0 1px 0 var(--steel-catch),
+    0 0 16px -6px rgba(71, 168, 255, 0.45),
+    0 12px 28px -16px rgba(0, 0, 0, 0.9);
+}
+
+.surface-edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--neon-angle),
+    transparent 0deg 200deg,
+    rgba(71, 168, 255, 0.9) 250deg,
+    #47a8ff 285deg,
+    #e6c27a 318deg,
+    #eef1f7 336deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  filter: drop-shadow(0 0 3px rgba(71, 168, 255, 0.9));
+  animation: aired-neon-run 6s linear infinite;
+}
+
+li:nth-child(3n + 2) .surface-edge::after {
+  animation-delay: -2s;
+}
+
+li:nth-child(3n + 3) .surface-edge::after {
+  animation-delay: -4s;
+}
+
+li:nth-child(2n) .surface-edge::after {
+  animation-duration: 7.5s;
+}
+
+@keyframes aired-neon-run {
+  to {
+    --neon-angle: 360deg;
+  }
+}
+
+/* The outlined buttons (share, keep, Mix, and the rest) get a neon edge too. */
+:is(button, a)[class*="border-white/"]:not(.surface-edge) {
+  border-color: rgba(71, 168, 255, 0.38);
+}
+
+:is(button, a)[class*="border-white/"]:not(.surface-edge):is(:hover, :focus-visible) {
+  border-color: rgba(71, 168, 255, 0.7);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :is(button, a).bg-cert-red,
   :is(button, a)[class*="border-white/"] {
     transition: none;
+  }
+
+  .surface-edge::after {
+    animation: none;
+    --neon-angle: 140deg;
   }
 }
 
