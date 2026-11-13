@@ -22,6 +22,8 @@ import {
   rulesScript,
   type Energy,
   type Fx,
+  type Layer,
+  type LayerStyle,
   type MixMinutes,
   type Move,
   type SetScript,
@@ -41,9 +43,21 @@ export type MixSource = {
 };
 
 const ENERGIES: { value: Energy; label: string; note: string }[] = [
-  { value: "lounge", label: "Lounge", note: "Smooth blends only. The songs carry it, no extra drums." },
-  { value: "club", label: "Club", note: "Blends and mash-ups, a bridge kick, hats, claps, risers and drops." },
-  { value: "peak", label: "Peak", note: "Everything in Club, harder: more cuts, more drops, a heavier kick." },
+  {
+    value: "lounge",
+    label: "Lounge",
+    note: "A touch slower and warm. Long parts melting over 8-bar blends, lines from one song floating over another in echo. No extra drums.",
+  },
+  {
+    value: "club",
+    label: "Club",
+    note: "Songs trade bars in call and response, lines from the next song arrive before it does, the strongest hook keeps coming back.",
+  },
+  {
+    value: "peak",
+    label: "Peak",
+    note: "Pushed faster and harder. Short parts traded bar by bar, chopped vocal hooks, loop builds and drops.",
+  },
 ];
 
 const MINUTES: { value: MixMinutes; label: string; note: string }[] = [
@@ -56,8 +70,11 @@ const MOVE_LABEL: Record<Move, string> = {
   open: "opens",
   blend: "blends in",
   mashup: "mash-up: its voice over the last beat",
+  trade: "trades bars with the last song",
   cut: "drops in on a cut",
 };
+
+const STYLE_LABEL: Record<LayerStyle, string> = { lift: "lifted", chop: "chopped", echo: "in echo" };
 
 type Stage =
   | { kind: "idle" }
@@ -75,6 +92,10 @@ function fxLabel(fx: Fx): string {
   if (fx.kick) on.push("kick");
   if (fx.claps) on.push("claps");
   return on.length ? ` · ${on.join(", ")}` : "";
+}
+
+function layerLabel(l: Layer, set: MixSource[]): string {
+  return `+ a line from "${set[l.song]?.title ?? "?"}", ${STYLE_LABEL[l.style]}${l.times > 1 ? ` ×${l.times}` : ""}`;
 }
 
 function names(s: MixSource): string {
@@ -308,6 +329,7 @@ function toBrief(a: SongAnalysis, s: MixSource): SongBrief {
   const ph = a.structure.phrases;
   const maxR = Math.max(1e-9, ...ph.map((p) => p.rms));
   const maxL = Math.max(1e-9, ...ph.map((p) => p.low));
+  const maxV = Math.max(1e-9, ...ph.map((p) => p.vocal));
   return {
     title: s.title,
     makers: s.contributors.map((c) => c.name),
@@ -320,6 +342,8 @@ function toBrief(a: SongAnalysis, s: MixSource): SongBrief {
       label: p.label,
       energy: Math.round((p.rms / maxR) * 9),
       bass: Math.round((p.low / maxL) * 9),
+      vocal: Math.round((p.vocal / maxV) * 9),
+      lines: p.lines,
     })),
   };
 }
@@ -410,6 +434,11 @@ function MixResult({
                     {fxLabel(v.fx)}
                   </span>
                 </span>
+                {v.layers.map((l, k) => (
+                  <span key={k} className="text-muted/80">
+                    {layerLabel(l, set)}
+                  </span>
+                ))}
                 {v.note ? <span className="text-muted/70 italic">{v.note}</span> : null}
               </span>
             </li>

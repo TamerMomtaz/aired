@@ -9,10 +9,14 @@
 //   planTimes    — lay the parts end to end on the master bar grid;
 //   renderSet    — play them through per-part filters, with the moves between
 //                  parts and the additions:
-//        blend    — the next part creeps in bass-cut for 4 bars; on the "one"
+//        blend    — the next part creeps in bass-cut (2, 4 or 8 bars by
+//                   energy); on the "one"
 //                   the basses swap and the old part is filtered away;
 //        mash-up  — for 4 bars the old part keeps only its beat and bass under
 //                   the new part's top;
+//        trade    — call and response: the songs swap every 1–2 bars for 8;
+//        lines    — 1–4 bar lines lifted from another song, laid on top in
+//                   the voice range (lifted, chopped or thrown into echo);
 //        cut      — echo throw out, slam in (always for a song whose tempo
 //                   can't lock, and after a loop build);
 //        loop build, breakdown, filter rise, riser, drop, kick, hats, claps,
@@ -24,7 +28,17 @@
 
 import { decodeRange, MIX_SAMPLE_RATE, type AdtsIndex } from "./load";
 import { shiftKey, type MusicalKey } from "./key";
-import { barSeconds, chooseRate, type Energy, type Fx, type Move, type SetScript } from "./script";
+import {
+  barSeconds,
+  chooseRate,
+  POST_BARS,
+  STYLE,
+  type Energy,
+  type Fx,
+  type Layer,
+  type Move,
+  type SetScript,
+} from "./script";
 import { refineStart, type Structure } from "./structure";
 import type { Tempo } from "./tempo";
 
@@ -37,8 +51,7 @@ export const MAX_TRACKS = 6;
 // which keeps a phone's memory in bounds.
 export const LOAD_SECONDS = 480;
 
-const PRE_BARS = 4; // audio kept before a part, for blends
-const POST_BARS = 4; // audio kept after it, for mash-ups and filter-outs
+const PRE_BARS = 8; // audio kept before a part, for blends (8 bars at Lounge)
 const TAIL_SECONDS = 4;
 
 // What the Mixer keeps of a song after its first listen: the analysis and the
@@ -61,6 +74,7 @@ export type PreparedSong = {
   bpm: number;
   key: MusicalKey; // after the tempo lock's pitch change
   parts: Map<string, Part>; // "phrase:bars" → decoded audio
+  lines: Map<string, Part>; // "phrase:bar:len" → a lifted line
 };
 
 export type PlannedVisit = {
@@ -71,6 +85,7 @@ export type PlannedVisit = {
   dur: number;
   move: Move;
   fx: Fx;
+  layers: Layer[];
   note?: string;
   sourceStart: number;
 };
@@ -86,19 +101,59 @@ export type MixPlan = {
 };
 
 const partKey = (phrase: number, bars: number) => `${phrase}:${bars}`;
+const lineKey = (l: Pick<Layer, "phrase" | "bar" | "len">) => `${l.phrase}:${l.bar}:${l.len}`;
+
+// The set's tempo: fixScript stores it; older scripts fall back to the opener.
+const setBpm = (songs: SongAnalysis[], script: SetScript) => script.bpm ?? songs[script.visits[0].song].tempo.bpm;
+
+// Decode `len` source seconds starting `pre` before `at`, and copy it into a
+// clip whose `pre` mark is exactly the downbeat nearest `at`.
+async function cutClip(s: SongAnalysis, at: number, pre: number, len: number): Promise<AudioBuffer | null> {
+  const from = at - pre;
+  const dec = await decodeRange(s.adts, Math.max(0, from), len + Math.min(0, from));
+  if (!dec) return null;
+  const approx = dec.lead + (at - Math.max(0, from));
+  const exact = refineStart(dec.buffer, approx, s.structure.beat);
+  const sr = dec.buffer.sampleRate;
+  const frames = Math.ceil(len * sr);
+  const clip = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: sr });
+  const shift = Math.round((exact - pre) * sr);
+  for (let c = 0; c < 2; c++) {
+    const src = dec.buffer.getChannelData(Math.min(c, dec.buffer.numberOfChannels - 1));
+    const dst = clip.getChannelData(c);
+    const a = Math.max(0, shift);
+    const b = Math.min(src.length, shift + frames);
+    if (b > a) dst.set(src.subarray(a, b), a - shift);
+  }
+  return clip;
+}
 
 export async function prepareSongs(
   songs: SongAnalysis[],
   script: SetScript,
   onProgress?: (fraction: number) => void,
 ): Promise<PreparedSong[]> {
-  const master = songs[script.visits[0].song].tempo.bpm;
+  const master = setBpm(songs, script);
   const mBar = barSeconds(master);
   const out: PreparedSong[] = songs.map((s) => {
     const { rate, synced } = chooseRate(master, s.tempo.bpm);
-    return { title: s.title, rate, synced, bpm: s.tempo.bpm, key: shiftKey(s.key, rate), parts: new Map() };
+    return {
+      title: s.title,
+      rate,
+      synced,
+      bpm: s.tempo.bpm,
+      key: shiftKey(s.key, rate),
+      parts: new Map(),
+      lines: new Map(),
+    };
   });
   const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars)}`, v])).values()];
+  const lineJobs = [
+    ...new Map(
+      script.visits.flatMap((v) => v.layers ?? []).map((l) => [`${l.song}:${lineKey(l)}`, l]),
+    ).values(),
+  ];
+  const all = jobs.length + lineJobs.length;
   let done = 0;
   for (const v of jobs) {
     const s = songs[v.song];
@@ -106,38 +161,29 @@ export async function prepareSongs(
     const srcBar = mBar * p.rate;
     const ph = s.structure.phrases[v.phrase];
     const pre = PRE_BARS * srcBar;
-    const len = (PRE_BARS + v.bars + POST_BARS) * srcBar;
-    const from = ph.start - pre;
-    const dec = await decodeRange(s.adts, Math.max(0, from), len + Math.min(0, from));
-    if (!dec) continue;
-    // Where the part's first downbeat sits in the decoded audio, fine-tuned.
-    const approx = dec.lead + (ph.start - Math.max(0, from));
-    const exact = refineStart(dec.buffer, approx, s.structure.beat);
-    // Copy into a clip whose PRE_BARS mark is exactly the downbeat.
-    const sr = dec.buffer.sampleRate;
-    const frames = Math.ceil(len * sr);
-    const clip = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: sr });
-    const shift = Math.round((exact - pre) * sr);
-    for (let c = 0; c < 2; c++) {
-      const src = dec.buffer.getChannelData(Math.min(c, dec.buffer.numberOfChannels - 1));
-      const dst = clip.getChannelData(c);
-      const a = Math.max(0, shift);
-      const b = Math.min(src.length, shift + frames);
-      if (b > a) dst.set(src.subarray(a, b), a - shift);
-    }
-    p.parts.set(partKey(v.phrase, v.bars), {
-      clip,
-      start: pre,
-      rms: Math.max(1e-4, (s.structure.phrases[v.phrase].rms + (s.structure.phrases[v.phrase + 1]?.rms ?? s.structure.phrases[v.phrase].rms)) / 2),
-    });
-    done++;
-    onProgress?.(done / jobs.length);
+    const clip = await cutClip(s, ph.start, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
+    if (!clip) continue;
+    const next = s.structure.phrases[v.phrase + 1] ?? ph;
+    p.parts.set(partKey(v.phrase, v.bars), { clip, start: pre, rms: Math.max(1e-4, (ph.rms + next.rms) / 2) });
+    onProgress?.(++done / all);
+  }
+  for (const l of lineJobs) {
+    const s = songs[l.song];
+    const p = out[l.song];
+    const srcBar = mBar * p.rate;
+    const ph = s.structure.phrases[l.phrase];
+    if (!ph) continue;
+    const pre = srcBar / 8;
+    const clip = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
+    if (!clip) continue;
+    p.lines.set(lineKey(l), { clip, start: pre, rms: Math.max(1e-4, ph.rms) });
+    onProgress?.(++done / all);
   }
   return out;
 }
 
 export function planTimes(script: SetScript, songs: SongAnalysis[], prepared: PreparedSong[]): MixPlan {
-  const master = songs[script.visits[0].song].tempo.bpm;
+  const master = setBpm(songs, script);
   const mBar = barSeconds(master);
   let at = 0;
   const visits: PlannedVisit[] = [];
@@ -146,6 +192,7 @@ export function planTimes(script: SetScript, songs: SongAnalysis[], prepared: Pr
     const dur = v.bars * mBar;
     visits.push({
       ...v,
+      layers: (v.layers ?? []).filter((l) => prepared[l.song].lines.has(lineKey(l))),
       at,
       dur,
       sourceStart: songs[v.song].structure.phrases[v.phrase].start,
@@ -182,12 +229,15 @@ export async function renderSet(
   const noise = noiseBuffer(ctx);
   const visits = plan.visits;
   const level = { lounge: 0.6, club: 0.85, peak: 1 }[energy];
+  const st = STYLE[energy];
+  const mashBars = energy === "lounge" ? 8 : 4; // how long a mash-up overlaps
 
   // ---- master chain -------------------------------------------------------
   const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -12;
+  // Lounge breathes, Peak is squeezed hard.
+  comp.threshold.value = { lounge: -10, club: -12, peak: -17 }[energy];
   comp.knee.value = 6;
-  comp.ratio.value = 4;
+  comp.ratio.value = { lounge: 2.5, club: 4, peak: 6 }[energy];
   comp.attack.value = 0.004;
   comp.release.value = 0.2;
   comp.connect(ctx.destination);
@@ -196,7 +246,11 @@ export async function renderSet(
   const masterHp = ctx.createBiquadFilter();
   masterHp.type = "highpass";
   masterHp.frequency.value = 20;
-  master.connect(masterHp).connect(comp);
+  // Lounge is warmer: the very top is rolled off.
+  const warmth = ctx.createBiquadFilter();
+  warmth.type = "lowpass";
+  warmth.frequency.value = energy === "lounge" ? 9000 : 20000;
+  master.connect(masterHp).connect(warmth).connect(comp);
   const outroFrom = plan.end - 4 * bar;
   masterHp.frequency.setValueAtTime(20, outroFrom);
   masterHp.frequency.exponentialRampToValueAtTime(900, plan.end);
@@ -249,9 +303,15 @@ export async function renderSet(
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.value = 20000;
+    // Steps back in the voice range while a line from another song is on top.
+    const mid = ctx.createBiquadFilter();
+    mid.type = "peaking";
+    mid.frequency.value = 1500;
+    mid.Q.value = 0.8;
+    mid.gain.value = 0;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    shelf.connect(hp).connect(lp).connect(gain).connect(music);
+    shelf.connect(hp).connect(lp).connect(mid).connect(gain).connect(music);
     const send = ctx.createGain();
     send.gain.value = 0;
     gain.connect(send).connect(echoSend);
@@ -259,28 +319,52 @@ export async function renderSet(
     // Clip time for an output time inside this part.
     const clipAt = (t: number) => part.start + (t - T) * rate;
     const play = (from: number, to: number, clipFrom: number) => {
+      // Near a song's very start there may be no audio before the clip: start
+      // later rather than out of time.
+      if (clipFrom < 0) {
+        from -= clipFrom / rate;
+        clipFrom = 0;
+      }
+      if (to - from < 0.01) return;
       const src = ctx.createBufferSource();
       src.buffer = part.clip;
       src.playbackRate.value = rate;
       src.connect(shelf);
-      src.start(from, Math.max(0, clipFrom), Math.max(0.01, (to - from) * rate));
+      src.start(from, clipFrom, (to - from) * rate);
+    };
+    // Call and response: the two songs swap every `tradeEvery` bars for 8 bars.
+    const trade = (from: number, incoming: boolean, after: number) => {
+      const k = st.tradeEvery * bar;
+      let cur = incoming ? 0 : g;
+      gain.gain.setValueAtTime(cur, from);
+      for (let i = 0; i * k < 8 * bar - 1e-6; i++) {
+        const t0 = from + i * k;
+        const want = (i % 2 === 0) === incoming ? g : 0;
+        gain.gain.setValueAtTime(cur, t0);
+        gain.gain.linearRampToValueAtTime(want, t0 + 0.008);
+        cur = want;
+      }
+      gain.gain.setValueAtTime(cur, from + 8 * bar);
+      gain.gain.linearRampToValueAtTime(after, from + 8 * bar + 0.008);
     };
 
     // -- how it comes in --
     let startAt = T;
     if (v.move === "blend") {
-      startAt = T - PRE_BARS * bar;
+      startAt = T - st.blendBars * bar;
       gain.gain.setValueAtTime(0, startAt);
       gain.gain.linearRampToValueAtTime(g * 0.8, T);
       gain.gain.setValueAtTime(g, T);
       shelf.gain.setValueAtTime(-30, startAt);
       shelf.gain.setValueAtTime(-30, T - 0.01);
       shelf.gain.linearRampToValueAtTime(0, T);
+    } else if (v.move === "trade") {
+      trade(T, true, g);
     } else if (v.move === "mashup") {
       gain.gain.setValueAtTime(g, T);
       hp.frequency.setValueAtTime(300, T);
-      hp.frequency.setValueAtTime(300, T + PRE_BARS * bar - 0.01);
-      hp.frequency.linearRampToValueAtTime(20, T + PRE_BARS * bar);
+      hp.frequency.setValueAtTime(300, T + mashBars * bar - 0.01);
+      hp.frequency.linearRampToValueAtTime(20, T + mashBars * bar);
     } else {
       gain.gain.setValueAtTime(v.move === "open" ? 0 : g, T);
       if (v.move === "open") gain.gain.linearRampToValueAtTime(g, T + bar);
@@ -296,7 +380,7 @@ export async function renderSet(
     }
     const loopFrom = v.fx.loopBuild ? Tend - 4 * bar : Tend;
     if (v.fx.filterRise || v.fx.loopBuild) {
-      const from = v.fx.loopBuild ? loopFrom : Math.max(T + PRE_BARS * bar, Tend - 8 * bar);
+      const from = v.fx.loopBuild ? loopFrom : Math.max(T + mashBars * bar, Tend - 8 * bar);
       hp.frequency.setValueAtTime(20, from);
       hp.frequency.exponentialRampToValueAtTime(700, Tend - 0.03);
       hp.frequency.setValueAtTime(20, Tend);
@@ -312,17 +396,22 @@ export async function renderSet(
     } else if (next.move === "blend") {
       shelf.gain.setValueAtTime(0, Tend - 0.01);
       shelf.gain.linearRampToValueAtTime(-30, Tend);
+      // Lounge lets the old song drift away over 4 bars.
+      const out = (energy === "lounge" ? 4 : 1) * bar;
       hp.frequency.setValueAtTime(20, Tend);
-      hp.frequency.exponentialRampToValueAtTime(1000, Tend + bar);
+      hp.frequency.exponentialRampToValueAtTime(1000, Tend + out);
       gain.gain.setValueAtTime(g, Tend);
-      gain.gain.linearRampToValueAtTime(0, Tend + bar);
-      stopAt = Tend + bar + 0.05;
+      gain.gain.linearRampToValueAtTime(0, Tend + out);
+      stopAt = Tend + out + 0.05;
+    } else if (next.move === "trade") {
+      trade(Tend, false, 0);
+      stopAt = Tend + 8 * bar + 0.05;
     } else if (next.move === "mashup") {
       lp.frequency.setValueAtTime(20000, Tend);
       lp.frequency.exponentialRampToValueAtTime(320, Tend + 0.25);
-      gain.gain.setValueAtTime(g, Tend + PRE_BARS * bar - beat);
-      gain.gain.linearRampToValueAtTime(0, Tend + PRE_BARS * bar);
-      stopAt = Tend + PRE_BARS * bar + 0.05;
+      gain.gain.setValueAtTime(g, Tend + mashBars * bar - beat);
+      gain.gain.linearRampToValueAtTime(0, Tend + mashBars * bar);
+      stopAt = Tend + mashBars * bar + 0.05;
     } else {
       send.gain.setValueAtTime(0, Tend - beat);
       send.gain.linearRampToValueAtTime(0.9, Tend - 0.02);
@@ -344,6 +433,60 @@ export async function renderSet(
         play(t, t + dur, src0);
         t += dur;
       }
+    }
+
+    // -- the lines dropped on top --
+    for (const l of v.layers) {
+      const ls = prepared[l.song];
+      const line = ls.lines.get(lineKey(l));
+      if (!line) continue;
+      const lg = Math.max(0.5, Math.min(2, target / line.rms)) * (energy === "lounge" ? 0.75 : 0.9);
+      const lhp = ctx.createBiquadFilter();
+      lhp.type = "highpass";
+      lhp.frequency.value = l.style === "chop" ? 280 : 380;
+      lhp.Q.value = 0.7;
+      const lgain = ctx.createGain();
+      lgain.gain.value = 0;
+      lhp.connect(lgain).connect(music);
+      const lsend = ctx.createGain();
+      lsend.gain.value = l.style === "echo" ? 0.35 : 0.12;
+      lgain.connect(lsend).connect(echoSend);
+      // One slice of the line: `off` output seconds into it, for `dur`.
+      const hit = (t: number, off: number, dur: number) => {
+        const src = ctx.createBufferSource();
+        src.buffer = line.clip;
+        src.playbackRate.value = ls.rate;
+        src.connect(lhp);
+        src.start(t, line.start + off * ls.rate, dur * ls.rate + 0.01);
+        lgain.gain.setValueAtTime(0, t);
+        lgain.gain.linearRampToValueAtTime(lg, t + 0.005);
+        lgain.gain.setValueAtTime(lg, t + dur - 0.01);
+        lgain.gain.linearRampToValueAtTime(0, t + dur);
+      };
+      const w0 = T + l.at * bar;
+      const w1 = w0 + l.len * l.times * bar;
+      for (let r = 0; r < l.times; r++) {
+        const t0 = w0 + r * l.len * bar;
+        if (l.style === "chop") {
+          // Stutter the line's first half-beat, then let it speak: "ha-ha-hey".
+          for (let m = 0; m < l.len; m++) {
+            const b0 = t0 + m * bar;
+            for (const h of [0, 0.75, 1.5]) hit(b0 + h * beat, m * bar, beat / 2);
+            hit(b0 + 2 * beat, m * bar, 2 * beat);
+          }
+        } else {
+          hit(t0, 0, l.len * bar);
+        }
+      }
+      if (l.style === "echo") {
+        lsend.gain.setValueAtTime(0.35, w1 - beat);
+        lsend.gain.linearRampToValueAtTime(0.95, w1 - 0.02);
+        lsend.gain.linearRampToValueAtTime(0, w1);
+      }
+      mid.gain.setValueAtTime(0, Math.max(T, w0 - 0.05));
+      mid.gain.linearRampToValueAtTime(-7, w0);
+      mid.gain.setValueAtTime(-7, w1);
+      mid.gain.linearRampToValueAtTime(0, w1 + 0.08);
     }
   });
 
@@ -457,7 +600,7 @@ export async function renderSet(
     const fx = v.fx;
 
     if (fx.pump && song.synced) {
-      const depth = (fx.claps ? 0.35 : 0.22) * level;
+      const depth = (fx.claps ? 0.35 : 0.22) * level * (energy === "peak" ? 1.3 : 1);
       for (let b = T; b < Tend - 1e-3; b += beat) pumpAt(b, depth);
     }
     if (song.synced) {

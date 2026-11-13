@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-import { NO_FX, type Energy, type MixMinutes, type SetScript, type SongBrief } from "./script";
+import {
+  masterBpm,
+  NO_FX,
+  STYLE,
+  type Energy,
+  type Layer,
+  type MixMinutes,
+  type SetScript,
+  type SongBrief,
+} from "./script";
 
 // The DJ brain: Claude plans the set the way a headline DJ plans a show.
 //
@@ -43,11 +52,23 @@ What great DJs do, and what you must do:
 - Trade parts between songs. Never play one song for more than 32 bars in a row, and never play half of one song and then half of another. Each time a song returns, move forward through it (later phrase indices) unless replaying its best hook on purpose.
 - Use the phrase labels: start on an intro, place breakdowns before big moments, land drops on the beat of a "drop" phrase, close on an outro or a calm phrase.
 - Tension tools: a breakdown part (fx.breakdown, bass stripped), a filter rise (fx.filter_rise) or a loop build (fx.loop_build: the last 4 bars stutter 1 bar, ½, ¼) with a riser, then a drop (fx.drop) into the next part. After a loop build the next part comes in with "cut".
-- Moves between parts: "blend" (smooth bass swap, the default), "mashup" (for 4 bars the outgoing song keeps only its beat and bass under the incoming song's vocals and melody: use it when keys match, it is your signature move), "cut" (echo out, slam in: for big moments, or when a song's tempo can't be locked).
+- Moves between parts: "blend" (smooth bass swap), "mashup" (for 4 bars the outgoing song keeps only its beat and bass under the incoming song's vocals and melody: use it when keys match), "trade" (call and response: for the first 8 bars the two songs swap every 2 bars, every bar at peak energy, before the new one takes over: the songs talk to each other), "cut" (echo out, slam in: for big moments, or when a song's tempo can't be locked).
+
+LINKING is what separates a real DJ from smooth blending, and it is the heart of your job. Blends alone sound like a playlist with crossfades. So in most parts, drop LINES on top: a line is 1, 2 or 4 bars lifted from any song (another song, or this one) and played over the current part, voice and melody only, on the beat, while the part underneath steps its mids back. Each phrase in the brief lists its vocal score v0-9 (how much voice or hook is in it) and its best lines as bar offsets (lines 2,6 = bars 2 and 6 of that phrase). Pick lines from high-v phrases. A layer is {song, phrase, bar, len, at, times, style}: "at" is the bar inside the current part where it lands, "times" repeats it back to back (1-4), and style is
+  "lift" (the line as it is), "chop" (its first half-beat stuttered then the line: "ha-ha-hey", for energy), or "echo" (sung once and thrown into an echo that rings on).
+Use lines to:
+  - tease the next song: its best line floats over the current part a few bars before it arrives, so the arrival feels inevitable;
+  - build a thread: choose the set's strongest hook and bring it back over other songs again and again, so the whole set is one story;
+  - answer: a line from one song replying to a line in another (put them at alternating bars);
+  - lift a build: a chopped line repeated 4× under a riser.
+Keep lines out of breakdowns' last bars and loop builds' last 4 bars, never overlap two lines in one part, and use at most 3 per part. Only songs whose tempo locks can give or take lines.
 - Additions (only on songs whose tempo locks to the opener): fx.kick, fx.hats, fx.claps, fx.pump. Use them to lift builds and peaks; leave intros, breakdowns and the outro clean.
 - The first part's song sets the tempo for the whole set. Songs more than 12% away from it (after allowing half/double time) cannot blend: they must enter and leave with "cut" and get no additions.
-- Respect the listener's energy setting: "lounge" = smooth, few additions, no claps or loop builds; "club" = balanced; "peak" = harder, more drops and additions.
-- Reach at least the requested length (sum of bars × seconds per bar). Seconds per bar = 240 / opener BPM.
+- The energy setting must change the whole character of the set, not just the volume:
+  "lounge" = the set runs 4% slower; long 32-bar parts, long blends and mashups, no added drums, no trades, no chops; lines float in "echo" or "lift", slow and spacious.
+  "club" = the opener's tempo; 16-bar parts; trades and mashups; lifted lines, teasers and a recurring hook; a breakdown and a loop build before the main drop.
+  "peak" = the set runs 4% faster; short 8-bar parts; trades every bar, cuts, chopped hooks repeated, a loop build and drop every 32 bars or so, kick, claps and pump almost throughout.
+- Reach at least the requested length (sum of bars × seconds per bar). The set's BPM and seconds per bar are given in the request.
 
 Writing:
 - title: a short, evocative name for this set (no third-party artist names).
@@ -79,12 +100,29 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["song", "phrase", "bars", "move", "fx", "note"],
+        required: ["song", "phrase", "bars", "move", "layers", "fx", "note"],
         properties: {
           song: { type: "integer" },
           phrase: { type: "integer" },
           bars: { type: "integer", description: "8, 16 or 32" },
-          move: { type: "string", enum: ["open", "blend", "mashup", "cut"] },
+          move: { type: "string", enum: ["open", "blend", "mashup", "trade", "cut"] },
+          layers: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["song", "phrase", "bar", "len", "at", "times", "style"],
+              properties: {
+                song: { type: "integer" },
+                phrase: { type: "integer" },
+                bar: { type: "integer", description: "0-7, where the line starts in that phrase" },
+                len: { type: "integer", description: "1, 2 or 4 bars" },
+                at: { type: "integer", description: "bar inside this part where it lands" },
+                times: { type: "integer", description: "1-4 repeats" },
+                style: { type: "string", enum: ["lift", "chop", "echo"] },
+              },
+            },
+          },
           fx: {
             type: "object",
             additionalProperties: false,
@@ -108,13 +146,13 @@ function briefText(songs: SongBrief[], opener: number): string {
         return Math.abs(best - 1) <= 0.12 ? `locks to the opener at ${((best - 1) * 100).toFixed(1)}%` : "CANNOT lock to the opener's tempo";
       })();
       const phrases = s.phrases
-        .map((p, k) => `${k}@${Math.round(p.start)}s ${p.label} e${p.energy} b${p.bass}`)
+        .map((p, k) => `${k}@${Math.round(p.start)}s ${p.label} e${p.energy} b${p.bass} v${p.vocal} lines ${p.lines.join(",")}`)
         .join(" | ");
       return [
         `Song ${i}: "${s.title}"${s.makers.length ? ` by ${s.makers.join(", ")}` : ""}`,
         s.descriptors.length ? `  sound: ${s.descriptors.join(", ")}` : null,
         `  ${Math.round(s.bpm)} BPM (${lock}) · key ${s.key.name} (${s.key.camelot}${s.key.confidence < 0.3 ? ", uncertain" : ""}) · ${Math.round(s.duration)}s`,
-        `  phrases (index@start label energy0-9 bass0-9): ${phrases}`,
+        `  phrases (index@start label energy0-9 bass0-9 vocal0-9 best-line-bars): ${phrases}`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -126,7 +164,8 @@ type RawPart = {
   song: number;
   phrase: number;
   bars: number;
-  move: "open" | "blend" | "mashup" | "cut";
+  move: "open" | "blend" | "mashup" | "trade" | "cut";
+  layers?: Layer[];
   fx: Record<keyof typeof FX_PROPS, boolean>;
   note: string;
 };
@@ -140,6 +179,7 @@ export async function planWithBrain(input: {
   const { songs, energy, minutes, vibe } = input;
   const user = [
     `Energy setting: ${energy}. Minimum length: ${minutes} minutes.`,
+    `If song 0 opens, the set runs at ${masterBpm(songs[0].bpm, energy).toFixed(1)} BPM, so one bar is ${(240 / masterBpm(songs[0].bpm, energy)).toFixed(2)} s (${STYLE[energy].push === 1 ? "the opener's own tempo" : `the opener's tempo ${STYLE[energy].push > 1 ? "+" : "-"}4%`}).`,
     `The listener's suggested opener is song 0; you may choose another opener if it makes a better set (it then sets the tempo).`,
     vibe ? `The listener's vibe for this set: "${vibe}"` : "The listener gave no vibe; make the best club journey these songs allow.",
     "",
@@ -150,7 +190,7 @@ export async function planWithBrain(input: {
 
   const response = await getClient().beta.messages.create({
     model: MODEL,
-    max_tokens: 8000,
+    max_tokens: 16000,
     system: SYSTEM,
     messages: [{ role: "user", content: user }],
     output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
@@ -184,6 +224,7 @@ export async function planWithBrain(input: {
         breakdown: !!p.fx?.breakdown,
         filterRise: !!p.fx?.filter_rise,
       },
+      layers: Array.isArray(p.layers) ? p.layers.filter((l) => Number.isInteger(l?.song)) : [],
       note: typeof p.note === "string" ? p.note : undefined,
     }));
   return {
