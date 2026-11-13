@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { usePlayer } from "@/components/player/player-provider";
+import { TagPanel } from "@/components/mixer/tag-panel";
 import { formatCatalogId, formatWorkLabel } from "@/lib/catalog";
 import { formatDuration } from "@/lib/format";
 import {
@@ -16,7 +17,7 @@ import {
   type SongAnalysis,
 } from "@/lib/mixer/engine";
 import { detectKey } from "@/lib/mixer/key";
-import { loadDeck } from "@/lib/mixer/load";
+import { loadDeck, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
 import {
   fixScript,
   rulesScript,
@@ -30,6 +31,7 @@ import {
   type SongBrief,
 } from "@/lib/mixer/script";
 import { analyzeStructure } from "@/lib/mixer/structure";
+import { decodeTag, loadTag, type SavedTag } from "@/lib/mixer/tag";
 import { detectTempo } from "@/lib/mixer/tempo";
 import { encodeWav } from "@/lib/mixer/wav";
 
@@ -79,7 +81,7 @@ const STYLE_LABEL: Record<LayerStyle, string> = { lift: "lifted", chop: "chopped
 type Stage =
   | { kind: "idle" }
   | { kind: "working"; step: string; progress: number }
-  | { kind: "done"; url: string; plan: MixPlan; seconds: number; set: MixSource[] }
+  | { kind: "done"; url: string; plan: MixPlan; seconds: number; set: MixSource[]; dj: string | null }
   | { kind: "error"; message: string };
 
 function fxLabel(fx: Fx): string {
@@ -111,6 +113,14 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [vibe, setVibe] = useState("");
   const [useBrain, setUseBrain] = useState(true);
+  const [tag, setTag] = useState<SavedTag | null>(null);
+  const [useTag, setUseTag] = useState(false);
+  useEffect(() => {
+    void loadTag().then((t) => {
+      setTag(t);
+      setUseTag(!!t);
+    });
+  }, []);
   const abortRef = useRef<AbortController | null>(null);
   const { pause } = usePlayer();
 
@@ -196,7 +206,9 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
       show("Mixing the set", 0.82);
       await tick();
       const plan = planTimes(script, analyses, prepared);
-      const buffer = await renderSet(prepared, plan, energy);
+      const signed = useTag && tag ? await decodeTag(tag.audio, MIX_SAMPLE_RATE) : null;
+      const dj = useTag && tag?.name ? tag.name : null;
+      const buffer = await renderSet(prepared, plan, energy, signed);
       if (ac.signal.aborted) return;
 
       show("Packing the file", 0.96);
@@ -207,7 +219,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         comment:
           `AIRED Mix. Built from ` +
           tracks.map((t) => `${formatWorkLabel(t.id, t.title)} by ${names(t)}`).join("; ") +
-          `. ${plan.by === "brain" ? "Planned by the AIRED DJ brain (Claude, Anthropic)" : "Planned by the AIRED Mixer"}; beat-matched and mixed by the AIRED Mixer. ai-red.io`,
+          `. ${dj ? `Mixed by ${dj}. ` : ""}${plan.by === "brain" ? "Planned by the AIRED DJ brain (Claude, Anthropic)" : "Planned by the AIRED Mixer"}; beat-matched and mixed by the AIRED Mixer. ai-red.io`,
         software: "AIRED Mixer",
       });
       setStage({
@@ -216,6 +228,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         plan,
         seconds: buffer.duration,
         set: tracks,
+        dj,
       });
     } catch (err) {
       if (ac.signal.aborted) return;
@@ -275,6 +288,8 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
           />
         ) : null}
       </fieldset>
+
+      <TagPanel key={tag ? "tag" : "none"} tag={tag} onTag={setTag} useTag={useTag} onUseTag={setUseTag} disabled={busy} />
 
       <div className="flex flex-col gap-2">
         <button
@@ -471,7 +486,7 @@ function MixResult({
           </p>
         ))}
         <p>
-          Mixed by you ·{" "}
+          Mixed by {stage.dj ?? "you"} ·{" "}
           {plan.by === "brain" ? "set planned by the AIRED DJ brain (Claude, Anthropic) · " : ""}
           beat-matched and mixed by the AIRED Mixer
         </p>
