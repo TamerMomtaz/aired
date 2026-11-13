@@ -8,6 +8,9 @@ export type WavTags = {
   artist: string; // IART
   comment: string; // ICMT — the source works and their contributors
   software: string; // ISFT
+  // ISBJ — how the set runs, part by part with times ("1:07 Song · cut ·
+  // drop"), so a moment someone points at can be traced to what the Mixer did.
+  setList?: string;
 };
 
 function infoChunk(tags: WavTags): Uint8Array<ArrayBuffer> {
@@ -17,6 +20,7 @@ function infoChunk(tags: WavTags): Uint8Array<ArrayBuffer> {
     ["IART", tags.artist],
     ["ICMT", tags.comment],
     ["ISFT", tags.software],
+    ...(tags.setList ? ([["ISBJ", tags.setList]] as [string, string][]) : []),
   ];
   const parts: Uint8Array[] = [];
   for (const [id, value] of fields) {

@@ -224,11 +224,17 @@ export function fixScript(
     const srcBar = mBar * rates[raw.song].rate;
     let bars: Bars = raw.bars === 8 || raw.bars === 32 ? raw.bars : 16;
     let phrase = Math.max(0, Math.min(s.phrases.length - 1, Math.round(raw.phrase)));
+    const prev = out[out.length - 1];
+    // The drop has to land on something. After a loop build or a drop the
+    // next part is the song at full strength: a quiet phrase there (an intro, a
+    // pause, a stripped verse) makes the whole build fall into a hole, which is
+    // what Tee heard at 1:07 in a mix of 0063 and 0118.
+    const landing = !!prev && (prev.fx.loopBuild || prev.fx.drop);
+    if (landing) phrase = strongPhrase(s, phrase, bars, srcBar);
     while (bars > 8 && !fits(s, phrase, bars, srcBar)) bars = (bars / 2) as Bars;
     while (phrase > 0 && !fits(s, phrase, bars, srcBar)) phrase--;
     if (!fits(s, phrase, bars, srcBar)) continue;
 
-    const prev = out[out.length - 1];
     let move: Move = ["blend", "mashup", "trade", "cut"].includes(raw.move) ? raw.move : "blend";
     if (!prev) move = "open";
     if (prev && (!rates[raw.song].synced || !rates[prev.song].synced)) move = "cut";
@@ -251,6 +257,8 @@ export function fixScript(
       fx.kick = fx.hats = fx.claps = fx.pump = false;
       fx.loopBuild = false;
     }
+    // ...and never a breakdown: the bass comes back on the drop, not after it.
+    if (landing) fx.breakdown = false;
     if (fx.breakdown) {
       fx.kick = fx.pump = false;
       if (move === "mashup" || move === "trade") move = "blend";
@@ -293,6 +301,25 @@ export function fixScript(
   const last = out[out.length - 1];
   last.fx = { ...last.fx, loopBuild: false, riser: false, drop: false };
   return { ...script, visits: out, bpm: master };
+}
+
+// The phrase a drop lands on: the one asked for if it's among the song's
+// strongest (energy and bass both at least 6 of 9), else the strongest that
+// fits, nearest to it.
+function strongPhrase(s: SongBrief, asked: number, bars: Bars, srcBar: number): number {
+  const strong = (i: number) => s.phrases[i].energy >= 6 && s.phrases[i].bass >= 6;
+  if (strong(asked)) return asked;
+  let best = asked;
+  let bestScore = -Infinity;
+  s.phrases.forEach((p, i) => {
+    if (!fits(s, i, Math.min(bars, 8) as Bars, srcBar)) return;
+    const score = p.energy + p.bass - Math.abs(i - asked) * 0.25;
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  });
+  return best;
 }
 
 // How well an order of songs flows, lower is better: the steps around the
