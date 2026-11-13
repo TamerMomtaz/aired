@@ -80,6 +80,7 @@ export async function POST(req: Request) {
       duration: num(r.duration, 1, 7200, 180),
       phrases,
       plays: Math.round(num(r.plays, 1, 3, 1)),
+      stems: r.stems === true,
     });
   }
 

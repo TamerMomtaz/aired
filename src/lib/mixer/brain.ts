@@ -67,6 +67,7 @@ Use lines to:
   - answer: a line from one song replying to a line in another (put them at alternating bars);
   - lift a build: a chopped line repeated 4× under a riser.
 Keep lines out of breakdowns' last bars and loop builds' last 4 bars, never overlap two lines in one part, and use at most 3 per part. Only songs whose tempo locks can give or take lines.
+STEMS: songs marked ON STEMS are split into vocals, drums, bass and music, and the engine mixes them like a DJ on stems. Between two stem songs a "blend" hands the bassline over exactly on the one (never two basslines at once) and the new singer starts only as the old one ends; a "mashup" truly lays the incoming song's voice and music over the outgoing song's own beat and bassline (4 bars, 8 at Lounge), so use it often wherever keys are compatible; a "breakdown" drops the beat and the bass and leaves the voice and music alone, an acapella moment, with the drums building back in its last bar; and a line taken from a stem song is the clean voice alone, while the singer underneath steps aside. So with stems, make the set's signature real mashups: 4-bar vocal lines from one song over another song's groove, repeated as a hook, and voices answering each other across songs. That is what makes a crowd scream.
 - Additions (only on songs whose tempo locks to the opener): kick, hats, claps, pump. Use them to lift builds and peaks; leave intros, breakdowns and the outro clean.
 - The first part's song sets the tempo for the whole set. Songs more than 12% away from it (after allowing half/double time) cannot blend: they must enter and leave with "cut" and get no additions.
 - The energy setting must change the whole character of the set, not just the volume:
@@ -140,7 +141,7 @@ function briefText(songs: SongBrief[], opener: number, energy: Energy): string {
       return [
         `Song ${i}: "${s.title}"${s.makers.length ? ` by ${s.makers.join(", ")}` : ""}${(s.plays ?? 1) > 1 ? ` · the listener added it ${s.plays} times: give it about ${s.plays} shares of the set and bring it back between the other songs` : ""}`,
         s.descriptors.length ? `  sound: ${s.descriptors.join(", ")}` : null,
-        `  ${Math.round(s.bpm)} BPM (${lock}) · key ${s.key.name} (${s.key.camelot}${s.key.confidence < 0.3 ? ", uncertain" : ""}) · ${Math.round(s.duration)}s`,
+        `  ${Math.round(s.bpm)} BPM (${lock}) · key ${s.key.name} (${s.key.camelot}${s.key.confidence < 0.3 ? ", uncertain" : ""}) · ${Math.round(s.duration)}s${s.stems ? " · ON STEMS" : ""}`,
         `  phrases (index@start label energy0-9 bass0-9 vocal0-9 best-line-bars): ${phrases}`,
       ]
         .filter(Boolean)

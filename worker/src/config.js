@@ -76,4 +76,14 @@ export const config = {
   // a time keeps a 12-minute job from starving the upload transcodes.
   reelSnippetConcurrency: Number(getOptional("REEL_SNIPPET_CONCURRENCY", "2")),
   reelFullConcurrency: Number(getOptional("REEL_FULL_CONCURRENCY", "1")),
+
+  // STEMS (stems.js) — every live song split once into vocals / drums / bass /
+  // other for the Mixer. On by default; STEMS_ENABLED=0 switches the sweep off.
+  stemsEnabled: getOptional("STEMS_ENABLED", "1") !== "0",
+  stemsModel: getOptional("STEMS_MODEL", "htdemucs"),
+  stemsPython: getOptional("STEMS_PYTHON", "/opt/stems/bin/python"),
+  stemsBitrate: getOptional("STEMS_BITRATE", "128k"),
+  stemsThreads: Number(getOptional("STEMS_THREADS", "2")),
+  stemsNice: Number(getOptional("STEMS_NICE", "15")),
+  stemsSweepMinutes: Number(getOptional("STEMS_SWEEP_MINUTES", "30")),
 };
