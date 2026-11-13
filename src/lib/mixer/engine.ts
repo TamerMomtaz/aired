@@ -44,8 +44,9 @@ import type { Tempo } from "./tempo";
 
 export type { Energy, MixMinutes, Move } from "./script";
 
-export const MIN_TRACKS = 2;
+export const MIN_TRACKS = 1; // one song = a remix of it
 export const MAX_TRACKS = 6;
+export const MAX_REPEATS = 3; // times one song may be added to a set
 // How much of each song to read. A long song (no length cap, CLAUDE.md Rule 4)
 // is still fully usable; the Mixer picks its parts from the first 8 minutes,
 // which keeps a phone's memory in bounds.
