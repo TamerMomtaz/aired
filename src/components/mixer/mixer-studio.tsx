@@ -80,6 +80,7 @@ const MOVE_LABEL: Record<Move, string> = {
   mashup: "mash-up: its voice over the last beat",
   trade: "trades bars with the last song",
   cut: "drops in on a cut",
+  flow: "plays on",
 };
 
 const STYLE_LABEL: Record<LayerStyle, string> = { lift: "lifted", chop: "chopped", echo: "in echo" };
