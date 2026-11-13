@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AlbumCard } from "@/components/album-card";
 import { ArtistShelfRow } from "@/components/artist-shelf-row";
+import { FreshDrop } from "@/components/fresh/fresh-drop";
 import { trackFromFeedWork } from "@/components/player/track";
 import { SearchBar } from "@/components/search-bar";
 import { WorkCard } from "@/components/work-card";
@@ -80,6 +81,8 @@ export default async function Home({
         </div>
         <SearchBar initial={q} autoFocus={isSearching} />
       </header>
+
+      {!isSearching ? <FreshDrop works={works} queue={queue} /> : null}
 
       {showMostAired ? (
         <section className="mb-8 flex flex-col gap-3">
