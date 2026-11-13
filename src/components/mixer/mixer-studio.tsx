@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { usePlayer } from "@/components/player/player-provider";
+import { MixaTeeShelf } from "@/components/mixer/mixatee-shelf";
 import { TagPanel } from "@/components/mixer/tag-panel";
 import { formatCatalogId, formatWorkLabel } from "@/lib/catalog";
 import { formatDuration } from "@/lib/format";
@@ -17,6 +18,7 @@ import {
   type SongAnalysis,
 } from "@/lib/mixer/engine";
 import { detectKey } from "@/lib/mixer/key";
+import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
 import { loadDeck, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
 import {
   fixScript,
@@ -81,7 +83,15 @@ const STYLE_LABEL: Record<LayerStyle, string> = { lift: "lifted", chop: "chopped
 type Stage =
   | { kind: "idle" }
   | { kind: "working"; step: string; progress: number }
-  | { kind: "done"; url: string; plan: MixPlan; seconds: number; set: MixSource[]; dj: string | null }
+  | {
+      kind: "done";
+      url: string;
+      plan: MixPlan;
+      seconds: number;
+      set: MixSource[];
+      dj: string | null;
+      saved: boolean;
+    }
   | { kind: "error"; message: string };
 
 function fxLabel(fx: Fx): string {
@@ -115,11 +125,14 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   const [useBrain, setUseBrain] = useState(true);
   const [tag, setTag] = useState<SavedTag | null>(null);
   const [useTag, setUseTag] = useState(false);
+  const [mixes, setMixes] = useState<SavedMix[]>([]);
+  const refreshMixes = () => void listMixes().then(setMixes);
   useEffect(() => {
     void loadTag().then((t) => {
       setTag(t);
       setUseTag(!!t);
     });
+    void listMixes().then(setMixes);
   }, []);
   const abortRef = useRef<AbortController | null>(null);
   const { pause } = usePlayer();
@@ -222,6 +235,28 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
           `. ${dj ? `Mixed by ${dj}. ` : ""}${plan.by === "brain" ? "Planned by the AIRED DJ brain (Claude, Anthropic)" : "Planned by the AIRED Mixer"}; beat-matched and mixed by the AIRED Mixer. ai-red.io`,
         software: "AIRED Mixer",
       });
+      // Keep it in MixaTee, on this device, with every credit.
+      const saved = await saveMix(
+        {
+          id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          title: plan.title,
+          createdAt: Date.now(),
+          seconds: buffer.duration,
+          bpm: plan.bpm,
+          energy: ENERGIES.find((e) => e.value === energy)?.label ?? energy,
+          dj,
+          story: plan.story || null,
+          plannedBy: plan.by,
+          credits: tracks.map((t) => ({ label: formatWorkLabel(t.id, t.title), by: names(t) })),
+          makers: [...new Set(tracks.flatMap((t) => t.contributors.map((c) => c.name)))],
+        },
+        blob,
+      ).then(
+        () => true,
+        () => false,
+      );
+      if (ac.signal.aborted) return;
+      if (saved) refreshMixes();
       setStage({
         kind: "done",
         url: URL.createObjectURL(blob),
@@ -229,6 +264,7 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
         seconds: buffer.duration,
         set: tracks,
         dj,
+        saved,
       });
     } catch (err) {
       if (ac.signal.aborted) return;
@@ -334,6 +370,8 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
       ) : null}
 
       {stage.kind === "done" ? <MixResult stage={stage} onPlay={pause} /> : null}
+
+      <MixaTeeShelf mixes={mixes} onChange={refreshMixes} />
     </div>
   );
 }
@@ -425,13 +463,20 @@ function MixResult({
           global player so two things never sound at once. */}
       <audio controls src={stage.url} onPlay={onPlay} className="w-full" />
 
-      <a
-        href={stage.url}
-        download={fileName}
-        className="self-start rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30"
-      >
-        Download the mix
-      </a>
+      <div className="flex flex-wrap items-center gap-3">
+        <a
+          href={stage.url}
+          download={fileName}
+          className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-foreground transition hover:border-white/30"
+        >
+          Download the mix
+        </a>
+        <span className="text-xs text-muted">
+          {stage.saved
+            ? "Saved in your MixaTee below."
+            : "Couldn't save it in MixaTee on this device (storage may be full). Download it to keep it."}
+        </span>
+      </div>
 
       <div className="flex flex-col gap-1.5 border-t border-white/8 pt-4">
         <p className="text-xs font-medium text-foreground">How the set runs</p>

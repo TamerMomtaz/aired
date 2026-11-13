@@ -51,6 +51,8 @@ export function NowPlayingBar() {
         ? "Repeat all"
         : "Repeat off";
   const contributorNames = current.contributors.map((c) => c.name).join(" · ");
+  // A MixaTee (a mix saved on this device) has no catalog page of its own.
+  const isMix = !!current.localUrl;
 
   function fractionFromClientX(clientX: number): number {
     const bar = barRef.current;
@@ -137,9 +139,9 @@ export function NowPlayingBar() {
 
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4">
           <Link
-            href={`/registry/${current.id}`}
+            href={isMix ? "/mix#mixatee" : `/registry/${current.id}`}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition hover:opacity-90"
-            aria-label={`Open AIRED-${current.id} ${current.title}`}
+            aria-label={isMix ? `Open MixaTee ${current.title}` : `Open AIRED-${current.id} ${current.title}`}
           >
             {current.artworkUrl ? (
               <Image
@@ -158,7 +160,7 @@ export function NowPlayingBar() {
             <span className="flex min-w-0 flex-col leading-tight">
               <span className="truncate text-sm font-medium text-foreground">
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-cert-red">
-                  {formatCatalogId(current.id)}
+                  {isMix ? "MixaTee" : formatCatalogId(current.id)}
                 </span>
                 <span className="text-muted/50"> · </span>
                 {current.title}
@@ -174,8 +176,8 @@ export function NowPlayingBar() {
           <div className="flex shrink-0 items-center gap-1">
             {/* Keep the song you're hearing, without leaving the page you're on
                 — the most natural moment to adorn something is while it plays. */}
-            <AdornButton workId={current.id} title={current.title} size="sm" />
-            {current.hlsPlaylistKey ? (
+            {isMix ? null : <AdornButton workId={current.id} title={current.title} size="sm" />}
+            {current.hlsPlaylistKey && !isMix ? (
               <DownloadButton
                 variant="compact"
                 input={{

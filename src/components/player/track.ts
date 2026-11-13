@@ -14,6 +14,9 @@ export type Track = {
   artworkUrl: string | null;
   durationSeconds: number | null;
   contributors: { name: string; profile_slug: string | null }[];
+  // A MixaTee (a mix saved on this device) plays from a local file URL instead
+  // of an R2 stream. Its id is negative, so it is never a catalog work.
+  localUrl?: string | null;
 };
 
 // Map a feed/search card row to a player Track so the whole feed is one tap away
