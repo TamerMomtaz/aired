@@ -9,17 +9,24 @@ import {
   LOAD_SECONDS,
   MAX_TRACKS,
   MIN_TRACKS,
-  planSet,
-  prepareTrack,
+  planTimes,
+  prepareSongs,
   renderSet,
-  visitCounts,
-  type Energy,
-  type MixMinutes,
   type MixPlan,
-  type Move,
-  type PreparedTrack,
+  type SongAnalysis,
 } from "@/lib/mixer/engine";
+import { detectKey } from "@/lib/mixer/key";
 import { loadDeck } from "@/lib/mixer/load";
+import {
+  fixScript,
+  rulesScript,
+  type Energy,
+  type Fx,
+  type MixMinutes,
+  type Move,
+  type SetScript,
+  type SongBrief,
+} from "@/lib/mixer/script";
 import { analyzeStructure } from "@/lib/mixer/structure";
 import { detectTempo } from "@/lib/mixer/tempo";
 import { encodeWav } from "@/lib/mixer/wav";
@@ -58,6 +65,18 @@ type Stage =
   | { kind: "done"; url: string; plan: MixPlan; seconds: number; set: MixSource[] }
   | { kind: "error"; message: string };
 
+function fxLabel(fx: Fx): string {
+  const on: string[] = [];
+  if (fx.breakdown) on.push("breakdown");
+  if (fx.filterRise) on.push("filter rise");
+  if (fx.loopBuild) on.push("loop build");
+  if (fx.riser && !fx.loopBuild) on.push("riser");
+  if (fx.drop || fx.loopBuild) on.push("drop");
+  if (fx.kick) on.push("kick");
+  if (fx.claps) on.push("claps");
+  return on.length ? ` · ${on.join(", ")}` : "";
+}
+
 function names(s: MixSource): string {
   return s.contributors.map((c) => c.name).join(", ") || "AIRED";
 }
@@ -69,6 +88,8 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   const [energy, setEnergy] = useState<Energy>("club");
   const [minutes, setMinutes] = useState<MixMinutes>(5);
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
+  const [vibe, setVibe] = useState("");
+  const [useBrain, setUseBrain] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const { pause } = usePlayer();
 
@@ -113,49 +134,59 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
     const ac = new AbortController();
     abortRef.current = ac;
     const n = tracks.length;
-    // Each song: fetch (70% of its slice) then analyse (30%). Render after.
-    const slice = 0.8 / n;
+    // Listening (fetch + analyse) takes the first 60% of the bar.
+    const slice = 0.6 / n;
+    const show = (step: string, progress: number) => setStage({ kind: "working", step, progress });
     try {
-      const prepared: PreparedTrack[] = [];
-      let masterBpm = 0;
-      let counts: number[] = [];
+      // 1. Listen to every song once: beat, key, phrases. Only the analysis and
+      //    the compressed audio are kept; the decoded song is let go.
+      const analyses: SongAnalysis[] = [];
       for (let i = 0; i < n; i++) {
         const s = tracks[i];
         const base = i * slice;
-        setStage({ kind: "working", step: `Fetching ${s.title}`, progress: base });
+        show(`Listening to ${s.title}`, base);
         const deck = await loadDeck(s.hlsPlaylistKey, LOAD_SECONDS, {
           signal: ac.signal,
-          onProgress: (f) =>
-            setStage({ kind: "working", step: `Fetching ${s.title}`, progress: base + f * slice * 0.7 }),
+          onProgress: (f) => show(`Listening to ${s.title}`, base + f * slice * 0.6),
         });
         if (ac.signal.aborted) return;
-        setStage({ kind: "working", step: `Reading the beat and sections of ${s.title}`, progress: base + slice * 0.75 });
+        show(`Hearing the beat, key and parts of ${s.title}`, base + slice * 0.7);
         await tick();
         const tempo = detectTempo(deck.buffer);
         const structure = analyzeStructure(deck.buffer, tempo);
-        if (i === 0) {
-          masterBpm = tempo.bpm;
-          counts = visitCounts(masterBpm, minutes, n).per;
-        }
-        // Only the chosen sections are kept; the full song is let go here.
-        prepared.push(prepareTrack(s.title, deck.buffer, tempo, structure, masterBpm, counts[i], i === 0));
+        const key = detectKey(deck.buffer);
+        analyses.push({ title: s.title, tempo, structure, key, duration: deck.seconds, adts: deck.adts });
       }
+      const briefs = analyses.map((a, i) => toBrief(a, tracks[i]));
 
-      setStage({ kind: "working", step: "Mixing the set", progress: 0.82 });
+      // 2. Plan the set: the DJ brain if it's reachable, else the built-in rules.
+      let script: SetScript | null = null;
+      if (useBrain) {
+        show("The DJ brain is planning your set", 0.62);
+        script = await askBrain(tracks, analyses, briefs, energy, minutes, vibe, ac.signal);
+        if (ac.signal.aborted) return;
+      }
+      script = fixScript(script ?? rulesScript(briefs, energy, minutes), briefs, energy, minutes);
+
+      // 3. Decode only the parts the plan uses, then mix.
+      show("Cueing up the parts", 0.7);
+      const prepared = await prepareSongs(analyses, script, (f) => show("Cueing up the parts", 0.7 + f * 0.1));
+      if (ac.signal.aborted) return;
+      show("Mixing the set", 0.82);
       await tick();
-      const plan = planSet(prepared, masterBpm, energy);
+      const plan = planTimes(script, analyses, prepared);
       const buffer = await renderSet(prepared, plan, energy);
       if (ac.signal.aborted) return;
 
-      setStage({ kind: "working", step: "Packing the file", progress: 0.96 });
+      show("Packing the file", 0.96);
       await tick();
       const blob = encodeWav(buffer, {
-        title: `${tracks.map((t) => t.title).join(" × ")} (AIRED Mix)`,
+        title: `${plan.title} (AIRED Mix)`,
         artist: tracks.map(names).join(" × "),
         comment:
           `AIRED Mix. Built from ` +
           tracks.map((t) => `${formatWorkLabel(t.id, t.title)} by ${names(t)}`).join("; ") +
-          `. Beat-matched and arranged by the AIRED Mixer. ai-red.io`,
+          `. ${plan.by === "brain" ? "Planned by the AIRED DJ brain (Claude, Anthropic)" : "Planned by the AIRED Mixer"}; beat-matched and mixed by the AIRED Mixer. ai-red.io`,
         software: "AIRED Mixer",
       });
       setStage({
@@ -196,6 +227,33 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
 
       <Choice legend="Energy" options={ENERGIES} value={energy} onChange={setEnergy} disabled={busy} />
       <Choice legend="Length" options={MINUTES} value={minutes} onChange={setMinutes} disabled={busy} />
+
+      <fieldset className="flex flex-col gap-2" disabled={busy}>
+        <legend className="mb-1 text-sm font-semibold text-foreground">DJ brain</legend>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={useBrain}
+            onChange={(e) => setUseBrain(e.target.checked)}
+            className="size-4 accent-white"
+          />
+          Let the DJ brain plan the set
+        </label>
+        <p className="text-xs text-muted">
+          It picks the order, the parts, the moves and the big moments, mixing in key, and tells you
+          why. If it can&apos;t be reached, the Mixer plans the set itself.
+        </p>
+        {useBrain ? (
+          <input
+            type="text"
+            value={vibe}
+            maxLength={300}
+            onChange={(e) => setVibe(e.target.value)}
+            placeholder="The vibe, in any words: sunset, slow climb to a euphoric peak…"
+            className="rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted/60 focus:border-white/30 focus:outline-none"
+          />
+        ) : null}
+      </fieldset>
 
       <div className="flex flex-col gap-2">
         <button
@@ -244,6 +302,65 @@ export function MixerStudio({ sources }: { sources: MixSource[] }) {
   );
 }
 
+// The numbers the planners work from. Energy and bass are ranked 0–9 within
+// each song so songs mastered at different loudness compare fairly.
+function toBrief(a: SongAnalysis, s: MixSource): SongBrief {
+  const ph = a.structure.phrases;
+  const maxR = Math.max(1e-9, ...ph.map((p) => p.rms));
+  const maxL = Math.max(1e-9, ...ph.map((p) => p.low));
+  return {
+    title: s.title,
+    makers: s.contributors.map((c) => c.name),
+    descriptors: [],
+    bpm: a.tempo.bpm,
+    key: a.key,
+    duration: a.duration,
+    phrases: ph.map((p) => ({
+      start: p.start,
+      label: p.label,
+      energy: Math.round((p.rms / maxR) * 9),
+      bass: Math.round((p.low / maxL) * 9),
+    })),
+  };
+}
+
+async function askBrain(
+  tracks: MixSource[],
+  analyses: SongAnalysis[],
+  briefs: SongBrief[],
+  energy: Energy,
+  minutes: MixMinutes,
+  vibe: string,
+  signal: AbortSignal,
+): Promise<SetScript | null> {
+  try {
+    const res = await fetch("/api/mix/plan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        vibe: vibe.trim(),
+        energy,
+        minutes,
+        songs: tracks.map((t, i) => ({
+          id: t.id,
+          bpm: analyses[i].tempo.bpm,
+          tonic: analyses[i].key.tonic,
+          minor: analyses[i].key.minor,
+          keyConfidence: analyses[i].key.confidence,
+          duration: briefs[i].duration,
+          phrases: briefs[i].phrases,
+        })),
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ai?: boolean; script?: SetScript };
+    return data.ai && data.script ? data.script : null;
+  } catch {
+    return null;
+  }
+}
+
 function MixResult({
   stage,
   onPlay,
@@ -256,11 +373,13 @@ function MixResult({
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-white/12 bg-white/[0.03] p-5">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-foreground">{set.map((s) => s.title).join(" × ")}</h2>
+        <h2 className="text-lg font-semibold text-foreground">{plan.title}</h2>
         <p className="text-xs text-muted">
           AIRED Mix · {formatDuration(Math.round(stage.seconds))} · {Math.round(plan.bpm)} BPM ·{" "}
-          {plan.visits.length} sections
+          {plan.visits.length} parts ·{" "}
+          {plan.by === "brain" ? "planned by the DJ brain" : "planned by the Mixer's own rules"}
         </p>
+        {plan.story ? <p className="mt-1 text-sm text-foreground/90">{plan.story}</p> : null}
       </div>
 
       {/* Its own element, scoped to this page. Pressing play here pauses the
@@ -283,23 +402,27 @@ function MixResult({
               <span className="w-10 shrink-0 tabular-nums text-foreground/80">
                 {formatDuration(Math.round(v.at))}
               </span>
-              <span className="min-w-0">
-                {set[v.track].title}{" "}
-                <span className="text-muted/70">
-                  (from {formatDuration(Math.round(v.sourceStart))}) · {MOVE_LABEL[v.move]}
+              <span className="flex min-w-0 flex-col">
+                <span>
+                  {set[v.song].title}{" "}
+                  <span className="text-muted/70">
+                    (from {formatDuration(Math.round(v.sourceStart))}, {v.bars} bars) · {MOVE_LABEL[v.move]}
+                    {fxLabel(v.fx)}
+                  </span>
                 </span>
+                {v.note ? <span className="text-muted/70 italic">{v.note}</span> : null}
               </span>
             </li>
           ))}
         </ol>
         <ul className="mt-2 flex flex-col gap-0.5 text-xs text-muted/80">
-          {plan.tracks.map((t, i) => {
+          {plan.songs.map((t, i) => {
             const nudge = (t.rate - 1) * 100;
             return (
               <li key={i}>
-                {t.title}: {Math.round(t.bpm)} BPM
-                {i === 0
-                  ? " · sets the tempo"
+                {t.title}: {Math.round(t.bpm)} BPM · key {t.key.name} ({t.key.camelot})
+                {plan.visits[0]?.song === i
+                  ? " · opens the set and sets the tempo"
                   : !t.synced
                     ? " · too far from the set's tempo to lock, so it comes and goes on cuts"
                     : Math.abs(nudge) >= 0.1
@@ -318,7 +441,11 @@ function MixResult({
             {formatWorkLabel(s.id, s.title)} by {names(s)}
           </p>
         ))}
-        <p>Mixed by you · beat-matched and arranged by the AIRED Mixer</p>
+        <p>
+          Mixed by you ·{" "}
+          {plan.by === "brain" ? "set planned by the AIRED DJ brain (Claude, Anthropic) · " : ""}
+          beat-matched and mixed by the AIRED Mixer
+        </p>
         <p className="text-muted/70">These credits are written inside the downloaded file too.</p>
       </div>
     </section>

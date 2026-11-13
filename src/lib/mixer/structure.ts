@@ -16,7 +16,15 @@ export type Phrase = {
   // Mean loudness of the phrase (linear RMS). Used to shape the energy arc and
   // to balance levels between songs.
   rms: number;
+  // Share of the energy in the low end (kick + bass) and in the top (hats,
+  // air, sibilance). A breakdown has little low end; a drop has a lot.
+  low: number;
+  high: number;
+  // What the phrase is doing in the song, read from the numbers above.
+  label: PhraseLabel;
 };
+
+export type PhraseLabel = "intro" | "breakdown" | "build" | "drop" | "groove" | "outro";
 
 export type Structure = {
   beat: number; // seconds per beat
@@ -37,22 +45,34 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
   const nBeats = Math.floor((buf.duration - tempo.firstBeat) / beat);
   const full = new Float64Array(Math.max(0, nBeats));
   const low = new Float64Array(Math.max(0, nBeats));
+  const lowAll = new Float64Array(Math.max(0, nBeats));
+  const highAll = new Float64Array(Math.max(0, nBeats));
   const a = Math.exp((-2 * Math.PI * 150) / sr);
+  const ah = Math.exp((-2 * Math.PI * 4000) / sr);
   for (let b = 0; b < nBeats; b++) {
     const s0 = Math.floor((tempo.firstBeat + b * beat) * sr);
     const s1 = Math.min(l.length, Math.floor((tempo.firstBeat + (b + 1) * beat) * sr));
     const head = s0 + Math.floor((s1 - s0) / 4);
     let ef = 0;
     let el = 0;
+    let ela = 0;
+    let eh = 0;
     let lp = 0;
-    for (let i = s0; i < s1; i += 2) {
+    let lph = 0;
+    for (let i = s0; i < s1; i++) {
       const x = (l[i] + r[i]) * 0.5;
-      ef += x * x;
       lp = (1 - a) * x + a * lp;
+      lph = (1 - ah) * x + ah * lph;
+      if (i & 1) continue;
+      ef += x * x;
+      ela += lp * lp;
+      eh += (x - lph) * (x - lph);
       if (i < head) el += lp * lp;
     }
     full[b] = Math.sqrt(ef / Math.max(1, (s1 - s0) / 2));
     low[b] = el;
+    lowAll[b] = ela / (ef || 1);
+    highAll[b] = eh / (ef || 1);
   }
 
   // Downbeat: the beat position (0..3) with the strongest low end on average.
@@ -99,21 +119,53 @@ export function analyzeStructure(buf: AudioBuffer, tempo: Tempo): Structure {
   const phrases: Phrase[] = [];
   // A short pickup before the first full phrase becomes its own "phrase 0" so
   // an intro is never thrown away.
-  if (off > 0) phrases.push({ start: Math.max(0, firstBar + (off - BARS_PER_PHRASE) * bar), rms: 0 });
+  const blank = { rms: 0, low: 0, high: 0, label: "groove" as PhraseLabel };
+  if (off > 0) phrases.push({ start: Math.max(0, firstBar + (off - BARS_PER_PHRASE) * bar), ...blank });
   for (let j = off; j + BARS_PER_PHRASE <= nBars; j += BARS_PER_PHRASE) {
-    phrases.push({ start: firstBar + j * bar, rms: 0 });
+    phrases.push({ start: firstBar + j * bar, ...blank });
   }
   for (const p of phrases) {
     const j0 = Math.max(0, Math.round((p.start - firstBar) / bar));
     let s = 0;
+    let lo = 0;
+    let hi = 0;
     let n = 0;
     for (let j = j0; j < Math.min(nBars, j0 + BARS_PER_PHRASE); j++) {
       s += barE[j];
+      for (let k = 0; k < 4; k++) {
+        lo += lowAll[down + j * 4 + k];
+        hi += highAll[down + j * 4 + k];
+      }
       n++;
     }
     p.rms = n ? s / n : 0;
+    p.low = n ? lo / (n * 4) : 0;
+    p.high = n ? hi / (n * 4) : 0;
   }
+  labelPhrases(phrases);
   return { beat, bar, phrases };
+}
+
+// Name each phrase's job from its loudness and low end relative to the song.
+function labelPhrases(ph: Phrase[]) {
+  if (ph.length === 0) return;
+  const med = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)] || 1e-9;
+  };
+  const mr = med(ph.map((p) => p.rms));
+  const ml = med(ph.map((p) => p.low));
+  ph.forEach((p, i) => {
+    const loud = p.rms / mr;
+    const bass = p.low / ml;
+    const next = ph[i + 1];
+    if (i === 0 && loud < 1) p.label = "intro";
+    else if (i === ph.length - 1 && loud < 0.95) p.label = "outro";
+    else if (loud < 0.75 || bass < 0.6) p.label = "breakdown";
+    else if (loud >= 1.08 && bass >= 0.9) p.label = "drop";
+    else if (next && next.rms / mr >= 1.08 && loud < next.rms / mr) p.label = "build";
+    else p.label = "groove";
+  });
 }
 
 // Fine-tune where a section starts. The tempo is measured on the first minute
