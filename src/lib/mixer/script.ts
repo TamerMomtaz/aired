@@ -8,7 +8,7 @@
 // Everything here is plain data. No audio, no secrets: the brain only ever sees
 // numbers about the songs plus their public titles, makers and descriptors.
 
-import { camelotDistance, shiftKey, type MusicalKey } from "./key";
+import { camelotDistance, type MusicalKey } from "./key";
 import type { PhraseLabel } from "./structure";
 
 export type Energy = "lounge" | "club" | "peak";
@@ -214,7 +214,7 @@ export function fixScript(
     const clash =
       !!prev &&
       prev.song !== raw.song &&
-      camelotDistance(shiftKey(songs[prev.song].key, rates[prev.song].rate), shiftKey(s.key, rates[raw.song].rate)) >= 3;
+      camelotDistance(songs[prev.song].key, s.key) >= 3;
     if (clash && move !== "cut") move = "cut";
     // A trade of a part with itself does nothing.
     if (move === "trade" && prev?.song === raw.song && prev.phrase === phrase) move = "blend";
@@ -249,7 +249,7 @@ export function fixScript(
       const prev = out[out.length - 1];
       const clash =
         prev.song !== v.song &&
-        camelotDistance(shiftKey(songs[prev.song].key, rates[prev.song].rate), shiftKey(songs[v.song].key, rates[v.song].rate)) >= 3;
+        camelotDistance(songs[prev.song].key, songs[v.song].key) >= 3;
       let move: Move =
         !rates[v.song].synced || !rates[prev.song].synced || prev.fx.loopBuild || clash
           ? "cut"
@@ -272,7 +272,8 @@ export function fixScript(
 // first, since the set keeps cycling through them), after each song's tempo
 // change has moved its key, plus a large cost for a song that can't lock.
 function orderCost(songs: SongBrief[], order: number[], master: number): number {
-  const keyOf = (i: number) => shiftKey(songs[i].key, chooseRate(master, songs[i].bpm).rate);
+  // Key lock: a song keeps its own key at any tempo.
+  const keyOf = (i: number) => songs[i].key;
   let cost = 0;
   for (let k = 0; k < order.length; k++) {
     const a = order[k];

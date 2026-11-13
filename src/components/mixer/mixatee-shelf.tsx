@@ -7,6 +7,7 @@ import { usePlayer } from "@/components/player/player-provider";
 import type { Track } from "@/components/player/track";
 import { formatDuration } from "@/lib/format";
 import { deleteMix, loadMixAudio, markOnAccount, mixPlayerId, renameMix, type SavedMix } from "@/lib/mixer/library";
+import { Mp3Button } from "@/components/mixer/mp3-button";
 import { uploadMixToAccount } from "@/lib/mixes/upload";
 
 // The catalog numbers a mix was built from. Mixes saved before these were
@@ -193,8 +194,13 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
                   onClick={() => void download(m)}
                   className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-foreground hover:border-white/30"
                 >
-                  Download
+                  WAV
                 </button>
+                <Mp3Button
+                  getWav={() => loadMixAudio(m.id)}
+                  fileName={fileName(m).replace(/\.wav$/, "")}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-foreground hover:border-white/30 disabled:opacity-60"
+                />
                 <button
                   type="button"
                   onClick={() => void remove(m)}
