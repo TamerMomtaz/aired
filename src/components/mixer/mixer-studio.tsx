@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { usePlayer } from "@/components/player/player-provider";
+import { ClubDecks } from "@/components/mixer/club-decks";
 import { MixaTeeShelf } from "@/components/mixer/mixatee-shelf";
 import { Mp3Button } from "@/components/mixer/mp3-button";
 import { TagPanel } from "@/components/mixer/tag-panel";
@@ -342,6 +343,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
 
   return (
     <div className="flex flex-col gap-6">
+      <ClubDecks set={set} busy={busy} />
       <SetList set={set} onRemove={remove} onMove={move} disabled={busy} autoOrder={autoOrder} />
 
       <label className="-mt-3 flex items-start gap-2 px-1 text-sm text-foreground">
@@ -424,7 +426,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
           type="button"
           onClick={() => void makeMix()}
           disabled={!ready}
-          className="rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:brightness-95 active:scale-[0.99] disabled:opacity-40"
+          className="club-go rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:brightness-95 active:scale-[0.99] disabled:opacity-40"
         >
           {busy ? "Mixing…" : stage.kind === "done" ? "Mix again" : "Mix it"}
         </button>
@@ -438,7 +440,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
           <p className="text-sm text-foreground">{stage.step}…</p>
           <div className="h-1 overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full bg-foreground/80 transition-[width]"
+              className="club-progress h-full bg-foreground/80 transition-[width]"
               style={{ width: `${Math.round(stage.progress * 100)}%` }}
             />
           </div>
@@ -543,7 +545,7 @@ function MixResult({
   const { plan, set } = stage;
   const fileName = `AIRED Mix - ${set.map((s) => formatCatalogId(s.id)).join(" x ")}.wav`;
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-white/12 bg-white/[0.03] p-5">
+    <section className="club-result flex flex-col gap-4 rounded-2xl border border-white/12 bg-white/[0.03] p-5">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-foreground">{plan.title}</h2>
         <p className="text-xs text-muted">
@@ -812,7 +814,7 @@ function Choice<T extends string | number>({
 }) {
   const current = options.find((o) => o.value === value);
   return (
-    <fieldset className="flex flex-col gap-2" disabled={disabled}>
+    <fieldset className="club-choice flex flex-col gap-2" disabled={disabled}>
       <legend className="mb-1 text-sm font-semibold text-foreground">{legend}</legend>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => (

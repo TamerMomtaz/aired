@@ -1,0 +1,527 @@
+/* AIRED Mixer — Ibiza club booth (Tee, Nov 2026).
+   Neon on a night sky: magenta, cyan, lime and sunset orange, lasers sweeping
+   behind the page, a real two-deck booth, glowing pads, and a drop button that
+   pulses like a kick. Everything is scoped to .club-stage, so the rest of AIRED
+   keeps its Brushed Onyx look. Look only: no mixer behaviour lives here. */
+
+.club-stage {
+  --club-pink: #ff2bd6;
+  --club-cyan: #22e4ff;
+  --club-lime: #b6ff3b;
+  --club-sun: #ff8a3d;
+  --club-violet: #7b5cff;
+  --club-night: #120a24;
+  position: relative;
+  isolation: isolate;
+  counter-reset: club-step;
+}
+
+/* The club itself: a violet night with lasers sweeping from the ceiling. */
+.club-lights {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(70% 45% at 50% 0%, rgba(123, 92, 255, 0.38), transparent 70%),
+    radial-gradient(50% 40% at 0% 100%, rgba(255, 43, 214, 0.22), transparent 70%),
+    radial-gradient(50% 40% at 100% 90%, rgba(34, 228, 255, 0.2), transparent 70%),
+    linear-gradient(180deg, #1a0f33, var(--club-night) 70%);
+}
+
+.club-lights span {
+  position: absolute;
+  top: -10%;
+  left: 50%;
+  width: 3px;
+  height: 140%;
+  transform-origin: top center;
+  filter: blur(1px);
+  opacity: 0.55;
+  animation: club-laser 7s ease-in-out infinite alternate;
+}
+
+.club-lights span:nth-child(1) {
+  background: linear-gradient(180deg, var(--club-pink), transparent 75%);
+  box-shadow: 0 0 18px 4px rgba(255, 43, 214, 0.5);
+}
+.club-lights span:nth-child(2) {
+  background: linear-gradient(180deg, var(--club-cyan), transparent 75%);
+  box-shadow: 0 0 18px 4px rgba(34, 228, 255, 0.5);
+  animation-duration: 9s;
+  animation-delay: -3s;
+}
+.club-lights span:nth-child(3) {
+  background: linear-gradient(180deg, var(--club-lime), transparent 70%);
+  box-shadow: 0 0 18px 4px rgba(182, 255, 59, 0.4);
+  animation-duration: 11s;
+  animation-delay: -6s;
+}
+.club-lights span:nth-child(4) {
+  background: linear-gradient(180deg, var(--club-sun), transparent 70%);
+  box-shadow: 0 0 18px 4px rgba(255, 138, 61, 0.45);
+  animation-duration: 8s;
+  animation-delay: -1s;
+}
+
+@keyframes club-laser {
+  from {
+    transform: rotate(-38deg);
+  }
+  to {
+    transform: rotate(38deg);
+  }
+}
+
+/* The hero. */
+.club-kicker {
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--club-cyan);
+  text-shadow: 0 0 10px rgba(34, 228, 255, 0.7);
+}
+
+.club-title {
+  font-size: clamp(56px, 16vw, 96px);
+  line-height: 0.9;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  background: linear-gradient(90deg, var(--club-pink), var(--club-sun), var(--club-lime), var(--club-cyan), var(--club-pink));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(255, 43, 214, 0.45));
+  animation: club-flow 8s linear infinite;
+}
+
+@keyframes club-flow {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+.club-tagline {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.club-pill {
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 228, 255, 0.6);
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #eaffff;
+  box-shadow: 0 0 14px rgba(34, 228, 255, 0.35), inset 0 0 10px rgba(34, 228, 255, 0.15);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.club-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(34, 228, 255, 0.6), inset 0 0 12px rgba(34, 228, 255, 0.25);
+}
+
+/* The booth: two decks and a crossfader. */
+.club-booth {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    #150c2a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(255, 43, 214, 0.25),
+    0 0 40px -6px rgba(255, 43, 214, 0.45),
+    0 0 60px -10px rgba(34, 228, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.club-deck {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.club-platter {
+  position: relative;
+  width: min(34vw, 170px);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  background: radial-gradient(circle, #2a2440 0 60%, #0d0a18 61% 100%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.club-deck-a .club-platter {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.08), 0 0 26px -4px rgba(255, 43, 214, 0.7);
+}
+.club-deck-b .club-platter {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.08), 0 0 26px -4px rgba(34, 228, 255, 0.7);
+}
+
+.club-vinyl {
+  position: absolute;
+  inset: 7%;
+  border-radius: 9999px;
+  background:
+    repeating-radial-gradient(circle, #111 0 2px, #1c1c22 2px 4px),
+    #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: club-spin 6s linear infinite;
+  animation-play-state: paused;
+}
+
+.club-vinyl::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from 20deg, transparent 0 40deg, rgba(255, 255, 255, 0.16) 60deg, transparent 80deg 220deg, rgba(255, 255, 255, 0.1) 240deg, transparent 260deg);
+}
+
+.club-deck.is-loaded .club-vinyl {
+  animation-play-state: running;
+}
+.club-booth.is-live .club-vinyl {
+  animation-duration: 1.8s;
+}
+
+@keyframes club-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.club-label {
+  width: 42%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.club-label-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, var(--club-violet), #2b1650);
+}
+
+.club-arm {
+  position: absolute;
+  top: 6%;
+  right: -2%;
+  width: 6px;
+  height: 58%;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #e9ebf2, #8a8d99);
+  transform-origin: top center;
+  transform: rotate(24deg);
+  transition: transform 0.6s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+.club-deck.is-loaded .club-arm {
+  transform: rotate(34deg);
+}
+
+.club-deck-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+.club-deck-a .club-deck-title {
+  text-shadow: 0 0 10px rgba(255, 43, 214, 0.8);
+}
+.club-deck-b .club-deck-title {
+  text-shadow: 0 0 10px rgba(34, 228, 255, 0.8);
+}
+
+.club-fader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 74px;
+}
+
+.club-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 44px;
+}
+.club-eq span {
+  width: 5px;
+  height: 30%;
+  border-radius: 2px;
+  background: linear-gradient(0deg, var(--club-lime), var(--club-sun) 60%, var(--club-pink));
+  animation: club-eq 0.9s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.club-booth.is-live .club-eq span,
+.club-deck.is-loaded ~ .club-fader .club-eq span,
+.club-booth:has(.is-loaded) .club-eq span {
+  animation-play-state: running;
+}
+@keyframes club-eq {
+  from {
+    height: 15%;
+  }
+  to {
+    height: 100%;
+  }
+}
+
+.club-fader-track {
+  position: relative;
+  width: 64px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #0b0716;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.club-fader-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fff, #b9bcc8);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+}
+.club-booth.is-live .club-fader-knob {
+  animation: club-fade 2.4s ease-in-out infinite alternate;
+}
+@keyframes club-fade {
+  from {
+    left: 15%;
+  }
+  to {
+    left: 85%;
+  }
+}
+
+.club-fader-label {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-align: center;
+  color: var(--club-lime);
+  text-shadow: 0 0 8px rgba(182, 255, 59, 0.8);
+}
+
+/* Every panel is a lit console plate with a numbered step badge. */
+.club-stage fieldset {
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  padding: 16px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+}
+
+.club-stage fieldset > legend {
+  counter-increment: club-step;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  float: left;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 0 !important;
+  font-size: 15px;
+  color: #fff;
+}
+.club-stage fieldset > legend + * {
+  clear: both;
+}
+
+.club-stage fieldset > legend::before {
+  content: counter(club-step);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #12081f;
+  background: linear-gradient(135deg, var(--club-lime), var(--club-cyan));
+  box-shadow: 0 0 12px rgba(182, 255, 59, 0.55);
+}
+
+/* Song rows: a neon edge on hover, a glow on what's in the set. */
+.club-stage fieldset ol > li {
+  background: linear-gradient(90deg, rgba(255, 43, 214, 0.16), rgba(123, 92, 255, 0.1)) !important;
+  border: 1px solid rgba(255, 43, 214, 0.3);
+}
+
+.club-stage fieldset ul button:hover:not(:disabled) {
+  background: linear-gradient(90deg, rgba(34, 228, 255, 0.12), transparent) !important;
+}
+
+.club-stage fieldset ul button img {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 10px rgba(255, 43, 214, 0.25);
+}
+
+.club-stage input[type="search"],
+.club-stage input[type="text"] {
+  background: rgba(10, 6, 22, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+.club-stage input[type="search"]:focus,
+.club-stage input[type="text"]:focus {
+  border-color: var(--club-cyan) !important;
+  box-shadow: 0 0 0 3px rgba(34, 228, 255, 0.2);
+}
+
+.club-stage input[type="checkbox"] {
+  accent-color: var(--club-pink);
+}
+
+/* Pads: Energy and Length are big glowing launch pads. */
+.club-choice > div > button {
+  border-radius: 12px !important;
+  padding: 10px 18px !important;
+  font-weight: 700;
+  color: #e9e6f5 !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+.club-choice > div > button:active {
+  transform: translateY(2px);
+}
+.club-choice > div > button[aria-pressed="true"] {
+  color: #12081f !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, var(--club-pink), var(--club-violet)) !important;
+  color: #fff !important;
+  box-shadow: 0 0 22px rgba(255, 43, 214, 0.6), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+}
+.club-choice > div > button:nth-child(1)[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--club-cyan), #2f7bff) !important;
+  box-shadow: 0 0 22px rgba(34, 228, 255, 0.6), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+}
+.club-choice > div > button:nth-child(3)[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--club-sun), #ff3d6e) !important;
+  box-shadow: 0 0 22px rgba(255, 138, 61, 0.7), inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Vibe idea chips. */
+.club-stage fieldset .flex-wrap > button.rounded-full {
+  border-color: rgba(182, 255, 59, 0.35) !important;
+}
+.club-stage fieldset .flex-wrap > button.rounded-full:hover {
+  box-shadow: 0 0 12px rgba(182, 255, 59, 0.35);
+}
+
+/* The drop button. */
+.club-go {
+  position: relative;
+  padding: 18px 20px !important;
+  border-radius: 16px !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff !important;
+  background: linear-gradient(90deg, var(--club-pink), var(--club-sun), var(--club-pink)) !important;
+  background-size: 200% 100% !important;
+  box-shadow: 0 0 30px rgba(255, 43, 214, 0.65), 0 6px 0 #8a1272, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: club-flow 4s linear infinite, club-kick 0.94s ease-in-out infinite;
+}
+.club-go:active:not(:disabled) {
+  transform: translateY(4px) !important;
+  box-shadow: 0 0 20px rgba(255, 43, 214, 0.6), 0 2px 0 #8a1272;
+}
+.club-go:disabled {
+  animation: none;
+  box-shadow: 0 6px 0 #4a2a44;
+}
+@keyframes club-kick {
+  0%,
+  100% {
+    box-shadow: 0 0 22px rgba(255, 43, 214, 0.5), 0 6px 0 #8a1272, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  12% {
+    box-shadow: 0 0 46px rgba(255, 138, 61, 0.9), 0 6px 0 #8a1272, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Progress: a striped neon bar. */
+.club-stage .club-progress {
+  background: repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.25) 0 8px,
+      transparent 8px 16px
+    ),
+    linear-gradient(90deg, var(--club-lime), var(--club-cyan), var(--club-pink)) !important;
+  background-size: 22px 22px, 100% 100% !important;
+  box-shadow: 0 0 12px rgba(34, 228, 255, 0.7);
+  animation: club-stripes 0.6s linear infinite;
+}
+.club-stage div:has(> .club-progress) {
+  height: 10px !important;
+}
+@keyframes club-stripes {
+  to {
+    background-position: 22px 0, 0 0;
+  }
+}
+
+/* The finished mix: a neon-framed stage. */
+.club-result {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(180deg, #1a0f33, #120a24) padding-box,
+    linear-gradient(135deg, var(--club-pink), var(--club-cyan), var(--club-lime)) border-box !important;
+  box-shadow: 0 0 40px -8px rgba(255, 43, 214, 0.55);
+}
+.club-result h2 {
+  font-size: 22px !important;
+  background: linear-gradient(90deg, #fff, var(--club-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+@media (max-width: 420px) {
+  .club-booth {
+    gap: 6px;
+    padding: 12px;
+  }
+  .club-fader {
+    width: 58px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-lights span,
+  .club-title,
+  .club-vinyl,
+  .club-eq span,
+  .club-fader-knob,
+  .club-go,
+  .club-stage .club-progress {
+    animation: none !important;
+  }
+}

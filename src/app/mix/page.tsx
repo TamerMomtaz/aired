@@ -5,6 +5,8 @@ import { MixerStudio, type MixSource } from "@/components/mixer/mixer-studio";
 import { createClient } from "@/lib/supabase/server";
 import { getFeed } from "@/lib/works/queries";
 
+import "./club.css";
+
 export const metadata: Metadata = {
   title: "Mix · AIRED",
   description:
@@ -41,16 +43,26 @@ export default async function MixPage({
     }));
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10">
-      <header className="mb-8 flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">Mix</h1>
+    <main className="club-stage mx-auto w-full max-w-3xl flex-1 px-5 py-10">
+      {/* Ibiza club booth (Tee, Nov 2026): lasers, neon, a real deck. Look only;
+          the mixing itself lives in MixerStudio and src/lib/mixer. */}
+      <div className="club-lights" aria-hidden>
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+      <header className="club-hero mb-8 flex flex-col gap-2">
+        <p className="club-kicker">AIRED · Live booth</p>
+        <h1 className="club-title">MIX</h1>
+        <p className="club-tagline">Your songs. One set. Your drop.</p>
         <p className="text-sm text-muted">
           Pick one to six songs (one song becomes a remix). The Mixer finds their beat, locks them to one
           tempo, and weaves them together part by part, like a club set, for
           five minutes or more. Every maker of every song stays credited on
           the mix.
         </p>
-        <Link href="/mixes" className="mt-1 self-start text-sm text-foreground underline underline-offset-4">
+        <Link href="/mixes" className="club-pill mt-1 self-start">
           My mixes on AIRED
         </Link>
       </header>
