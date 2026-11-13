@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -23,8 +24,9 @@ import {
 } from "@/lib/voice/speech";
 import { HostVoice } from "./host-voice";
 
-// The AIRED host: the app says good morning to you by name, asks how you feel,
-// chats about it (with jokes), and puts on songs that fit.
+// Kahotia, AIRED's host: AIRED's mascot (half stitched burlap doll, half blue
+// man, braids in fire and sea) says good morning to you by name, asks how you
+// feel, chats about it (with jokes), and puts on songs that fit.
 //
 // When the app opens, a small speech bubble greets the listener above the mic
 // button. Phones only allow sound and the microphone after a tap, so the bubble
@@ -316,13 +318,18 @@ export function Host({ name }: { name: string | null }) {
         <div
           className={`fixed right-4 z-30 w-[min(20rem,calc(100vw-2rem))] rounded-2xl rounded-br-sm border border-white/12 bg-background/95 p-4 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.9)] backdrop-blur ${lift}`}
           role="dialog"
-          aria-label="AIRED says hello"
+          aria-label="Kahotia says hello"
         >
           <div className="flex items-start gap-3">
-            <HostAvatar className="size-9 shrink-0" />
-            <p dir="auto" className="flex-1 text-sm leading-relaxed text-foreground">
-              {hello}
-            </p>
+            <HostAvatar className="size-14 shrink-0" />
+            <div className="flex flex-1 flex-col gap-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Kahotia
+              </span>
+              <p dir="auto" className="text-sm leading-relaxed text-foreground">
+                {hello}
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setBubble(false)}
@@ -335,7 +342,7 @@ export function Host({ name }: { name: string | null }) {
           <button
             type="button"
             onClick={() => start(true)}
-            className="mt-3 w-full rounded-full bg-cert-red px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+            className="mt-3 w-full rounded-full bg-gradient-to-r from-[#e8902a] to-[#2f74e0] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-8px_rgba(47,116,224,0.8)] transition hover:brightness-110"
           >
             {ar ? "يلا نتكلم" : "Let's talk"}
           </button>
@@ -350,14 +357,17 @@ export function Host({ name }: { name: string | null }) {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Talk with AIRED"
+            aria-label="Talk with Kahotia"
             className="flex max-h-[88dvh] w-full max-w-lg flex-col gap-3 rounded-t-2xl border border-white/10 bg-background p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <HostAvatar className="size-7" active={phase === "speaking"} />
-                <h2 className="text-base font-semibold text-foreground">AIRED</h2>
+                <HostAvatar className="size-10" active={phase === "speaking"} />
+                <div className="flex flex-col leading-tight">
+                  <h2 className="text-base font-semibold text-foreground">Kahotia</h2>
+                  <span className="text-[11px] text-muted">{ar ? "مضيف AIRED" : "your AIRED host"}</span>
+                </div>
               </div>
               <div className="flex items-center gap-1.5">
                 <div
@@ -502,7 +512,7 @@ export function Host({ name }: { name: string | null }) {
               ) : null}
               <p className="min-h-[1.25rem] text-center text-xs text-muted" aria-live="polite">
                 {phase === "speaking"
-                  ? ar ? "AIRED بيتكلم… دوس على المايك عشان تقاطعه" : "AIRED is talking… tap the mic to cut in"
+                  ? ar ? "كاهوتيا بيتكلم… دوس على المايك عشان تقاطعه" : "Kahotia is talking… tap the mic to cut in"
                   : phase === "listening"
                     ? ar ? "سامعك…" : "Listening…"
                     : phase === "thinking"
@@ -563,18 +573,24 @@ function Dot({ delay }: { delay: string }) {
   );
 }
 
+// Kahotia's face: the split portrait (burlap doll | blue man) in a ring that
+// carries the same split, fire braids on the left and sea braids on the right.
+// While Kahotia speaks, the ring breathes.
 function HostAvatar({ className = "", active = false }: { className?: string; active?: boolean }) {
   return (
-    <span
-      className={`relative inline-flex items-center justify-center rounded-full bg-cert-red text-white ${className}`}
-      aria-hidden
-    >
+    <span className={`relative inline-flex shrink-0 rounded-full ${className}`} aria-hidden>
       {active ? (
-        <span className="absolute inset-0 animate-ping rounded-full bg-cert-red/40 motion-reduce:animate-none" />
+        <span className="absolute -inset-1 animate-ping rounded-full bg-gradient-to-r from-[#e8902a]/50 to-[#2f74e0]/50 motion-reduce:animate-none" />
       ) : null}
-      <svg viewBox="0 0 24 24" className="relative size-[55%]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-        <path d="M4 12h1.5M8 8v8M12 5v14M16 9v6M19.5 12H20" />
-      </svg>
+      <span className="relative block size-full rounded-full bg-gradient-to-r from-[#e8902a] to-[#2f74e0] p-[2px] shadow-[0_0_18px_-4px_rgba(47,116,224,0.7)]">
+        <Image
+          src="/kahotia/face.jpg"
+          alt=""
+          width={160}
+          height={160}
+          className="size-full rounded-full object-cover"
+        />
+      </span>
     </span>
   );
 }
