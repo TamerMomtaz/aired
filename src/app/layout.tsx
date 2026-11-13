@@ -2,6 +2,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { CircuitBackdrop } from "@/components/backdrop/circuit-backdrop";
 import { InstallCoach } from "@/components/install/install-coach";
 import { SwRegister } from "@/components/install/sw-register";
 import { AdornedProvider } from "@/components/library/adorned-provider";
@@ -95,6 +96,8 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-dvh antialiased">
+        {/* Brushed Onyx: the living circuit board behind the whole app. */}
+        <CircuitBackdrop />
         {/* The player provider wraps the persistent app shell so the single
             <audio> element survives navigation and keeps playing while the
             listener browses (Phase 5 — continuous play). */}
