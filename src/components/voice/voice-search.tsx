@@ -377,7 +377,7 @@ export function VoiceSearch() {
               }}
               className="self-start text-xs text-muted underline-offset-4 transition hover:text-foreground hover:underline"
             >
-              {ar ? "مش عارف تسمع إيه؟ اتكلم مع AIRED عن مودك" : "Not sure what you want? Talk to AIRED about your mood"}
+              {ar ? "مش عارف تسمع إيه؟ اتكلم مع كاهوتيا عن مودك" : "Not sure what you want? Talk to Kahotia about your mood"}
             </button>
 
             {message ? (

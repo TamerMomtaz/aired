@@ -26,6 +26,8 @@ function scoreVoice(v: SpeechSynthesisVoice, lang: VoiceLang): number {
   if (lang === "en" && (l === "en-us" || l === "en-gb")) s += 1;
   if (/natural|neural|premium|enhanced|siri/i.test(v.name)) s += 4;
   if (/google/i.test(v.name)) s += 2;
+  // Kahotia is a he: prefer the phone's male voices where their names say so.
+  if (/\b(maged|majed|tarik|hamed|daniel|aaron|arthur|alex|fred|gordon|rishi|tom|male)\b/i.test(v.name)) s += 3;
   if (v.localService === false) s += 1; // cloud voices tend to sound better
   return s;
 }
@@ -144,8 +146,10 @@ export class HostVoice {
       u.lang = lang === "ar" ? "ar-EG" : "en-US";
       const v = bestVoice(lang);
       if (v) u.voice = v;
-      u.rate = lang === "ar" ? 1 : 1.03;
-      u.pitch = 1.05;
+      // A touch slower and lower than the default reads warmer and less
+      // like a talking box.
+      u.rate = lang === "ar" ? 0.96 : 0.98;
+      u.pitch = 0.92;
       // Some phones never fire onend; don't let the conversation hang.
       const guard = window.setTimeout(finish, 4000 + text.length * 110);
       function finish() {

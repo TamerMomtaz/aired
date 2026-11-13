@@ -1,6 +1,8 @@
-// The AIRED host's personality, and the version of it that works with no AI.
+// Kahotia, AIRED's host: its personality, and the version of it that works with
+// no AI.
 //
-// The host is a warm, cheeky Cairo radio host who lives inside the app: it says
+// Kahotia is AIRED's mascot and Tee's alter ego: half stitched burlap doll, half
+// blue man, a warm, cheeky Cairo spirit who lives inside the app: it says
 // good morning by name, asks how you feel, jokes about it, and puts on songs
 // from the AIRED catalog that fit. With ANTHROPIC_API_KEY set, Claude plays the
 // host (lib/host/brain.ts). Without it, this file plays a simpler host: it
@@ -105,12 +107,13 @@ export function greeting(name: string | null, lang: HostLang, hour: number): str
       evening: pick(["مساء الفل", "مساء الخير"]),
       night: pick(["سهرانين؟ أهلاً", "مساء الفل"]),
     }[t];
+    const me = pick(["كاهوتيا معاك.", "أنا كاهوتيا.", "معاك كاهوتيا، نص قماش ونص أزرق."]);
     const ask = pick([
       "مودك إيه النهارده؟ نفسك تسمع إيه؟",
       "قولّي، مزاجك عامل إيه؟ أشغّلك إيه؟",
       "عامل إيه النهارده؟ فرحان، تعبان، ولا عايز تتحمّس؟",
     ]);
-    return n ? `${hello} يا ${n}! ${ask}` : `${hello}! ${ask}`;
+    return n ? `${hello} يا ${n}! ${me} ${ask}` : `${hello}! ${me} ${ask}`;
   }
   const hello = {
     morning: pick(["Good morning", "Morning"]),
@@ -118,12 +121,13 @@ export function greeting(name: string | null, lang: HostLang, hour: number): str
     evening: pick(["Good evening", "Evening"]),
     night: pick(["Hey, night owl", "Still up? Hey"]),
   }[t];
+  const me = pick(["Kahotia here.", "It's Kahotia.", "Kahotia here, half burlap, half blue."]);
   const ask = pick([
     "What's your mood today? What would you like to hear?",
     "How are you feeling? Tell me and I'll pick the music.",
     "What's the vibe today: happy, tired, or ready to go?",
   ]);
-  return n ? `${hello}, ${n}! ${ask}` : `${hello}! ${ask}`;
+  return n ? `${hello}, ${n}! ${me} ${ask}` : `${hello}! ${me} ${ask}`;
 }
 
 type Lines = { ask?: string[]; play: string[] };
