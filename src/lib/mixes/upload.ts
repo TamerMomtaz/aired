@@ -30,10 +30,11 @@ export async function uploadMixToAccount(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const path = `${user.id}/mix-${uploadId}/master.wav`;
+  const mp3 = audio.type === "audio/mpeg";
+  const path = `${user.id}/mix-${uploadId}/master.${mp3 ? "mp3" : "wav"}`;
   const up = await supabase.storage
     .from("masters")
-    .upload(path, audio, { upsert: false, contentType: "audio/wav", cacheControl: "3600" });
+    .upload(path, audio, { upsert: false, contentType: mp3 ? "audio/mpeg" : "audio/wav", cacheControl: "3600" });
   if (up.error) return { error: `The upload didn't finish: ${up.error.message}` };
 
   const res = await fetch("/api/mixes", {

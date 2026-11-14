@@ -193,7 +193,7 @@ export async function planWithBrain(input: {
 
   const stream = getClient().beta.messages.stream({
     model: MODEL,
-    max_tokens: 6000,
+    max_tokens: 12000,
     system: SYSTEM,
     messages: [{ role: "user", content: user }],
     output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
@@ -206,15 +206,21 @@ export async function planWithBrain(input: {
   } finally {
     clearTimeout(timer);
   }
-  if (response.stop_reason === "refusal") return null;
+  // Why a plan couldn't be read, in the logs (no song or vibe text): a 10
+  // minute set came back unreadable once, and the reason wasn't recorded.
+  const why = (what: string) => {
+    console.log(`mix-plan unreadable: ${what} · stop ${response.stop_reason} · out ${response.usage?.output_tokens ?? "?"} tokens`);
+    return null;
+  };
+  if (response.stop_reason === "refusal") return why("refusal");
   const text = response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   let out: { title?: unknown; story?: unknown; parts?: unknown };
   try {
     out = JSON.parse(text);
   } catch {
-    return null;
+    return why(`not JSON (${text.length} chars)`);
   }
-  if (!Array.isArray(out.parts)) return null;
+  if (!Array.isArray(out.parts)) return why("no parts");
   const visits = (out.parts as RawPart[])
     .filter((p) => Number.isInteger(p?.s) && Number.isInteger(p?.p))
     .map((p) => {

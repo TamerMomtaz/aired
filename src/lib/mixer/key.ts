@@ -161,3 +161,13 @@ export function camelotDistance(a: MusicalKey, b: MusicalKey): number {
   if (around === 0) return side;
   return around + side;
 }
+
+// Two keys that sound sour on top of each other: 3+ steps apart on the wheel,
+// and both keys actually heard. A key read with little confidence (a song with
+// hand drums and few held notes) is a guess, and a guess must not stop two
+// songs from blending: that turned every switch in Tee's mix of 0013 and 0118
+// into a hard cut, over a 3% key reading.
+export const KEY_SURE = 0.3;
+export function keysClash(a: MusicalKey, b: MusicalKey): boolean {
+  return a.confidence >= KEY_SURE && b.confidence >= KEY_SURE && camelotDistance(a, b) >= 3;
+}
