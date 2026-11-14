@@ -9,6 +9,7 @@ import { formatDuration } from "@/lib/format";
 import { deleteMix, loadMixAudio, markOnAccount, mixPlayerId, renameMix, type SavedMix } from "@/lib/mixer/library";
 import { Mp3Button } from "@/components/mixer/mp3-button";
 import { uploadMixToAccount } from "@/lib/mixes/upload";
+import { wavToMp3 } from "@/lib/mixer/mp3";
 
 // The catalog numbers a mix was built from. Mixes saved before these were
 // stored carry them only in their credit labels ("AIRED-0092 · …").
@@ -59,14 +60,26 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
   const [confirm, setConfirm] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keeping, setKeeping] = useState<string | null>(null);
+  const [step, setStep] = useState<string | null>(null);
   const [needSignIn, setNeedSignIn] = useState(false);
 
   async function keep(m: SavedMix) {
     setError(null);
     setNeedSignIn(false);
-    const blob = await loadMixAudio(m.id).catch(() => null);
-    if (!blob) return setError("That mix couldn't be read from this device.");
+    const wav = await loadMixAudio(m.id).catch(() => null);
+    if (!wav) return setError("That mix couldn't be read from this device.");
     setKeeping(m.id);
+    // A 10 minute WAV is about 100 MB, too big to get up from a phone (Tee
+    // pressed Keep and it just sat there). The same mix as a 192 kbps MP3 is
+    // about 14 MB; the worker turns either into the stream.
+    setStep("Making it small to send… 0%");
+    const blob = await wavToMp3(wav, (f) => setStep(`Making it small to send… ${Math.round(f * 100)}%`)).catch(() => null);
+    if (!blob) {
+      setKeeping(null);
+      setStep(null);
+      return setError("That mix couldn't be prepared for AIRED. Try again.");
+    }
+    setStep(`Sending ${Math.max(1, Math.round(blob.size / 1e6))} MB to AIRED…`);
     const r = await uploadMixToAccount(blob, {
       title: m.title,
       seconds: m.seconds,
@@ -78,6 +91,7 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
       sourceWorkIds: sourceIds(m),
     });
     setKeeping(null);
+    setStep(null);
     if ("error" in r) {
       if (r.error === "signin") setNeedSignIn(true);
       else setError(r.error);
@@ -186,7 +200,7 @@ export function MixaTeeShelf({ mixes, onChange }: { mixes: SavedMix[]; onChange:
                     disabled={keeping !== null}
                     className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
                   >
-                    {keeping === m.id ? "Saving to AIRED…" : "Keep on AIRED"}
+                    {keeping === m.id ? (step ?? "Saving to AIRED…") : "Keep on AIRED"}
                   </button>
                 )}
                 <button

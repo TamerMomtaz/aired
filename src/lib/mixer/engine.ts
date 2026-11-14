@@ -35,7 +35,7 @@ import {
   type StemName,
   type StemSource,
 } from "./load";
-import { camelotDistance, type MusicalKey } from "./key";
+import { keysClash, type MusicalKey } from "./key";
 import { applyGrains, KEY_LOCK_MIN, stretchWithGrains } from "./stretch";
 import {
   barSeconds,
@@ -402,7 +402,7 @@ export async function prepareStems(
     const prev = plan.visits[idx - 1];
     const ranges: [number, number][] = [];
     const clash =
-      !!prev && prev.song !== v.song && camelotDistance(prepared[prev.song].key, prepared[v.song].key) >= 3;
+      !!prev && prev.song !== v.song && keysClash(prepared[prev.song].key, prepared[v.song].key);
     if (v.move === "blend") ranges.push([T - (clash ? 2 : st.blendBars) * bar - 0.05, T + bar]);
     if (v.move === "mashup") ranges.push([T - 0.05, T + mashBars * bar + beat]);
     if (v.fx.breakdown) ranges.push([T, (v.fx.loopBuild ? Tend - 4 * bar : Tend) - 0.02]);
@@ -690,7 +690,7 @@ export async function renderSet(
     // Keys that clash (3+ steps apart on the Camelot wheel) sound sour layered
     // for long, so those blends are kept short.
     const prevSong = idx > 0 ? prepared[visits[idx - 1].song] : null;
-    const clash = !!prevSong && prevSong !== song && camelotDistance(prevSong.key, song.key) >= 3;
+    const clash = !!prevSong && prevSong !== song && keysClash(prevSong.key, song.key);
     if (v.move === "flow") {
       // The same song carrying on: a 12 ms seam, nothing a listener hears.
       startAt = T - SEAM;

@@ -8,7 +8,7 @@
 // Everything here is plain data. No audio, no secrets: the brain only ever sees
 // numbers about the songs plus their public titles, makers and descriptors.
 
-import { camelotDistance, type MusicalKey } from "./key";
+import { camelotDistance, keysClash, type MusicalKey } from "./key";
 import type { Mood } from "./moods";
 import type { PhraseLabel } from "./structure";
 
@@ -125,9 +125,11 @@ export const STYLE: Record<
 };
 
 // The furthest a song is sped up or slowed down to lock. Key lock keeps the
-// pitch, but past about 8% a voice starts to sound stretched, and DJ decks
-// stop there too.
-export const MAX_NUDGE = 0.08;
+// pitch. This was 8% (a DJ deck's narrow range), but then two songs at 100 and
+// 122 BPM could never lock and Tee's two-song mix was nothing but hard cuts.
+// With the set meeting songs halfway, 12% each way locks songs up to about a
+// quarter apart (100 and 122 meet at 110), which is a wide deck's range.
+export const MAX_NUDGE = 0.12;
 export const POST_BARS = 8; // audio kept after a part, for trades and fades
 
 // The set's tempo: the opener's (pushed for Peak, eased for Lounge), unless
@@ -268,11 +270,13 @@ export function fixScript(
     // Keys 3+ steps apart on the wheel sound sour on top of each other, so
     // those songs never overlap: the old one echoes out and the new one lands
     // clean, the way a DJ gets between songs that don't share a key.
-    const clash =
-      !!prev &&
-      prev.song !== raw.song &&
-      camelotDistance(songs[prev.song].key, s.key) >= 3;
-    if (clash && move !== "cut") move = "cut";
+    const clash = !!prev && prev.song !== raw.song && keysClash(songs[prev.song].key, s.key);
+    // On stems two clashing songs can still pass the beat: a short blend
+    // where only the incoming drums and music ride in, the bass changes on the
+    // one and the voice after (see the engine). Without stems they never
+    // overlap.
+    const bridge = clash && !!prev && !!songs[prev.song].stems && !!s.stems;
+    if (clash && move !== "cut") move = bridge ? "blend" : "cut";
     // A trade of a part with itself does nothing.
     if (move === "trade" && prev?.song === raw.song && prev.phrase === phrase) move = "blend";
     const fx: Fx = { ...NO_FX, ...raw.fx };
@@ -288,7 +292,7 @@ export function fixScript(
     }
     if (energy === "lounge") {
       fx.claps = fx.loopBuild = fx.kick = fx.hats = fx.pump = false;
-      if (move === "cut" && prev && rates[raw.song].synced && rates[prev.song].synced && !clash) move = "blend";
+      if (move === "cut" && prev && rates[raw.song].synced && rates[prev.song].synced && (!clash || bridge)) move = "blend";
       if (move === "trade") move = "mashup";
     }
     const v: ScriptVisit = { song: raw.song, phrase, bars, move, fx, note: raw.note?.slice(0, 160) };
@@ -306,13 +310,12 @@ export function fixScript(
       if (total >= minutes * 60) break;
       if (used.has(`${v.song}:${v.phrase}`) && extra.length > out.length) continue;
       const prev = out[out.length - 1];
-      const clash =
-        prev.song !== v.song &&
-        camelotDistance(songs[prev.song].key, songs[v.song].key) >= 3;
+      const clash = prev.song !== v.song && keysClash(songs[prev.song].key, songs[v.song].key);
+      const bridge = clash && !!songs[prev.song].stems && !!songs[v.song].stems;
       let move: Move =
-        !rates[v.song].synced || !rates[prev.song].synced || prev.fx.loopBuild || clash
+        !rates[v.song].synced || !rates[prev.song].synced || prev.fx.loopBuild || (clash && !bridge)
           ? "cut"
-          : v.move === "open"
+          : clash || v.move === "open"
             ? "blend"
             : v.move;
       if (move === "trade" && prev.song === v.song && prev.phrase === v.phrase) move = "blend";
