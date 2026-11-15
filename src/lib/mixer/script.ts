@@ -53,6 +53,10 @@ export type Layer = {
   at: number; // bar inside the part where it lands
   times: number; // how many times in a row (1–4)
   style: LayerStyle;
+  // Set by the Mixer's ears (never planned): seconds before the line lands and
+  // after it leaves that the singer underneath steps aside, so they step out
+  // and back in on a breath, not mid-word.
+  duck?: [number, number];
 };
 
 export type ScriptVisit = {
@@ -188,7 +192,7 @@ export function barSeconds(bpm: number): number {
 }
 
 // Can phrase `p` of song `s` play for `bars` output bars at this rate?
-function fits(s: SongBrief, p: number, bars: number, srcBar: number): boolean {
+export function fits(s: SongBrief, p: number, bars: number, srcBar: number): boolean {
   const ph = s.phrases[p];
   return !!ph && ph.start + (bars + POST_BARS) * srcBar <= s.duration - 0.05;
 }
@@ -359,7 +363,7 @@ export function fixScript(
 // The phrase a drop lands on: the one asked for if it's among the song's
 // strongest (energy and bass both at least 6 of 9), else the strongest that
 // fits, nearest to it.
-function strongPhrase(s: SongBrief, asked: number, bars: Bars, srcBar: number): number {
+export function strongPhrase(s: SongBrief, asked: number, bars: Bars, srcBar: number): number {
   const strong = (i: number) => s.phrases[i].energy >= 6 && s.phrases[i].bass >= 6;
   if (strong(asked)) return asked;
   let best = asked;
