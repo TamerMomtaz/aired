@@ -15,13 +15,10 @@ import {
   MAX_TRACKS,
   MAX_REPEATS,
   MIN_TRACKS,
-  planTimes,
-  prepareSongs,
-  prepareStems,
-  renderSet,
   type MixPlan,
   type SongAnalysis,
 } from "@/lib/mixer/engine";
+import { earsLine, mixWithEars } from "@/lib/mixer/ears";
 import { detectKey } from "@/lib/mixer/key";
 import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
 import { loadDeck, loadStemSource, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
@@ -102,6 +99,8 @@ type Stage =
       // Why the Mixer's own rules planned it, when the DJ brain was asked but
       // didn't answer.
       brainMiss: string | null;
+      // What the Mixer heard when it listened to its own mix, and fixed.
+      ears: string;
     }
   | { kind: "error"; message: string };
 
@@ -283,22 +282,20 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       }
       script = fixScript(script ?? rulesScript(briefs, energy, minutes, 0, mood), briefs, energy, minutes, mood);
 
-      // 3. Decode only the parts the plan uses, then mix.
-      show("Cueing up the parts", 0.7);
-      const prepared = await prepareSongs(analyses, script, (f) => show("Cueing up the parts", 0.7 + f * 0.1));
-      if (ac.signal.aborted) return;
-      show("Mixing the set", 0.82);
-      await tick();
-      const plan = planTimes(script, analyses, prepared);
-      if (analyses.some((a) => a.stems)) {
-        show("Splitting the moves into stems", 0.82);
-        await prepareStems(analyses, prepared, plan, energy, (f) => show("Splitting the moves into stems", 0.82 + f * 0.08));
-        if (ac.signal.aborted) return;
-        show("Mixing the set", 0.9);
-      }
+      // 3. Decode only the parts the plan uses, then mix. The Mixer listens to
+      // its own mix first and repairs what it hears (lib/mixer/ears.ts).
       const signed = useTag && tag ? await decodeTag(tag.audio, MIX_SAMPLE_RATE) : null;
       const dj = useTag && tag?.name ? tag.name : null;
-      const buffer = await renderSet(prepared, plan, energy, signed, mood);
+      const { plan, buffer, report } = await mixWithEars({
+        songs: analyses,
+        briefs,
+        script,
+        energy,
+        mood,
+        tag: signed,
+        show,
+        signal: ac.signal,
+      });
       if (ac.signal.aborted) return;
 
       show("Packing the file", 0.96);
@@ -356,6 +353,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         dj,
         saved,
         brainMiss,
+        ears: earsLine(report),
       });
     } catch (err) {
       if (ac.signal.aborted) return;
@@ -590,6 +588,7 @@ function MixResult({
         </p>
         {plan.story ? <p className="mt-1 text-sm text-foreground/90">{plan.story}</p> : null}
         {stage.brainMiss ? <p className="mt-1 text-xs text-muted">{stage.brainMiss}</p> : null}
+        <p className="mt-1 text-xs text-muted">{stage.ears}</p>
       </div>
 
       <MixPlayer

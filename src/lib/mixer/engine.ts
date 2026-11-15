@@ -123,6 +123,12 @@ export type PlannedVisit = {
   layers: Layer[];
   note?: string;
   sourceStart: number;
+  // Set by the Mixer's ears, on stems: where the singer hands over, so a voice
+  // ends and starts on a breath while the beat stays on the grid. voiceIn is
+  // seconds from this part's start when its singer comes in; voiceOut is
+  // seconds from its end when its singer stops (negative: before the end).
+  voiceIn?: number;
+  voiceOut?: number;
 };
 
 export type MixPlan = {
@@ -197,10 +203,13 @@ export async function prepareSongs(
   songs: SongAnalysis[],
   script: SetScript,
   onProgress?: (fraction: number) => void,
+  // Songs already prepared for this set (same tempo): only the parts and lines
+  // the script newly asks for are decoded. Used when the ears repair a plan.
+  have?: PreparedSong[],
 ): Promise<PreparedSong[]> {
   const master = setBpm(songs, script);
   const mBar = barSeconds(master);
-  const out: PreparedSong[] = songs.map((s) => {
+  const out: PreparedSong[] = have ?? songs.map((s) => {
     const { rate, synced } = chooseRate(master, s.tempo.bpm);
     return {
       title: s.title,
@@ -213,13 +222,15 @@ export async function prepareSongs(
       lines: new Map(),
     };
   });
-  const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars, v.skip)}`, v])).values()];
+  const jobs = [...new Map(script.visits.map((v) => [`${v.song}:${partKey(v.phrase, v.bars, v.skip)}`, v])).values()].filter(
+    (v) => !out[v.song].parts.has(partKey(v.phrase, v.bars, v.skip)),
+  );
   const lineJobs = [
     ...new Map(
       script.visits.flatMap((v) => v.layers ?? []).map((l) => [`${l.song}:${lineKey(l)}`, l]),
     ).values(),
-  ];
-  const all = jobs.length + lineJobs.length;
+  ].filter((l) => !out[l.song].lines.has(lineKey(l)));
+  const all = Math.max(1, jobs.length + lineJobs.length);
   let done = 0;
   for (const v of jobs) {
     const s = songs[v.song];
@@ -403,12 +414,21 @@ export async function prepareStems(
     const ranges: [number, number][] = [];
     const clash =
       !!prev && prev.song !== v.song && keysClash(prepared[prev.song].key, prepared[v.song].key);
-    if (v.move === "blend") ranges.push([T - (clash ? 2 : st.blendBars) * bar - 0.05, T + bar]);
+    const vIn = v.voiceIn ?? 0;
+    const vOut = v.voiceOut ?? 0;
+    if (v.move === "blend") ranges.push([T - (clash ? 2 : st.blendBars) * bar - 0.05, T + Math.max(bar, vIn + 0.2)]);
     if (v.move === "mashup") ranges.push([T - 0.05, T + mashBars * bar + beat]);
+    if (v.move === "cut" && vIn > 0) ranges.push([T - 0.05, T + vIn + 0.2]);
     if (v.fx.breakdown) ranges.push([T, (v.fx.loopBuild ? Tend - 4 * bar : Tend) - 0.02]);
-    for (const l of v.layers) ranges.push([T + l.at * bar - 0.1, T + (l.at + l.len * l.times) * bar + 0.1]);
-    if (next?.move === "blend") ranges.push([Tend - bar, Tend + (energy === "lounge" ? 4 : 1) * bar + 0.05]);
-    if (next?.move === "mashup") ranges.push([Tend - beat, Tend + mashBars * bar + 0.05]);
+    for (const l of v.layers)
+      ranges.push([
+        T + l.at * bar + Math.min(0, l.duck?.[0] ?? 0) - 0.1,
+        T + (l.at + l.len * l.times) * bar + Math.max(0, l.duck?.[1] ?? 0) + 0.1,
+      ]);
+    if (next?.move === "blend")
+      ranges.push([Tend + Math.min(-bar, vOut - 0.1), Tend + (energy === "lounge" ? 4 : 1) * bar + 0.05]);
+    if (next?.move === "mashup") ranges.push([Tend + Math.min(-beat, vOut - 0.1), Tend + mashBars * bar + 0.05]);
+    if (next?.move === "cut" && v.voiceOut !== undefined) ranges.push([Tend + vOut - 0.1, Tend + 0.05]);
     if (ranges.length) wanted.push({ v, ranges });
   });
   let done = 0;
@@ -701,12 +721,14 @@ export async function renderSet(
       gain.gain.setValueAtTime(0, startAt);
       gain.gain.linearRampToValueAtTime(g * 0.8, T);
       gain.gain.setValueAtTime(g, T);
-      if (covered(startAt, T)) {
+      if (covered(startAt, Math.max(T, T + (v.voiceIn ?? 0) + 0.05))) {
         // On stems: the new song's drums and music ride in under the old
-        // song; its bassline takes over exactly on the one, its singer after.
+        // song; its bassline takes over exactly on the one, its singer after
+        // (on the breath the ears found, when they found one).
         stem(["bass", "vocals"], startAt - 0.05, 0, 0.001);
         stem(["bass"], T - 0.015, 1);
-        stem(["vocals"], T, 1, beat / 2);
+        if (v.voiceIn !== undefined) stem(["vocals"], T + v.voiceIn - 0.03, 1, 0.03);
+        else stem(["vocals"], T, 1, beat / 2);
       } else {
         shelf.gain.setValueAtTime(-30, startAt);
         shelf.gain.setValueAtTime(-30, T - 0.01);
@@ -721,6 +743,11 @@ export async function renderSet(
         // song's beat and bassline, then its own beat takes over.
         stem(["drums", "bass"], T - 0.05, 0, 0.001);
         stem(["drums", "bass"], T + mashBars * bar - 0.015, 1);
+        if (v.voiceIn && v.voiceIn > 0) {
+          // Its singer waits for the start of a line.
+          stem(["vocals"], T - 0.05, 0, 0.001);
+          stem(["vocals"], T + v.voiceIn - 0.03, 1, 0.03);
+        }
       } else {
         hp.frequency.setValueAtTime(300, T);
         hp.frequency.setValueAtTime(300, T + mashBars * bar - 0.01);
@@ -733,6 +760,10 @@ export async function renderSet(
       gain.gain.linearRampToValueAtTime(g, T + beat / 2);
       lp.frequency.setValueAtTime(700, T);
       lp.frequency.exponentialRampToValueAtTime(20000, T + bar);
+      if (v.voiceIn && v.voiceIn > 0 && covered(T, T + v.voiceIn + 0.05)) {
+        stem(["vocals"], T - 0.05, 0, 0.001);
+        stem(["vocals"], T + v.voiceIn - 0.03, 1, 0.03);
+      }
     } else {
       gain.gain.setValueAtTime(v.move === "open" ? 0 : g, T);
       if (v.move === "open") gain.gain.linearRampToValueAtTime(g, T + bar);
@@ -797,11 +828,12 @@ export async function renderSet(
     } else if (next.move === "blend") {
       // Lounge lets the old song drift away over 4 bars.
       const out = (energy === "lounge" ? 4 : 1) * bar;
-      if (covered(Tend - bar, Tend + out)) {
+      if (covered(Tend + Math.min(-bar, (v.voiceOut ?? 0) - 0.05), Tend + out)) {
         // On stems: the old bassline hands over on the one and the old voice
         // finishes its line; only the drums and music drift away.
         stem(["bass"], Tend - 0.015, 0);
-        stem(["vocals"], Tend - beat / 2, 0, beat / 2);
+        if (v.voiceOut !== undefined) stem(["vocals"], Tend + v.voiceOut, 0, 0.05);
+        else stem(["vocals"], Tend - beat / 2, 0, beat / 2);
       } else {
         shelf.gain.setValueAtTime(0, Tend - 0.01);
         shelf.gain.linearRampToValueAtTime(-30, Tend);
@@ -815,10 +847,12 @@ export async function renderSet(
       trade(Tend, false, 0);
       stopAt = Tend + 8 * bar + 0.05;
     } else if (next.move === "mashup") {
-      if (covered(Tend - beat, Tend + mashBars * bar)) {
+      if (covered(Tend + Math.min(-beat, (v.voiceOut ?? 0) - 0.05), Tend + mashBars * bar)) {
         // On stems: only this song's beat and bassline stay, under the new
         // song's voice.
-        stem(["vocals", "other"], Tend - 0.015, 0);
+        stem(["other"], Tend - 0.015, 0);
+        if (v.voiceOut !== undefined) stem(["vocals"], Tend + v.voiceOut, 0, 0.05);
+        else stem(["vocals"], Tend - 0.015, 0);
       } else {
         lp.frequency.setValueAtTime(20000, Tend);
         lp.frequency.exponentialRampToValueAtTime(320, Tend + 0.25);
@@ -827,6 +861,9 @@ export async function renderSet(
       gain.gain.linearRampToValueAtTime(0, Tend + mashBars * bar);
       stopAt = Tend + mashBars * bar + 0.05;
     } else {
+      // A cut: on stems the singer stops on the last breath before it.
+      if (v.voiceOut !== undefined && v.voiceOut < 0 && covered(Tend + v.voiceOut - 0.05, Tend))
+        stem(["vocals"], Tend + v.voiceOut, 0, 0.05);
       send.gain.setValueAtTime(0, Tend - beat);
       send.gain.linearRampToValueAtTime(0.9, Tend - 0.02);
       send.gain.linearRampToValueAtTime(0, Tend);
@@ -919,10 +956,13 @@ export async function renderSet(
         lsend.gain.linearRampToValueAtTime(0.95, w1 - 0.02);
         lsend.gain.linearRampToValueAtTime(0, w1);
       }
-      if (covered(w0, w1)) {
-        // On stems the singer underneath steps aside for the line.
-        stem(["vocals"], w0 - 0.06, 0.12, 0.06);
-        stem(["vocals"], w1, 1, 0.08);
+      const d0 = w0 + Math.min(0, l.duck?.[0] ?? 0);
+      const d1 = w1 + Math.max(0, l.duck?.[1] ?? 0);
+      if (covered(d0, d1)) {
+        // On stems the singer underneath steps aside for the line (on a
+        // breath, when the ears found one).
+        stem(["vocals"], d0 - 0.06, 0.12, 0.06);
+        stem(["vocals"], d1, 1, 0.08);
       } else {
         mid.gain.setValueAtTime(0, Math.max(T, w0 - 0.05));
         mid.gain.linearRampToValueAtTime(-7, w0);
