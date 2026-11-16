@@ -499,6 +499,50 @@ function noiseBuffer(ctx: BaseAudioContext, seconds = 2): AudioBuffer {
   return buf;
 }
 
+// The DJ's ways out of a part when the next one comes in on a cut:
+//   echo   — the last beat thrown into an echo (the default)
+//   brake  — the record slows to a stop: for songs whose tempos can't lock
+//   filter — the bass drains away over the last bar: into a bigger part
+//   spin   — a backspin: now and then in a Club or Peak set
+type Exit = "echo" | "brake" | "filter" | "spin" | null;
+
+function exitsFor(
+  visits: PlannedVisit[],
+  prepared: PreparedSong[],
+  energy: Energy,
+  mood: Mood,
+): Exit[] {
+  const handDrums = mood.family === "belly" || mood.family === "dabka";
+  let cuts = 0;
+  return visits.map((v, i) => {
+    const next = visits[i + 1];
+    if (!next || next.move !== "cut" || v.fx.loopBuild) return null;
+    cuts++;
+    const locked = prepared[v.song].synced && prepared[next.song].synced;
+    // Tempos that can't lock: a brake every other time (a DJ's way to change
+    // tempo), an echo throw in between so it never becomes a gimmick.
+    if (!locked) return energy === "lounge" || handDrums || cuts % 2 === 0 ? "echo" : "brake";
+    if (next.fx.drop || v.fx.filterRise) return "filter";
+    if (energy !== "lounge" && !handDrums && cuts % 3 === 0) return "spin";
+    return "echo";
+  });
+}
+
+// `seconds` of a clip before clip second `to`, backwards (for a backspin).
+function reversed(ctx: BaseAudioContext, clip: AudioBuffer, to: number, seconds: number): AudioBuffer | null {
+  const sr = clip.sampleRate;
+  const b = Math.min(clip.length, Math.floor(to * sr));
+  const a = Math.max(0, b - Math.floor(seconds * sr));
+  if (b - a < sr * 0.1) return null;
+  const out = ctx.createBuffer(clip.numberOfChannels, b - a, sr);
+  for (let c = 0; c < clip.numberOfChannels; c++) {
+    const src = clip.getChannelData(c);
+    const dst = out.getChannelData(c);
+    for (let i = 0; i < b - a; i++) dst[i] = src[b - 1 - i];
+  }
+  return out;
+}
+
 export async function renderSet(
   prepared: PreparedSong[],
   plan: MixPlan,
@@ -589,6 +633,9 @@ export async function renderSet(
   const rmsAll = visits.map((v) => partOf(v).rms).sort((a, b) => a - b);
   const target = rmsAll[Math.floor(rmsAll.length / 2)] || 0.1;
 
+  // How each part leaves on a cut: the DJ's toolbox, picked per switch.
+  const exits = exitsFor(visits, prepared, energy, mood);
+
   // ---- the parts ------------------------------------------------------------
   visits.forEach((v, idx) => {
     const song = prepared[v.song];
@@ -629,10 +676,14 @@ export async function renderSet(
     const stemGate = ctx.createGain();
     stemGate.gain.value = 0;
     const faders = {} as Record<StemName, GainNode>;
-    for (const n of STEM_NAMES) {
-      faders[n] = ctx.createGain();
-      faders[n].connect(stemGate);
-    }
+    for (const n of STEM_NAMES) faders[n] = ctx.createGain();
+    // The drums pass a high-pass, so an incoming song can ride in on its hats
+    // alone and swap kicks with the old song exactly on the one.
+    const drumHp = ctx.createBiquadFilter();
+    drumHp.type = "highpass";
+    drumHp.frequency.value = 20;
+    faders.drums.connect(drumHp).connect(stemGate);
+    for (const n of ["vocals", "bass", "other"] as const) faders[n].connect(stemGate);
     stemGate.connect(shelf);
     mixGate.connect(shelf);
     const events = new Map<AudioParam, [number, number, number][]>();
@@ -727,6 +778,16 @@ export async function renderSet(
         // (on the breath the ears found, when they found one).
         stem(["bass", "vocals"], startAt - 0.05, 0, 0.001);
         stem(["bass"], T - 0.015, 1);
+        // Never two kicks: its hats ride in, its kick lands on the one.
+        drumHp.frequency.setValueAtTime(380, startAt - 0.05);
+        drumHp.frequency.setValueAtTime(380, T - 0.02);
+        drumHp.frequency.exponentialRampToValueAtTime(20, T + 0.01);
+        if (clash) {
+          // Keys that clash: its chords and melody wait for the one too, so
+          // the bridge is only drums under the old song.
+          stem(["other"], startAt - 0.05, 0, 0.001);
+          stem(["other"], T - 0.015, 1);
+        }
         if (v.voiceIn !== undefined) stem(["vocals"], T + v.voiceIn - 0.03, 1, 0.03);
         else stem(["vocals"], T, 1, beat / 2);
       } else {
@@ -754,12 +815,19 @@ export async function renderSet(
         hp.frequency.linearRampToValueAtTime(20, T + mashBars * bar);
       }
     } else if (v.move === "cut" && !visits[idx - 1]?.fx.loopBuild) {
-      // A cut that isn't a drop lands soft: in over half a beat, its top
-      // opening over the first bar, under the old song's echo tail.
-      gain.gain.setValueAtTime(0, T);
-      gain.gain.linearRampToValueAtTime(g, T + beat / 2);
-      lp.frequency.setValueAtTime(700, T);
-      lp.frequency.exponentialRampToValueAtTime(20000, T + bar);
+      const after = exits[idx - 1];
+      if (after === "brake" || after === "spin") {
+        // After a brake or a backspin the new song slams in on the one.
+        gain.gain.setValueAtTime(0, T);
+        gain.gain.linearRampToValueAtTime(g, T + 0.006);
+      } else {
+        // Otherwise a cut lands soft: in over half a beat, its top opening
+        // over the first bar, under the old song's echo tail.
+        gain.gain.setValueAtTime(0, T);
+        gain.gain.linearRampToValueAtTime(g, T + beat / 2);
+        lp.frequency.setValueAtTime(700, T);
+        lp.frequency.exponentialRampToValueAtTime(20000, T + bar);
+      }
       if (v.voiceIn && v.voiceIn > 0 && covered(T, T + v.voiceIn + 0.05)) {
         stem(["vocals"], T - 0.05, 0, 0.001);
         stem(["vocals"], T + v.voiceIn - 0.03, 1, 0.03);
@@ -832,6 +900,7 @@ export async function renderSet(
         // On stems: the old bassline hands over on the one and the old voice
         // finishes its line; only the drums and music drift away.
         stem(["bass"], Tend - 0.015, 0);
+        if (keysClash(song.key, prepared[next.song].key) && next.song !== v.song) stem(["other"], Tend - 0.015, 0);
         if (v.voiceOut !== undefined) stem(["vocals"], Tend + v.voiceOut, 0, 0.05);
         else stem(["vocals"], Tend - beat / 2, 0, beat / 2);
       } else {
@@ -864,11 +933,55 @@ export async function renderSet(
       // A cut: on stems the singer stops on the last breath before it.
       if (v.voiceOut !== undefined && v.voiceOut < 0 && covered(Tend + v.voiceOut - 0.05, Tend))
         stem(["vocals"], Tend + v.voiceOut, 0, 0.05);
-      send.gain.setValueAtTime(0, Tend - beat);
-      send.gain.linearRampToValueAtTime(0.9, Tend - 0.02);
-      send.gain.linearRampToValueAtTime(0, Tend);
-      gain.gain.setValueAtTime(g, Tend - 0.02);
-      gain.gain.linearRampToValueAtTime(0, Tend);
+      const exit = exits[idx];
+      if (exit === "brake" || exit === "spin") {
+        // The record stops (a brake) or is spun back (a backspin) over the
+        // last beats: the main audio ends there and the move plays it out.
+        const len = exit === "brake" ? (energy === "peak" ? 1 : 2) * beat : beat;
+        stopAt = Tend - len;
+        gain.gain.setValueAtTime(g, Tend - len);
+        gain.gain.linearRampToValueAtTime(g * (exit === "brake" ? 0.8 : 0.6), Tend - 0.02);
+        gain.gain.linearRampToValueAtTime(0, Tend);
+        if (exit === "brake") {
+          lp.frequency.setValueAtTime(20000, Tend - len);
+          lp.frequency.exponentialRampToValueAtTime(900, Tend);
+          const src = ctx.createBufferSource();
+          src.buffer = part.clip;
+          src.playbackRate.setValueAtTime(rate, Tend - len);
+          src.playbackRate.exponentialRampToValueAtTime(rate * 0.06, Tend);
+          src.connect(mixGate);
+          src.start(Tend - len, Math.max(0, clipAt(Tend - len)));
+          src.stop(Tend + 0.01);
+        } else {
+          const spun = reversed(ctx, part.clip, clipAt(Tend - len), 3);
+          if (spun) {
+            hp.frequency.setValueAtTime(20, Tend - len);
+            hp.frequency.exponentialRampToValueAtTime(600, Tend);
+            const src = ctx.createBufferSource();
+            src.buffer = spun;
+            src.playbackRate.setValueAtTime(rate * 1.5, Tend - len);
+            src.playbackRate.exponentialRampToValueAtTime(rate * 4, Tend);
+            src.connect(mixGate);
+            src.start(Tend - len);
+            src.stop(Tend + 0.01);
+            send.gain.setValueAtTime(0, Tend - len);
+            send.gain.linearRampToValueAtTime(0.5, Tend - 0.02);
+            send.gain.linearRampToValueAtTime(0, Tend);
+          }
+        }
+      } else {
+        if (exit === "filter" && !rising) {
+          // A filter cut: the bass drains away over the last bar, then out.
+          hp.frequency.setValueAtTime(20, Tend - bar);
+          hp.frequency.exponentialRampToValueAtTime(1200, Tend - 0.03);
+          hp.frequency.setValueAtTime(20, Tend);
+        }
+        send.gain.setValueAtTime(0, Tend - beat);
+        send.gain.linearRampToValueAtTime(exit === "filter" ? 0.5 : 0.9, Tend - 0.02);
+        send.gain.linearRampToValueAtTime(0, Tend);
+        gain.gain.setValueAtTime(g, Tend - 0.02);
+        gain.gain.linearRampToValueAtTime(0, Tend);
+      }
     }
 
     // -- the audio itself --

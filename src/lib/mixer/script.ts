@@ -229,6 +229,9 @@ export function fixScript(
     for (const l of raw.slice(0, 4)) {
       const s = songs[l?.song];
       if (!s || !rates[l.song].synced) continue;
+      // A voice sung in a key that clashes with the song under it sounds
+      // sour however clean the stem is: such lines are left out.
+      if (l.song !== v.song && keysClash(s.key, songs[v.song].key)) continue;
       const len = (l.len === 1 || l.len === 4 ? l.len : 2) as 1 | 2 | 4;
       const phrase = Math.max(0, Math.min(s.phrases.length - 1, Math.round(l.phrase)));
       const bar = Math.max(0, Math.min(8 - len, Math.round(l.bar)));
