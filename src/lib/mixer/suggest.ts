@@ -152,7 +152,7 @@ export function rulesPick(feeling: Feeling, songs: CatalogSong[], avoid: number[
     mood,
     minutes: feeling.minutes,
     title: `TeeJay · ${feeling.label}`,
-    why: "",
+    why: feeling.note,
     by: "rules",
   };
 }
