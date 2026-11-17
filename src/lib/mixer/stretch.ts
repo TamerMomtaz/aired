@@ -164,3 +164,46 @@ export function applyGrains(
 // Below this a tempo change is inaudible as pitch (under 1/30 of a semitone)
 // and the clip plays as it is.
 export const KEY_LOCK_MIN = 0.002;
+
+// ── High-quality key lock ────────────────────────────────────────────────
+//
+// Signalsmith Stretch (MIT, WebAssembly in an AudioWorklet) keeps drums sharp
+// and voices natural at the 8–12% moves a far-apart pair needs, where WSOLA
+// starts to smear. Tee picked it by ear on 2026-11-17 (A/B on 0063 and 0118).
+// It renders offline, and its timing is linear: output sample o reads input
+// sample o × rate (measured within ±2 ms), so a song and its stems stretched
+// separately still line up. When it can't load, callers fall back to WSOLA.
+
+let hqBroken = false;
+
+// Stretch `input` so that output sample 0 reads input second `inStart`, at
+// `rate` (> 1 faster), for `outLen` samples. Null when the stretcher is
+// unavailable, so the caller can use WSOLA instead.
+export async function stretchHQ(
+  input: AudioBuffer,
+  rate: number,
+  inStart = 0,
+  outLen = Math.max(1, Math.round((input.length - inStart * input.sampleRate) / rate)),
+): Promise<AudioBuffer | null> {
+  if (hqBroken || typeof OfflineAudioContext === "undefined") return null;
+  try {
+    const { default: SignalsmithStretch } = await import("signalsmith-stretch");
+    const chans = input.numberOfChannels;
+    const ctx = new OfflineAudioContext(chans, Math.max(1, outLen), input.sampleRate);
+    const node = await SignalsmithStretch(ctx, {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [chans],
+    });
+    node.connect(ctx.destination);
+    const data: Float32Array[] = [];
+    for (let c = 0; c < chans; c++) data.push(input.getChannelData(c));
+    await node.addBuffers(data);
+    node.schedule({ output: 0, active: true, input: inStart, rate });
+    return await ctx.startRendering();
+  } catch (err) {
+    console.warn("[mixer] HQ stretch unavailable, using WSOLA", err);
+    hqBroken = true;
+    return null;
+  }
+}

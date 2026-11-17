@@ -36,7 +36,7 @@ import {
   type StemSource,
 } from "./load";
 import { keysClash, type MusicalKey } from "./key";
-import { applyGrains, KEY_LOCK_MIN, stretchWithGrains } from "./stretch";
+import { applyGrains, KEY_LOCK_MIN, stretchHQ, stretchWithGrains } from "./stretch";
 import {
   barSeconds,
   chooseRate,
@@ -90,9 +90,11 @@ export type Part = {
   start: number;
   rms: number;
   // Where the clip came from, so its stems can be cut to match it exactly:
-  // the source second at clip input sample 0, and the key-lock grains.
+  // the source second at clip input sample 0, and how it was key-locked:
+  // WSOLA grains, or (high-quality stretch) a straight line at `hq` = rate.
   src0: number;
-  grains: Int32Array;
+  grains: Int32Array | null;
+  hq?: number;
   windows: StemWindow[];
   // A line's clean voice, from the vocal stem (lines only).
   voice?: AudioBuffer | null;
@@ -240,13 +242,14 @@ export async function prepareSongs(
     const pre = PRE_BARS * srcBar;
     const raw = await cutClip(s, ph.start + (v.skip ?? 0) * srcBar, pre, (PRE_BARS + v.bars + POST_BARS) * srcBar);
     if (!raw) continue;
-    const { clip, scale, grains } = lockKey(raw.clip, p.rate);
+    const { clip, scale, grains, hq } = await lockKey(raw.clip, p.rate);
     p.parts.set(partKey(v.phrase, v.bars, v.skip), {
       clip,
       start: pre * scale,
       rms: loudness(clip, pre * scale, (pre + v.bars * srcBar) * scale),
       src0: raw.src0,
       grains,
+      hq,
       windows: [],
     });
     await tick();
@@ -261,13 +264,14 @@ export async function prepareSongs(
     const pre = srcBar / 8;
     const raw = await cutClip(s, ph.start + l.bar * srcBar, pre, (l.len + 1) * srcBar + pre);
     if (!raw) continue;
-    const { clip, scale, grains } = lockKey(raw.clip, p.rate);
+    const { clip, scale, grains, hq } = await lockKey(raw.clip, p.rate);
     const line: Part = {
       clip,
       start: pre * scale,
       rms: loudness(clip, pre * scale, (pre + l.len * srcBar) * scale),
       src0: raw.src0,
       grains,
+      hq,
       windows: [],
     };
     // With stems, a lifted line is the singer alone: no second beat or
@@ -288,8 +292,17 @@ export async function prepareSongs(
 
 // Key lock: stretch a clip to the set's tempo without moving its pitch.
 // `scale` turns a time in the source into a time in the returned clip.
-function lockKey(clip: AudioBuffer, rate: number): { clip: AudioBuffer; scale: number; grains: Int32Array } {
+// The high-quality stretcher for real tempo moves; WSOLA for tiny ones, and
+// whenever the high-quality one can't run.
+const HQ_MIN = 0.025;
+async function lockKey(
+  clip: AudioBuffer,
+  rate: number,
+): Promise<{ clip: AudioBuffer; scale: number; grains: Int32Array | null; hq?: number }> {
   if (Math.abs(rate - 1) <= KEY_LOCK_MIN) return { clip, scale: 1, grains: identityGrains(clip.length) };
+  // Under HQ_MIN WSOLA is already transparent, and it is many times faster.
+  const hq = Math.abs(rate - 1) >= HQ_MIN ? await stretchHQ(clip, rate) : null;
+  if (hq) return { clip: hq, scale: 1 / rate, grains: null, hq: rate };
   const { out, grains } = stretchWithGrains(clip, rate);
   return { clip: out, scale: 1 / rate, grains };
 }
@@ -315,13 +328,16 @@ async function stemWindow(
   const o0 = Math.max(0, Math.floor(c0 * sr));
   const o1 = Math.min(part.clip.length, Math.ceil(c1 * sr));
   if (o1 - o0 < sr * 0.05) return null;
+  if (part.hq) return hqStemWindow(src, part, part.hq, o0, o1, names);
+  const grains = part.grains;
+  if (!grains) return null;
   const k0 = Math.max(0, Math.floor(o0 / 1024) - 2);
-  const k1 = Math.min(part.grains.length - 1, Math.ceil(o1 / 1024) + 1);
+  const k1 = Math.min(grains.length - 1, Math.ceil(o1 / 1024) + 1);
   let ia = Infinity;
   let ib = -Infinity;
   for (let k = k0; k <= k1; k++) {
-    ia = Math.min(ia, part.grains[k]);
-    ib = Math.max(ib, part.grains[k] + 2048);
+    ia = Math.min(ia, grains[k]);
+    ib = Math.max(ib, grains[k] + 2048);
   }
   if (!Number.isFinite(ia)) return null;
   const from = part.src0 + ia / sr;
@@ -338,7 +354,7 @@ async function stemWindow(
     const bufs = {} as Record<StemName, AudioBuffer>;
     for (const name of names) {
       const d = decoded[name];
-      bufs[name] = applyGrains(d.buffer, d.inOffset - lag, part.grains, o0, o1);
+      bufs[name] = applyGrains(d.buffer, d.inOffset - lag, grains, o0, o1);
     }
     return bufs;
   };
@@ -349,6 +365,63 @@ async function stemWindow(
     if (found !== null) src.lag = found;
   }
   return { c0: o0 / sr, c1: o1 / sr, bufs: build(src.lag ?? 0) };
+}
+
+// The same for a part stretched by the high-quality stretcher. Its timing is a
+// straight line (output sample o reads input sample o × rate), so each stem is
+// stretched on its own over the same span and lands on the part. A little
+// extra output is rendered before o0 and thrown away, so the stretcher has
+// warmed up by the time the window starts.
+async function hqStemWindow(
+  src: StemSource,
+  part: Part,
+  rate: number,
+  o0: number,
+  o1: number,
+  names: readonly StemName[],
+): Promise<StemWindow | null> {
+  const sr = part.clip.sampleRate;
+  const WARM = 4096; // output samples rendered before o0 and dropped
+  const i0 = Math.max(0, Math.floor((o0 - WARM) * rate) - 2048); // first input sample needed
+  const i1 = Math.ceil(o1 * rate) + 4096;
+  const from = part.src0 + i0 / sr;
+  const seconds = (i1 - i0) / sr;
+  const decoded = {} as Record<StemName, { buffer: AudioBuffer; inOffset: number }>;
+  for (const name of STEM_NAMES) {
+    if (!names.includes(name)) continue;
+    const dec = await decodeStemRange(src, name, Math.max(0, from), seconds);
+    if (!dec) return null;
+    decoded[name] = { buffer: dec.buffer, inOffset: Math.round((Math.max(0, from) - dec.lead - part.src0) * sr) };
+  }
+  const warm = Math.min(WARM, o0);
+  const build = async (lag: number) => {
+    const bufs = {} as Record<StemName, AudioBuffer>;
+    for (const name of names) {
+      const d = decoded[name];
+      // Buffer second that output sample (o0 - warm) reads.
+      const inStart = ((o0 - warm) * rate - (d.inOffset - lag)) / sr;
+      const out = await stretchHQ(d.buffer, rate, inStart, o1 - o0 + warm);
+      if (!out) return null;
+      bufs[name] = warm ? sliceBuffer(out, warm) : out;
+    }
+    return bufs;
+  };
+  if (src.lag === undefined && names.length === STEM_NAMES.length) {
+    src.lag = 0;
+    const first = await build(0);
+    if (!first) return null;
+    const found = measureLag(first, part.clip, o0);
+    if (found !== null) src.lag = found;
+  }
+  const bufs = await build(src.lag ?? 0);
+  return bufs ? { c0: o0 / sr, c1: o1 / sr, bufs } : null;
+}
+
+function sliceBuffer(buf: AudioBuffer, from: number): AudioBuffer {
+  const len = Math.max(1, buf.length - from);
+  const out = new AudioBuffer({ numberOfChannels: buf.numberOfChannels, length: len, sampleRate: buf.sampleRate });
+  for (let c = 0; c < buf.numberOfChannels; c++) out.copyToChannel(buf.getChannelData(c).subarray(from, from + len), c);
+  return out;
 }
 
 // How many samples the summed stems sit late against the clip (positive =
