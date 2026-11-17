@@ -19,6 +19,8 @@ import {
   type SongAnalysis,
 } from "@/lib/mixer/engine";
 import { earsLine, mixWithEars } from "@/lib/mixer/ears";
+import { FEELINGS, MAX_KEEP, MIN_KEEP, type FeelingId, type Suggestion } from "@/lib/mixer/feelings";
+import { keepMeeting } from "@/lib/mixer/fit";
 import { detectKey } from "@/lib/mixer/key";
 import { listMixes, saveMix, type SavedMix } from "@/lib/mixer/library";
 import { loadDeck, loadStemSource, MIX_SAMPLE_RATE } from "@/lib/mixer/load";
@@ -153,7 +155,6 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
   const [setIds, setSetIds] = useState<number[]>(initialIds ?? sources.slice(0, 2).map((s) => s.id));
   const [moodId, setMoodId] = useState("club");
   const mood = moodById(moodId);
-  const energy: Energy = mood.energy;
   const [minutes, setMinutes] = useState<MixMinutes>(5);
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [vibe, setVibe] = useState("");
@@ -162,6 +163,11 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
   const [tag, setTag] = useState<SavedTag | null>(null);
   const [useTag, setUseTag] = useState(false);
   const [mixes, setMixes] = useState<SavedMix[]>([]);
+  // TeeJay's last suggestion: what he picked, why, and which songs he just
+  // used, so the next press of the same feeling brings a fresh set.
+  const [teejay, setTeejay] = useState<(Suggestion & { feeling: FeelingId; dropped: number }) | null>(null);
+  const [asking, setAsking] = useState<FeelingId | null>(null);
+  const recentRef = useRef<number[]>([]);
   const refreshMixes = () => void listMixes().then(setMixes);
   useEffect(() => {
     void loadTag().then((t) => {
@@ -208,11 +214,60 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
     });
   }
 
-  async function makeMix() {
-    if (set.length < MIN_TRACKS) return;
+  // One tap: TeeJay picks the songs, the mood and the length for a feeling,
+  // then the Mixer makes the set straight away.
+  async function askTeejay(feeling: FeelingId) {
+    if (busy || asking) return;
+    setAsking(feeling);
+    setStage({ kind: "working", step: "TeeJay is choosing your songs", progress: 0.01 });
+    try {
+      const res = await fetch("/api/mix/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feeling, avoid: recentRef.current }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { suggestion?: Suggestion; error?: string };
+      const suggestion = data.suggestion;
+      if (!res.ok || !suggestion || suggestion.ids.length < MIN_TRACKS) {
+        setStage({ kind: "error", message: "TeeJay couldn't pick a set just now. Try again in a moment." });
+        return;
+      }
+      recentRef.current = [...suggestion.ids, ...recentRef.current].slice(0, 18);
+      setTeejay({ ...suggestion, feeling, dropped: 0 });
+      setMoodId(suggestion.mood);
+      setMinutes(suggestion.minutes);
+      setSetIds(suggestion.ids.slice(0, MAX_TRACKS));
+      setAsking(null);
+      await makeMix({ suggestion, feeling });
+    } catch {
+      setStage({ kind: "error", message: "TeeJay couldn't be reached. Check the connection and try again." });
+    } finally {
+      setAsking(null);
+    }
+  }
+
+  // The page's choices, under other names: makeMix's own mood, minutes, vibe
+  // and order may come from a TeeJay suggestion instead.
+  const moodNow = mood;
+  const minutesNow = minutes;
+  const vibeNow = vibe;
+  const autoOrderNow = autoOrder;
+
+  async function makeMix(pick?: { suggestion: Suggestion; feeling: FeelingId }) {
+    // A TeeJay suggestion brings its own songs, mood and length; otherwise the
+    // set and choices on the page are used.
+    const picked = pick
+      ? pick.suggestion.ids.map((id) => sources.find((s) => s.id === id)).filter((s): s is MixSource => !!s)
+      : set;
+    if (picked.length < MIN_TRACKS) return;
+    const mood = pick ? moodById(pick.suggestion.mood) : moodNow;
+    const energy: Energy = mood.energy;
+    const minutes: MixMinutes = pick ? pick.suggestion.minutes : minutesNow;
+    const vibe = pick ? pick.suggestion.why : vibeNow;
+    const autoOrder = pick ? true : autoOrderNow;
     // A song added more than once is listened to once and gets that many
     // shares of the set.
-    let tracks = set.filter((s, i) => set.findIndex((t) => t.id === s.id) === i);
+    let tracks = picked.filter((s, i) => picked.findIndex((t) => t.id === s.id) === i);
     let plays = tracks.map((t) => set.filter((s) => s.id === t.id).length);
     abortRef.current?.abort();
     const ac = new AbortController();
@@ -240,6 +295,17 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         const structure = analyzeStructure(deck.buffer, tempo);
         const key = detectKey(deck.buffer);
         analyses.push({ title: s.title, tempo, structure, key, duration: deck.seconds, adts: deck.adts });
+      }
+      // TeeJay listens before he commits: of his picks, keep the ones whose
+      // tempos can meet, so nothing in his set has to be cut in cold.
+      if (pick) {
+        const keep = keepMeeting(analyses.map((a) => a.tempo.bpm), mood.bpm, MAX_KEEP, MIN_KEEP);
+        const dropped = tracks.length - keep.length;
+        tracks = keep.map((i) => tracks[i]);
+        plays = keep.map((i) => plays[i]);
+        analyses.splice(0, analyses.length, ...keep.map((i) => analyses[i]));
+        setSetIds(tracks.map((t) => t.id));
+        setTeejay({ ...pick.suggestion, feeling: pick.feeling, dropped });
       }
       // Songs the worker has split into stems are mixed on their stems where
       // the moves want it, and the DJ brain is told which ones they are.
@@ -298,12 +364,13 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
       });
       if (ac.signal.aborted) return;
 
+      const setTitle = pick?.suggestion.title || plan.title;
       show("Packing the file", 0.96);
       await tick();
       const blob = encodeWav(buffer, {
         title: remix
-          ? `${plan.title} (AIRED ${moodName ?? energyLabel} Remix)`
-          : `${plan.title} (AIRED ${moodName ? `${moodName} ` : ""}Mix)`,
+          ? `${setTitle} (AIRED ${moodName ?? energyLabel} Remix)`
+          : `${setTitle} (AIRED ${moodName ? `${moodName} ` : ""}Mix)`,
         artist: tracks.map(names).join(" × "),
         comment:
           `AIRED Mix. Built from ` +
@@ -322,10 +389,10 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
         {
           id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
           title: remix
-            ? `${plan.title} · ${moodName ?? energyLabel} remix`
+            ? `${setTitle} · ${moodName ?? energyLabel} remix`
             : moodName
-              ? `${plan.title} · ${moodName}`
-              : plan.title,
+              ? `${setTitle} · ${moodName}`
+              : setTitle,
           createdAt: Date.now(),
           seconds: buffer.duration,
           bpm: plan.bpm,
@@ -374,6 +441,7 @@ export function MixerStudio({ sources, initialIds }: { sources: MixSource[]; ini
 
   return (
     <div className="flex flex-col gap-6">
+      <TeejayPanel onPick={askTeejay} asking={asking} disabled={busy} last={teejay} />
       <ClubDecks set={set} busy={busy} />
       <SetList set={set} onRemove={remove} onMove={move} disabled={busy} autoOrder={autoOrder} />
 
@@ -937,5 +1005,63 @@ function Choice<T extends string | number>({
       </div>
       {current ? <p className="text-xs text-muted">{current.note}</p> : null}
     </fieldset>
+  );
+}
+
+// TeeJay suggests: four feelings, one tap each. He reads the whole catalog,
+// picks songs that fit the feeling and each other, and the Mixer makes the set.
+function TeejayPanel({
+  onPick,
+  asking,
+  disabled,
+  last,
+}: {
+  onPick: (f: FeelingId) => void;
+  asking: FeelingId | null;
+  disabled: boolean;
+  last: (Suggestion & { feeling: FeelingId; dropped: number }) | null;
+}) {
+  const lastFeeling = last ? FEELINGS.find((f) => f.id === last.feeling) : null;
+  return (
+    <section className="surface-edge flex flex-col gap-3 rounded-2xl p-4">
+      <div>
+        <h2 className="text-lg font-bold text-foreground">TeeJay, mix me something</h2>
+        <p className="text-xs text-muted">
+          Pick a feeling. TeeJay listens across every song on AIRED, new ones included, chooses the ones that fit it
+          and fit each other, and makes the set. Tap again for a fresh one.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {FEELINGS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onPick(f.id)}
+            disabled={disabled || !!asking}
+            title={f.note}
+            className="flex flex-col items-start gap-0.5 rounded-xl border border-white/15 px-3 py-2.5 text-left transition hover:border-white/40 disabled:opacity-50"
+          >
+            <span className="text-base font-semibold text-foreground" dir="auto">
+              {f.emoji} {f.label}
+            </span>
+            <span className="text-[11px] leading-snug text-muted">{asking === f.id ? "Choosing songs…" : f.note}</span>
+          </button>
+        ))}
+      </div>
+      {last && lastFeeling ? (
+        <p className="text-sm text-foreground" dir="auto">
+          <span className="font-semibold">
+            {lastFeeling.emoji} {last.title}
+          </span>
+          {last.why ? <span className="text-muted"> · {last.why}</span> : null}
+          {last.dropped > 0 ? (
+            <span className="block text-xs text-muted">
+              TeeJay listened and left out {last.dropped} song{last.dropped > 1 ? "s" : ""} whose tempo couldn&apos;t meet the
+              others.
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+    </section>
   );
 }
