@@ -143,8 +143,8 @@ export const POST_BARS = 8; // audio kept after a part, for trades and fades
 // cut in cold.
 //
 // A mood with a tempo window (Deep House 118–125, Dabka Techno 124–130) pulls
-// that starting point into its window; the search below then settles as close
-// to it as the songs allow without losing their lock.
+// that starting point into its window, and the search below stays in it
+// unless that would leave a song unable to lock.
 export function masterBpm(
   songs: { bpm: number }[],
   opener: number,
@@ -170,7 +170,11 @@ export function masterBpm(
       locked++;
       worst = Math.max(worst, Math.abs(r.rate - 1));
     }
-    const cost = -locked * 1000 + Math.max(0, worst - 0.04) * 100 + Math.abs(f - 1) * 10;
+    // A mood's window is its tempo, the first thing a dancer feels: every 1%
+    // outside it costs three times what 1% more stretch does (the HQ stretcher
+    // keeps a 10% move clean), so Deep House sits at 118, not 114.
+    const out = window ? Math.max(0, window[0] - m, m - window[1]) / m : 0;
+    const cost = -locked * 1000 + Math.max(0, worst - 0.04) * 100 + Math.abs(f - 1) * 10 + out * 300;
     if (cost < bestCost - 1e-9) {
       bestCost = cost;
       best = m;

@@ -48,7 +48,7 @@ import {
   type Move,
   type SetScript,
 } from "./script";
-import { classicMood, type Groove, type Mood } from "./moods";
+import { classicMood, type Groove, type Mood, type MoodFamily } from "./moods";
 import { refineStart, type Structure } from "./structure";
 import type { Tempo } from "./tempo";
 
@@ -616,6 +616,36 @@ function reversed(ctx: BaseAudioContext, clip: AudioBuffer, to: number, seconds:
   return out;
 }
 
+// How far forward each family's own groove sits. Measured on 2026-11-20 (two
+// songs, five minutes): a belly-dance darbuka came out only 3 dB above a plain
+// Club set's added drums, about 7 dB under the music, and Tee couldn't hear
+// the moods apart. A party darbuka or a dabke tabl is a player in the band,
+// so those sit about 3 to 4 dB under the music now; hand percussion in house is
+// a colour, a little lower.
+const GROOVE_PRESENCE: Record<MoodFamily, number> = {
+  classic: 1,
+  belly: 1.9,
+  dabka: 1.5,
+  oud: 1.6,
+  violin: 1,
+  euro: 1,
+  house: 1.5,
+  fusion: 1.6,
+};
+// Each family's tone when the mood names none, and how deep tones cut. The
+// first tones (about 2 dB) were too gentle to tell apart on a phone speaker.
+const FAMILY_TONE: Record<MoodFamily, { low: number; mid: number; high: number }> = {
+  classic: { low: 0, mid: 0, high: 0 },
+  belly: { low: 0.5, mid: 1.5, high: 1 }, // the darbuka's slap and the voices forward
+  dabka: { low: 1.5, mid: 1, high: 0 }, // the tabl's boom and the crowd
+  oud: { low: -0.5, mid: 1.5, high: 0.5 },
+  violin: { low: 0, mid: 0.5, high: 1.5 },
+  euro: { low: 1, mid: -0.5, high: 1.5 }, // big and shiny
+  house: { low: 1, mid: 0, high: -0.5 },
+  fusion: { low: 1, mid: 1, high: 0 },
+};
+const TONE_DEPTH = 1.8;
+
 export async function renderSet(
   prepared: PreparedSong[],
   plan: MixPlan,
@@ -653,7 +683,8 @@ export async function renderSet(
   warmth.frequency.value = energy === "lounge" ? 9000 : 20000;
   // The mood's tone: Deep House warm and round, Strings Lift bright, Oud
   // Spotlight with the melody range forward.
-  const tone = mood.tone ?? { low: 0, mid: 0, high: 0 };
+  const t0 = mood.tone ?? FAMILY_TONE[mood.family];
+  const tone = { low: t0.low * TONE_DEPTH, mid: t0.mid * TONE_DEPTH, high: t0.high * TONE_DEPTH };
   const toneLow = ctx.createBiquadFilter();
   toneLow.type = "lowshelf";
   toneLow.frequency.value = 150;
@@ -1419,7 +1450,7 @@ export async function renderSet(
       const grooveOn =
         !!gr && (where === "always" ? !fx.breakdown : where === "breaks" ? fx.breakdown : drumsOn);
       if (gr && grooveOn) {
-        const lvl = gr.level * level * (where === "always" && !drumsOn ? 0.65 : 1);
+        const lvl = gr.level * level * GROOVE_PRESENCE[mood.family] * (where === "always" && !drumsOn ? 0.75 : 1);
         playGroove(gr, T, drumsTo, lvl);
       }
       if (gr && solo) drumSolo(gr, loopFrom, Tend, level);
