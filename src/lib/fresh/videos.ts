@@ -7,6 +7,8 @@
 // URL below. Old entries can stay or be removed once a song leaves the
 // spotlight. If a video fails to load, the card falls back to the cover.
 export const FRESH_VIDEOS: Record<number, string> = {
+  // AIRED-0154 Much To Match ;)
+  154: "https://cdn.openart.ai/openart-ai/production/2026-11/create-video/yVmPo7UAwG14W1MwhjtW/938e260e987eb808a0570b599f3602e3-57de91ca-0098-438b-9953-c764ba6e7af0_c2pa_1795191640405_ddfb6a90.mp4",
   // AIRED-0153 ABADAYAH - RU-LE
   153: "https://cdn.openart.ai/openart-ai/production/2026-11/create-video/yVmPo7UAwG14W1MwhjtW/f5ab4e385c2be4b49d20419b71345813-b1526b64-aaf9-47ca-b8e3-abe5482cd5dd_c2pa_1794568489439_2df14bab.mp4",
   // AIRED-0152 LA COLLE / ست الكل
