@@ -167,14 +167,48 @@ export const KEY_LOCK_MIN = 0.002;
 
 // ── High-quality key lock ────────────────────────────────────────────────
 //
-// Signalsmith Stretch (MIT, WebAssembly in an AudioWorklet) keeps drums sharp
-// and voices natural at the 8–12% moves a far-apart pair needs, where WSOLA
-// starts to smear. Tee picked it by ear on 2026-11-17 (A/B on 0063 and 0118).
-// It renders offline, and its timing is linear: output sample o reads input
-// sample o × rate (measured within ±2 ms), so a song and its stems stretched
-// separately still line up. When it can't load, callers fall back to WSOLA.
+// Signalsmith Stretch (MIT, WebAssembly) keeps drums sharp and voices natural
+// at the 8–12% moves a far-apart pair needs, where WSOLA starts to smear. Tee
+// picked it by ear on 2026-11-17 (A/B on 0063 and 0118).
+//
+// It runs straight on its WebAssembly here, one instance reused for every
+// clip. (The package's own AudioWorklet node needs an OfflineAudioContext per
+// clip, and browsers stop making those after about 125 in a page: a long set
+// asks for hundreds, so mixes froze for good. See vendor/.)
+//
+// The loop below is the package's own player, block for block: for every
+// 128 output samples it seeks to the input under the play head and renders
+// the block, so the timing is linear: output sample o reads input sample
+// o × rate. A song and its stems stretched separately still line up. When the
+// stretcher can't load, callers fall back to WSOLA.
 
 let hqBroken = false;
+
+type Wasm = {
+  HEAP8: Int8Array;
+  _main(): void;
+  _presetDefault(channels: number, sampleRate: number): void;
+  _reset(): void;
+  _setBuffers(channels: number, length: number): number;
+  _inputLatency(): number;
+  _outputLatency(): number;
+  _setTransposeSemitones(semitones: number, tonality: number): void;
+  _setFormantSemitones(semitones: number, compensate: boolean): void;
+  _setFormantBase(base: number): void;
+  _seek(samples: number, rate: number): void;
+  _process(inSamples: number, outSamples: number): void;
+};
+let wasmPromise: Promise<Wasm> | null = null;
+function loadWasm(): Promise<Wasm> {
+  wasmPromise ??= import("./vendor/signalsmith-wasm.mjs").then(async ({ default: factory }) => {
+    const m = (await factory()) as Wasm;
+    m._main();
+    return m;
+  });
+  return wasmPromise;
+}
+
+const HQ_BLOCK = 128; // samples per render step, as in the package's player
 
 // Stretch `input` so that output sample 0 reads input second `inStart`, at
 // `rate` (> 1 faster), for `outLen` samples. Null when the stretcher is
@@ -185,25 +219,74 @@ export async function stretchHQ(
   inStart = 0,
   outLen = Math.max(1, Math.round((input.length - inStart * input.sampleRate) / rate)),
 ): Promise<AudioBuffer | null> {
-  if (hqBroken || typeof OfflineAudioContext === "undefined") return null;
+  if (hqBroken) return null;
+  let m: Wasm;
   try {
-    const { default: SignalsmithStretch } = await import("signalsmith-stretch");
-    const chans = input.numberOfChannels;
-    const ctx = new OfflineAudioContext(chans, Math.max(1, outLen), input.sampleRate);
-    const node = await SignalsmithStretch(ctx, {
-      numberOfInputs: 0,
-      numberOfOutputs: 1,
-      outputChannelCount: [chans],
-    });
-    node.connect(ctx.destination);
-    const data: Float32Array[] = [];
-    for (let c = 0; c < chans; c++) data.push(input.getChannelData(c));
-    await node.addBuffers(data);
-    node.schedule({ output: 0, active: true, input: inStart, rate });
-    return await ctx.startRendering();
+    m = await loadWasm();
   } catch (err) {
     console.warn("[mixer] HQ stretch unavailable, using WSOLA", err);
     hqBroken = true;
     return null;
   }
+  const sr = input.sampleRate;
+  const chans = input.numberOfChannels;
+  const src: Float32Array[] = [];
+  for (let c = 0; c < chans; c++) src.push(input.getChannelData(c));
+  const out = new AudioBuffer({ numberOfChannels: chans, length: Math.max(1, outLen), sampleRate: sr });
+  const dst: Float32Array[] = [];
+  for (let c = 0; c < chans; c++) dst.push(out.getChannelData(c));
+
+  m._presetDefault(chans, sr);
+  m._reset();
+  const inLat = m._inputLatency();
+  const outLat = m._outputLatency();
+  const bufLen = inLat + outLat;
+  const ptr = m._setBuffers(chans, bufLen);
+  m._setTransposeSemitones(0, 8000 / sr);
+  m._setFormantSemitones(0, false);
+  m._setFormantBase(0);
+  let heap = m.HEAP8.buffer;
+  let ins: Float32Array[] = [];
+  let outs: Float32Array[] = [];
+  const views = () => {
+    heap = m.HEAP8.buffer;
+    ins = [];
+    outs = [];
+    for (let c = 0; c < chans; c++) {
+      ins.push(new Float32Array(heap, ptr + bufLen * 4 * c, bufLen));
+      outs.push(new Float32Array(heap, ptr + bufLen * 4 * (c + chans), HQ_BLOCK));
+    }
+  };
+  views();
+  const n = src[0].length;
+  let lastYield = performance.now();
+  for (let o = 0; o < outLen; o += HQ_BLOCK) {
+    // The input sample under the play head, latency ahead, ends the window.
+    const end = Math.round((inStart + ((o + outLat) / sr) * rate + inLat / sr) * sr);
+    const start = end - bufLen;
+    for (let c = 0; c < chans; c++) {
+      const b = ins[c];
+      const from = Math.max(0, start);
+      const to = Math.min(n, end);
+      if (to <= from) {
+        b.fill(0);
+        continue;
+      }
+      const lead = from - start;
+      if (lead > 0) b.fill(0, 0, lead);
+      b.set(src[c].subarray(from, to), lead);
+      if (lead + (to - from) < bufLen) b.fill(0, lead + (to - from));
+    }
+    m._seek(bufLen, rate);
+    m._process(0, HQ_BLOCK);
+    if (m.HEAP8.buffer !== heap) views();
+    const take = Math.min(HQ_BLOCK, outLen - o);
+    for (let c = 0; c < chans; c++) dst[c].set(take === HQ_BLOCK ? outs[c] : outs[c].subarray(0, take), o);
+    // Let the page breathe (the progress bar, the stop button) every ~50 ms.
+    if (performance.now() - lastYield > 50) {
+      await new Promise((r) => setTimeout(r, 0));
+      lastYield = performance.now();
+    }
+  }
+  return out;
 }
